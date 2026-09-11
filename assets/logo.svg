@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="800" height="240" fill="none">
+  <defs>
+    <linearGradient id="grad-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="100%" stop-color="#0072FF"/>
+    </linearGradient>
+    <linearGradient id="grad-violet" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7B2CBF"/>
+      <stop offset="100%" stop-color="#E0AAFF"/>
+    </linearGradient>
+    <linearGradient id="grad-orange" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF9E00"/>
+      <stop offset="100%" stop-color="#FF5400"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background Card -->
+  <rect width="800" height="240" rx="16" fill="#0B0F19" stroke="#1E293B" stroke-width="2"/>
+
+  <!-- OpenTelemetry / Speed Bridge Icon (Left) -->
+  <g transform="translate(40, 30)">
+    <!-- Telescopic Conduits & Constellations -->
+    <circle cx="110" cy="40" r="4" fill="#00E5FF" filter="url(#glow)"/>
+    <circle cx="140" cy="25" r="3" fill="#E0AAFF" filter="url(#glow)"/>
+    <circle cx="85" cy="55" r="3" fill="#FF9E00" filter="url(#glow)"/>
+    <line x1="85" y1="55" x2="110" y2="40" stroke="#00E5FF" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <line x1="110" y1="40" x2="140" y2="25" stroke="#E0AAFF" stroke-width="1.5" stroke-dasharray="3 3"/>
+
+    <!-- Telescope Body -->
+    <g transform="rotate(-30 110 90)">
+      <rect x="70" y="70" width="90" height="34" rx="6" fill="url(#grad-cyan)" stroke="#FFFFFF" stroke-width="1.5" filter="url(#glow)"/>
+      <rect x="155" y="66" width="16" height="42" rx="4" fill="#E0AAFF" stroke="#FFFFFF" stroke-width="1.5"/>
+      <circle cx="163" cy="87" r="14" fill="#0B0F19" stroke="#00E5FF" stroke-width="3"/>
+      <circle cx="70" cy="87" r="6" fill="#FF9E00"/>
+    </g>
+
+    <!-- Speed Bridge Rails -->
+    <path d="M 10 140 Q 90 90 180 100" fill="none" stroke="url(#grad-cyan)" stroke-width="5" stroke-linecap="round" filter="url(#glow)"/>
+    <path d="M 30 155 Q 100 115 190 125" fill="none" stroke="url(#grad-violet)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 60 165 Q 120 135 200 145" fill="none" stroke="url(#grad-orange)" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Speed Light Pulses -->
+    <circle cx="180" cy="100" r="5" fill="#00E5FF" filter="url(#glow)"/>
+    <circle cx="190" cy="125" r="4" fill="#E0AAFF" filter="url(#glow)"/>
+    <circle cx="200" cy="145" r="3" fill="#FF9E00" filter="url(#glow)"/>
+    <line x1="180" y1="100" x2="230" y2="100" stroke="#00E5FF" stroke-width="2" stroke-linecap="round"/>
+    <line x1="190" y1="125" x2="235" y2="125" stroke="#E0AAFF" stroke-width="2" stroke-linecap="round"/>
+    <line x1="200" y1="145" x2="240" y2="145" stroke="#FF9E00" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Typography & Subtitle (Right) -->
+  <g transform="translate(300, 75)">
+    <text x="0" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif" font-weight="800" font-size="38" fill="#F8FAFC" letter-spacing="-0.5">
+      agent<tspan fill="#00E5FF">-otel-</tspan>bridge
+    </text>
+    <text x="0" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif" font-weight="500" font-size="16" fill="#94A3B8">
+      Ultra-Fast OpenTelemetry Native Bridge for AI CLI Agents
+    </text>
+    <g transform="translate(0, 95)">
+      <rect x="0" y="0" width="95" height="24" rx="6" fill="#1E293B" stroke="#334155"/>
+      <text x="47" y="16" font-family="monospace" font-size="12" font-weight="600" fill="#00E5FF" text-anchor="middle">SUB-3MS</text>
+
+      <rect x="105" y="0" width="115" height="24" rx="6" fill="#1E293B" stroke="#334155"/>
+      <text x="162" y="16" font-family="monospace" font-size="12" font-weight="600" fill="#E0AAFF" text-anchor="middle">OTEL-CONTRIB</text>
+
+      <rect x="230" y="0" width="95" height="24" rx="6" fill="#1E293B" stroke="#334155"/>
+      <text x="277" y="16" font-family="monospace" font-size="12" font-weight="600" fill="#FF9E00" text-anchor="middle">FAIL-OPEN</text>
+
+      <rect x="335" y="0" width="115" height="24" rx="6" fill="#1E293B" stroke="#334155"/>
+      <text x="392" y="16" font-family="monospace" font-size="12" font-weight="600" fill="#10B981" text-anchor="middle">RUST NATIVE</text>
+    </g>
+  </g>
+</svg>
