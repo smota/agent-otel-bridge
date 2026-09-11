@@ -3,13 +3,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use std::time::Instant;
+use crate::stats::Stats;
 use agent_otel_core::model::{AntigravityHookInput, HookEvent};
 use agent_otel_core::otlp::build_span_from_hook;
-use crate::stats::Stats;
+use std::time::Instant;
 
+#[derive(Debug, Clone)]
 pub struct ParseBenchResult {
     pub stats: Stats,
+    pub spans_per_sec: f64,
+}
+
+impl ParseBenchResult {
+    pub fn summary(&self) -> ParseBenchSummary {
+        ParseBenchSummary {
+            stats: self.stats.summary(),
+            spans_per_sec: (self.spans_per_sec * 10.0).round() / 10.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ParseBenchSummary {
+    pub stats: crate::stats::StatsSummary,
     pub spans_per_sec: f64,
 }
 

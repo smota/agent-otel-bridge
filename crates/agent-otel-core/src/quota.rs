@@ -72,28 +72,70 @@ pub fn build_quota_metrics_request(
     resource: Resource,
     snapshot: &QuotaSnapshot,
 ) -> ExportMetricsServiceRequest {
+    build_quota_metrics_request_opts(resource, snapshot, false)
+}
+
+pub fn build_quota_metrics_request_opts(
+    resource: Resource,
+    snapshot: &QuotaSnapshot,
+    emit_legacy_aliases: bool,
+) -> ExportMetricsServiceRequest {
     let mut metrics = Vec::new();
 
-    if snapshot.remaining_fraction.is_finite() && (0.0..=1.0).contains(&snapshot.remaining_fraction) {
+    if snapshot.remaining_fraction.is_finite() && (0.0..=1.0).contains(&snapshot.remaining_fraction)
+    {
+        // Canonical generic agent metric
         metrics.push(quota_gauge(
-            QUOTA_REMAINING_FRACTION,
+            METRIC_AGENT_QUOTA_REMAINING,
             "1",
             snapshot.remaining_fraction,
             snapshot.observed_at_unix_nano,
             &snapshot.bucket,
             &snapshot.group,
         ));
+        // Fleet-wide normalized bottleneck gauge (0.0..=1.0)
+        metrics.push(quota_gauge(
+            METRIC_FLEET_BOTTLENECK_RATIO,
+            "1",
+            snapshot.remaining_fraction,
+            snapshot.observed_at_unix_nano,
+            "fleet-bottleneck",
+            "all",
+        ));
+        // Optional legacy alias for backward compatibility with older v0.1 dashboards
+        if emit_legacy_aliases {
+            metrics.push(quota_gauge(
+                METRIC_AGY_QUOTA_REMAINING,
+                "1",
+                snapshot.remaining_fraction,
+                snapshot.observed_at_unix_nano,
+                &snapshot.bucket,
+                &snapshot.group,
+            ));
+        }
     }
 
     if snapshot.seconds_to_reset.is_finite() && snapshot.seconds_to_reset >= 0.0 {
+        // Canonical generic agent metric
         metrics.push(quota_gauge(
-            QUOTA_SECONDS_TO_RESET,
+            METRIC_AGENT_QUOTA_RESET,
             "s",
             snapshot.seconds_to_reset,
             snapshot.observed_at_unix_nano,
             &snapshot.bucket,
             &snapshot.group,
         ));
+        // Optional legacy alias for backward compatibility with older v0.1 dashboards
+        if emit_legacy_aliases {
+            metrics.push(quota_gauge(
+                METRIC_AGY_QUOTA_RESET,
+                "s",
+                snapshot.seconds_to_reset,
+                snapshot.observed_at_unix_nano,
+                &snapshot.bucket,
+                &snapshot.group,
+            ));
+        }
     }
 
     ExportMetricsServiceRequest {

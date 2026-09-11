@@ -31,12 +31,33 @@ pub async fn run_server(
             res = server.connect() => {
                 match res {
                     Ok(()) => {
-                        let connected = server;
-                        server = ServerOptions::new()
-                            .in_buffer_size(64 * 1024)
-                            .out_buffer_size(4 * 1024)
-                            .create(&name)?;
+                        let mut next_server = None;
+                        for _attempt in 0..10 {
+                            match ServerOptions::new()
+                                .in_buffer_size(64 * 1024)
+                                .out_buffer_size(4 * 1024)
+                                .create(&name)
+                            {
+                                Ok(s) => {
+                                    next_server = Some(s);
+                                    break;
+                                }
+                                Err(_) => {
+                                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                                }
+                            }
+                        }
 
+                        let next = match next_server {
+                            Some(s) => s,
+                            None => {
+                                eprintln!("[agent-otel-ipc] Warning: unable to allocate next pipe instance, retrying in 500ms");
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                continue;
+                            }
+                        };
+
+                        let connected = std::mem::replace(&mut server, next);
                         let tx = tx.clone();
                         let shutdown_child = shutdown.clone();
                         tokio::spawn(async move {

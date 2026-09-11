@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use std::fmt;
-use std::time::Duration;
 use bytes::Bytes;
 use opentelemetry_proto::tonic::collector::{
     metrics::v1::ExportMetricsServiceRequest, trace::v1::ExportTraceServiceRequest,
 };
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
+use std::fmt;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub enum ExportError {
@@ -74,10 +74,14 @@ impl OtlpExporter {
         self.post_protobuf(&self.traces_url, Bytes::from(buf)).await
     }
 
-    pub async fn export_metrics(&self, req: ExportMetricsServiceRequest) -> Result<(), ExportError> {
+    pub async fn export_metrics(
+        &self,
+        req: ExportMetricsServiceRequest,
+    ) -> Result<(), ExportError> {
         let mut buf = Vec::with_capacity(req.encoded_len());
         req.encode(&mut buf)?;
-        self.post_protobuf(&self.metrics_url, Bytes::from(buf)).await
+        self.post_protobuf(&self.metrics_url, Bytes::from(buf))
+            .await
     }
 
     async fn post_protobuf(&self, url: &str, body: Bytes) -> Result<(), ExportError> {

@@ -1,0 +1,1103 @@
+{
+  "tags": [
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    },
+    {
+      "key": "technology",
+      "value": "agent-otel-bridge"
+    },
+    {
+      "key": "signal",
+      "value": "traces-metrics"
+    },
+    {
+      "key": "standard",
+      "value": "opentelemetry-genai"
+    }
+  ],
+  "spec": {
+    "variables": [
+      {
+        "spec": {
+          "display": {
+            "name": "Service",
+            "description": "Filter by OpenTelemetry service name"
+          },
+          "allowAllValue": true,
+          "sort": "alphabetical-asc",
+          "allowMultiple": true,
+          "plugin": {
+            "spec": {
+              "name": "service.name",
+              "signal": "all"
+            },
+            "kind": "signoz/DynamicVariable"
+          },
+          "name": "service_name",
+          "customAllValue": "",
+          "capturingRegexp": ""
+        },
+        "kind": "ListVariable"
+      }
+    ],
+    "display": {
+      "name": "AI Agent Observability (OpenTelemetry)",
+      "description": "Production observability dashboard for autonomous AI coding agents (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi) instrumented via agent-otel-bridge. Built on canonical OpenTelemetry GenAI (gen_ai.*) and Agent Lifecycle (agent.*) standards."
+    },
+    "duration": "",
+    "layouts": [
+      {
+        "spec": {
+          "display": {
+            "collapse": {
+              "open": true
+            },
+            "title": "Quota & Token Economics (Guardrails & Spend)"
+          },
+          "items": [
+            {
+              "x": 0,
+              "width": 12,
+              "y": 0,
+              "content": {
+                "$ref": "#/spec/panels/quota-burn"
+              },
+              "height": 6
+            },
+            {
+              "x": 0,
+              "width": 6,
+              "y": 6,
+              "content": {
+                "$ref": "#/spec/panels/quota-current"
+              },
+              "height": 3
+            },
+            {
+              "x": 6,
+              "width": 6,
+              "y": 6,
+              "content": {
+                "$ref": "#/spec/panels/quota-reset"
+              },
+              "height": 3
+            }
+          ]
+        },
+        "kind": "Grid"
+      },
+      {
+        "spec": {
+          "display": {
+            "collapse": {
+              "open": true
+            },
+            "title": "Agent Health, Concurrency & Loop Protection"
+          },
+          "items": [
+            {
+              "x": 0,
+              "width": 6,
+              "y": 0,
+              "content": {
+                "$ref": "#/spec/panels/tool-calls"
+              },
+              "height": 6
+            },
+            {
+              "x": 6,
+              "width": 6,
+              "y": 0,
+              "content": {
+                "$ref": "#/spec/panels/top-tools"
+              },
+              "height": 6
+            },
+            {
+              "x": 0,
+              "width": 6,
+              "y": 6,
+              "content": {
+                "$ref": "#/spec/panels/loop-invocations"
+              },
+              "height": 6
+            },
+            {
+              "x": 0,
+              "width": 12,
+              "y": 12,
+              "content": {
+                "$ref": "#/spec/panels/conversations"
+              },
+              "height": 3
+            },
+            {
+              "x": 6,
+              "width": 6,
+              "y": 6,
+              "content": {
+                "$ref": "#/spec/panels/requests-by-model"
+              },
+              "height": 6
+            }
+          ]
+        },
+        "kind": "Grid"
+      },
+      {
+        "spec": {
+          "display": {
+            "collapse": {
+              "open": true
+            },
+            "title": "Turn Outcomes & Safety Governance"
+          },
+          "items": [
+            {
+              "x": 0,
+              "width": 6,
+              "y": 0,
+              "content": {
+                "$ref": "#/spec/panels/termination-reasons"
+              },
+              "height": 6
+            },
+            {
+              "x": 6,
+              "width": 6,
+              "y": 0,
+              "content": {
+                "$ref": "#/spec/panels/turns-over-time"
+              },
+              "height": 6
+            },
+            {
+              "x": 0,
+              "width": 12,
+              "y": 6,
+              "content": {
+                "$ref": "#/spec/panels/recent-turns"
+              },
+              "height": 7
+            }
+          ]
+        },
+        "kind": "Grid"
+      }
+    ],
+    "panels": {
+      "termination-reasons": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "legend": {
+                "position": "right",
+                "customColors": null,
+                "mode": "list"
+              }
+            },
+            "kind": "signoz/PieChartPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count()",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'Stop' OR agy.hook.event = 'Stop') AND (agent.termination_reason EXISTS OR agy.termination_reason EXISTS)"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "agent.termination_reason",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "traces",
+                    "legend": "{{agent.termination_reason}}",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "scalar"
+            }
+          ],
+          "display": {
+            "name": "Why Turns Ended",
+            "description": "Distribution of termination reasons on Stop spans. NO_TOOL_CALL signifies healthy completion without further tool execution; USER_INTERRUPT or TURN_LIMIT indicate exceptions."
+          }
+        },
+        "kind": "Panel"
+      },
+      "top-tools": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "thresholds": null,
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "columnUnits": null,
+                "decimalPrecision": "2"
+              }
+            },
+            "kind": "signoz/TablePanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count()",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "alias": "Calls",
+                        "expression": "count()"
+                      },
+                      {
+                        "alias": "Conversations",
+                        "expression": "count_distinct(gen_ai.conversation.id)"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'PostToolUse' OR agy.hook.event = 'PostToolUse') AND gen_ai.tool.name EXISTS"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.tool.name",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "traces",
+                    "legend": "",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "scalar"
+            }
+          ],
+          "display": {
+            "name": "Top Tools",
+            "description": "Total calls and distinct sessions per tool."
+          }
+        },
+        "kind": "Panel"
+      },
+      "quota-current": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "thresholds": null,
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "columnUnits": {
+                  "A": "percentunit",
+                  "__result_0": "percentunit"
+                },
+                "decimalPrecision": "1"
+              }
+            },
+            "kind": "signoz/TablePanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "__result",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "reduceTo": "last",
+                        "metricName": "agent.quota.remaining_fraction",
+                        "temporality": "",
+                        "spaceAggregation": "max",
+                        "timeAggregation": "latest"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "bucket",
+                        "fieldContext": "attribute",
+                        "signal": "metrics",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "group",
+                        "fieldContext": "attribute",
+                        "signal": "metrics",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "metrics",
+                    "legend": "",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "scalar"
+            }
+          ],
+          "display": {
+            "name": "Current Quota Remaining",
+            "description": "Latest provider quota balance fraction (0.0 to 1.0). Grouped by bucket and model group."
+          }
+        },
+        "kind": "Panel"
+      },
+      "tool-calls": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "axes": {
+                "isLogScale": false,
+                "softMax": null,
+                "softMin": null
+              },
+              "chartAppearance": {
+                "lineStyle": "solid",
+                "lineInterpolation": "spline",
+                "spanGaps": {
+                  "fillLessThan": "",
+                  "fillOnlyBelow": false
+                },
+                "fillMode": "none",
+                "showPoints": false
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "thresholds": null,
+              "visualization": {
+                "fillSpans": false,
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              }
+            },
+            "kind": "signoz/TimeSeriesPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count()",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'PostToolUse' OR agy.hook.event = 'PostToolUse') AND gen_ai.tool.name EXISTS"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.tool.name",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "traces",
+                    "legend": "{{gen_ai.tool.name}}",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "time_series"
+            }
+          ],
+          "display": {
+            "name": "Tool Calls Over Time",
+            "description": "Rate of tool executions (PostToolUse) grouped by tool name."
+          }
+        },
+        "kind": "Panel"
+      },
+      "quota-reset": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "thresholds": null,
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "columnUnits": {
+                  "A": "s",
+                  "__result_0": "s"
+                },
+                "decimalPrecision": "0"
+              }
+            },
+            "kind": "signoz/TablePanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "__result",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "reduceTo": "last",
+                        "metricName": "agent.quota.seconds_to_reset",
+                        "temporality": "",
+                        "spaceAggregation": "max",
+                        "timeAggregation": "latest"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "bucket",
+                        "fieldContext": "attribute",
+                        "signal": "metrics",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "metrics",
+                    "legend": "",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "scalar"
+            }
+          ],
+          "display": {
+            "name": "Seconds to Quota Reset",
+            "description": "Countdown duration (in seconds) until the current quota window resets."
+          }
+        },
+        "kind": "Panel"
+      },
+      "loop-invocations": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "axes": {
+                "isLogScale": false,
+                "softMax": null,
+                "softMin": null
+              },
+              "chartAppearance": {
+                "lineStyle": "solid",
+                "lineInterpolation": "spline",
+                "spanGaps": {
+                  "fillLessThan": "",
+                  "fillOnlyBelow": false
+                },
+                "fillMode": "none",
+                "showPoints": false
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "thresholds": null,
+              "visualization": {
+                "fillSpans": false,
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              }
+            },
+            "kind": "signoz/TimeSeriesPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count()",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'PostInvocation' OR agy.hook.event = 'PostInvocation')"
+                    },
+                    "disabled": false,
+                    "signal": "traces",
+                    "limit": 100,
+                    "legend": "Loop Invocations",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "time_series"
+            }
+          ],
+          "display": {
+            "name": "Agent Loop Invocations",
+            "description": "PostInvocation fires once per internal agent loop pass. Rapid sustained growth indicates a runaway loop."
+          }
+        },
+        "kind": "Panel"
+      },
+      "conversations": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "thresholds": null,
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              }
+            },
+            "kind": "signoz/NumberPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count_distinct(gen_ai.conversation.id)",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "alias": "Sessions",
+                        "expression": "count_distinct(gen_ai.conversation.id)"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event EXISTS OR agy.hook.event EXISTS)"
+                    },
+                    "disabled": false,
+                    "signal": "traces",
+                    "limit": 100,
+                    "legend": "",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "scalar"
+            }
+          ],
+          "display": {
+            "name": "Active Sessions",
+            "description": "Distinct interactive agent conversations seen in the selected window, counted from gen_ai.conversation.id across all hook spans."
+          }
+        },
+        "kind": "Panel"
+      },
+      "recent-turns": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "selectFields": [
+                {
+                  "name": "agent.termination_reason",
+                  "fieldContext": "attribute",
+                  "signal": "traces",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "gen_ai.request.model",
+                  "fieldContext": "attribute",
+                  "signal": "traces",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "gen_ai.conversation.id",
+                  "fieldContext": "attribute",
+                  "signal": "traces",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "agent.execution.num",
+                  "fieldContext": "attribute",
+                  "signal": "traces",
+                  "fieldDataType": ""
+                },
+                {
+                  "name": "agent.fully_idle",
+                  "fieldContext": "attribute",
+                  "signal": "traces",
+                  "fieldDataType": ""
+                }
+              ]
+            },
+            "kind": "signoz/ListPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "selectFields": [
+                      {
+                        "name": "agent.termination_reason",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "gen_ai.request.model",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "gen_ai.conversation.id",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "agent.execution.num",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": ""
+                      },
+                      {
+                        "name": "agent.fully_idle",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": ""
+                      }
+                    ],
+                    "disabled": false,
+                    "limit": 25,
+                    "signal": "traces",
+                    "name": "A",
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'Stop' OR agy.hook.event = 'Stop')"
+                    },
+                    "order": [
+                      {
+                        "key": {
+                          "name": "timestamp",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "source": ""
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "raw"
+            }
+          ],
+          "display": {
+            "name": "Recent Turn Endings",
+            "description": "Detailed log of completed reasoning turns, showing agent name, model, session ID, termination reason, and idle status."
+          }
+        },
+        "kind": "Panel"
+      },
+      "quota-burn": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "axes": {
+                "isLogScale": false,
+                "softMax": 1,
+                "softMin": 0
+              },
+              "chartAppearance": {
+                "lineStyle": "solid",
+                "lineInterpolation": "spline",
+                "spanGaps": {
+                  "fillLessThan": "",
+                  "fillOnlyBelow": false
+                },
+                "fillMode": "none",
+                "showPoints": false
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "thresholds": null,
+              "visualization": {
+                "fillSpans": false,
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "percentunit",
+                "decimalPrecision": "2"
+              }
+            },
+            "kind": "signoz/TimeSeriesPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "__result",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "spaceAggregation": "max",
+                        "metricName": "agent.quota.remaining_fraction",
+                        "temporality": "",
+                        "timeAggregation": "latest"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "group",
+                        "fieldContext": "attribute",
+                        "signal": "metrics",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "metrics",
+                    "legend": "{{group}}",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "time_series"
+            }
+          ],
+          "display": {
+            "name": "Quota Burn-Down Timeline",
+            "description": "Remaining quota percentage over time. Shows rate of consumption across provider quota buckets."
+          }
+        },
+        "kind": "Panel"
+      },
+      "turns-over-time": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "axes": {
+                "isLogScale": false,
+                "softMax": null,
+                "softMin": null
+              },
+              "chartAppearance": {
+                "lineStyle": "solid",
+                "lineInterpolation": "spline",
+                "spanGaps": {
+                  "fillLessThan": "",
+                  "fillOnlyBelow": false
+                },
+                "fillMode": "none",
+                "showPoints": false
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "thresholds": null,
+              "visualization": {
+                "fillSpans": false,
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              }
+            },
+            "kind": "signoz/TimeSeriesPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count()",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'Stop' OR agy.hook.event = 'Stop')"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.request.model",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "traces",
+                    "legend": "{{gen_ai.request.model}}",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "time_series"
+            }
+          ],
+          "display": {
+            "name": "Turns Completed Over Time",
+            "description": "Stop spans per interval, one per completed turn. Compare against loop invocations to see how much work each turn required."
+          }
+        },
+        "kind": "Panel"
+      },
+      "requests-by-model": {
+        "spec": {
+          "links": null,
+          "plugin": {
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "legend": {
+                "position": "right",
+                "customColors": null,
+                "mode": "list"
+              }
+            },
+            "kind": "signoz/PieChartPanel"
+          },
+          "queries": [
+            {
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "spec": {
+                    "source": "",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "count()",
+                          "fieldContext": "",
+                          "signal": "",
+                          "fieldDataType": ""
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event = 'PostInvocation' OR agy.hook.event = 'PostInvocation') AND gen_ai.request.model EXISTS"
+                    },
+                    "disabled": false,
+                    "limit": 100,
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.request.model",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "signal": "traces",
+                    "legend": "{{gen_ai.request.model}}",
+                    "name": "A"
+                  },
+                  "kind": "signoz/BuilderQuery"
+                }
+              },
+              "kind": "scalar"
+            }
+          ],
+          "display": {
+            "name": "Requests by Model",
+            "description": "Proportion of loop iterations by Foundation Model identifier."
+          }
+        },
+        "kind": "Panel"
+      }
+    },
+    "refreshInterval": ""
+  },
+  "image": "",
+  "generateName": true,
+  "schemaVersion": "v6"
+}

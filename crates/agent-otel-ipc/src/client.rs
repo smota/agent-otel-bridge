@@ -11,11 +11,11 @@ use windows_sys::Win32::Foundation::{
     INVALID_HANDLE_VALUE, TRUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_OVERLAPPED, FILE_GENERIC_WRITE, OPEN_EXISTING, WriteFile,
+    CreateFileW, WriteFile, FILE_FLAG_OVERLAPPED, FILE_GENERIC_WRITE, OPEN_EXISTING,
 };
-use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResultEx, OVERLAPPED};
 use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
 use windows_sys::Win32::System::Threading::CreateEventW;
+use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResultEx, OVERLAPPED};
 
 use crate::frame::{encode_frame, MsgType, DEFAULT_PIPE_NAME};
 
@@ -34,9 +34,15 @@ impl Drop for HandleGuard {
     }
 }
 
-fn wide_pipe_name() -> Vec<u16> {
-    let name = std::env::var("AGY_OTEL_PIPE").unwrap_or_else(|_| DEFAULT_PIPE_NAME.to_string());
+fn to_wide(name: &str) -> Vec<u16> {
     name.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+fn wide_pipe_name() -> Vec<u16> {
+    let name = std::env::var("AGENT_OTEL_PIPE")
+        .or_else(|_| std::env::var("AGY_OTEL_PIPE"))
+        .unwrap_or_else(|_| DEFAULT_PIPE_NAME.to_string());
+    to_wide(&name)
 }
 
 fn open_pipe(pipe_wide: &[u16]) -> Option<HANDLE> {
@@ -62,6 +68,7 @@ pub fn send_fire_and_forget(msg_type: MsgType, payload: &[u8]) {
     let _ = try_send(msg_type, payload);
 }
 
+#[allow(clippy::result_unit_err)]
 pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
     let deadline = Instant::now() + TOTAL_BUDGET;
     let pipe_wide = wide_pipe_name();
@@ -70,20 +77,34 @@ pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
         Some(h) => h,
         None => {
             let err = unsafe { GetLastError() };
-            if err != ERROR_PIPE_BUSY {
+            if err == ERROR_PIPE_BUSY {
+                let remaining = deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(CONNECT_BUDGET_CAP);
+                if remaining.is_zero() {
+                    return Err(());
+                }
+                let ok =
+                    unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), remaining.as_millis() as u32) };
+                if ok == 0 {
+                    return Err(());
+                }
+                open_pipe(&pipe_wide).ok_or(())?
+            } else if std::env::var("AGENT_OTEL_PIPE").is_err()
+                && std::env::var("AGY_OTEL_PIPE").is_err()
+            {
+                // Fallback to legacy pipe name if default pipe is not listening
+                let legacy_wide = to_wide(crate::frame::LEGACY_PIPE_NAME);
+                if let Some(h) = open_pipe(&legacy_wide) {
+                    h
+                } else {
+                    spawn_daemon_detached();
+                    return Err(());
+                }
+            } else {
+                spawn_daemon_detached();
                 return Err(());
             }
-            let remaining = deadline
-                .saturating_duration_since(Instant::now())
-                .min(CONNECT_BUDGET_CAP);
-            if remaining.is_zero() {
-                return Err(());
-            }
-            let ok = unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), remaining.as_millis() as u32) };
-            if ok == 0 {
-                return Err(());
-            }
-            open_pipe(&pipe_wide).ok_or(())?
         }
     };
     let handle = HandleGuard(handle);
@@ -116,7 +137,7 @@ pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             unsafe {
-                CancelIoEx(handle.0, &mut overlapped);
+                CancelIoEx(handle.0, &overlapped);
             }
             return Err(());
         }
@@ -124,7 +145,7 @@ pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
         let done = unsafe {
             GetOverlappedResultEx(
                 handle.0,
-                &mut overlapped,
+                &overlapped,
                 &mut transferred,
                 remaining.as_millis() as u32,
                 FALSE,
@@ -132,11 +153,83 @@ pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
         };
         if done == 0 {
             unsafe {
-                CancelIoEx(handle.0, &mut overlapped);
+                CancelIoEx(handle.0, &overlapped);
             }
             return Err(());
         }
     }
 
     Ok(())
+}
+
+#[cfg(windows)]
+pub fn spawn_daemon_detached() {
+    static LAST_SPAWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let prev = LAST_SPAWN.load(std::sync::atomic::Ordering::Relaxed);
+    if now.saturating_sub(prev) < 5 {
+        return;
+    }
+    LAST_SPAWN.store(now, std::sync::atomic::Ordering::Relaxed);
+
+    if let Some(exe) = find_bridge_binary() {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x00000008;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let _ = std::process::Command::new(exe)
+            .arg("daemon")
+            .creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+    }
+}
+
+#[cfg(not(windows))]
+pub fn spawn_daemon_detached() {}
+
+pub fn find_bridge_binary() -> Option<std::path::PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let neighbor = dir.join(if cfg!(windows) {
+                "agent-otel-bridge.exe"
+            } else {
+                "agent-otel-bridge"
+            });
+            if neighbor.is_file() {
+                return Some(neighbor);
+            }
+        }
+    }
+
+    if let Ok(path_var) = std::env::var("PATH") {
+        let bin_name = if cfg!(windows) {
+            "agent-otel-bridge.exe"
+        } else {
+            "agent-otel-bridge"
+        };
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    for rel in &[
+        "target/release/agent-otel-bridge.exe",
+        "target/debug/agent-otel-bridge.exe",
+    ] {
+        let p = std::path::PathBuf::from(rel);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+
+    None
 }

@@ -1,0 +1,53 @@
+name: "Benchmark Submission"
+description: "Submit performance benchmark results from your workstation or server"
+title: "Benchmark: [CPU Model] on [OS]"
+labels: ["benchmark"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🚀 Thank you for contributing to the Community Benchmark Registry!
+        You can generate and submit this report automatically using:
+        ```powershell
+        cargo run --release -p agent-otel-bench -- --submit
+        ```
+  - type: input
+    id: cpu
+    attributes:
+      label: "Processor (CPU Model)"
+      description: "e.g., AMD Ryzen AI 9 HX 470, Intel Core i9-14900K, Apple M3 Max"
+      placeholder: "e.g. AMD Ryzen AI 9 HX 470"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: "Operating System & Architecture"
+      description: "e.g., Windows 11 Pro 25H2 (Build 26200, x86_64), Ubuntu 24.04 LTS"
+      placeholder: "e.g. Windows 11 Pro 25H2 (Build 26200, x86_64)"
+    validations:
+      required: true
+  - type: input
+    id: ram
+    attributes:
+      label: "System Memory (RAM)"
+      description: "Total physical RAM in GB (e.g., 32 GB, 64 GB, 96 GB)"
+      placeholder: "e.g. 64 GB"
+    validations:
+      required: false
+  - type: textarea
+    id: benchmark_json
+    attributes:
+      label: "Benchmark JSON Payload"
+      description: "Paste the complete JSON payload output by `agent-otel-bench --json` or saved in `benchmarks/reports/*.json`"
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Environment Details / Notes (Optional)"
+      description: "e.g., Bare metal workstation, battery vs plugged-in, Hyper-V VM, WSL2, high-performance power plan"
+      placeholder: "e.g. Bare metal laptop, plugged in on Best Performance power plan"
+    validations:
+      required: false

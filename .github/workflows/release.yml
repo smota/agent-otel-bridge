@@ -1,0 +1,114 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_crates:
+        description: 'Publish crates to crates.io'
+        required: true
+        type: boolean
+        default: true
+      dry_run:
+        description: 'Dry run publishing (do not actually upload)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-artifacts:
+    name: Build Release Artifacts
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binaries
+        run: cargo build --release -p agent-otel-bridge -p agent-otel-client
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { 'dev' }
+          $archiveName = "agent-otel-bridge-$tag-x86_64-pc-windows-msvc.zip"
+
+          New-Item -ItemType Directory -Path staging -Force
+          Copy-Item target/release/agent-otel-bridge.exe staging/
+          Copy-Item target/release/agent-hook.exe staging/
+          Copy-Item README.md staging/
+          Copy-Item LICENSE staging/
+
+          Compress-Archive -Path staging/* -DestinationPath $archiveName -Force
+          $hash = (Get-FileHash -Path $archiveName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $archiveName" | Out-File -FilePath "$archiveName.sha256" -Encoding ascii
+
+          Write-Output "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_ENV
+          Write-Output "SHA_NAME=$archiveName.sha256" >> $env:GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: |
+            agent-otel-bridge-*.zip
+            agent-otel-bridge-*.zip.sha256
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  publish-crates-io:
+    name: Publish to crates.io
+    needs: build-release-artifacts
+    if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish_crates == true)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish crates sequentially
+        shell: pwsh
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          $isDryRun = "${{ github.event.inputs.dry_run }}" -eq "true"
+          $dryRunFlag = if ($isDryRun) { "--dry-run" } else { "" }
+
+          if (-not $env:CARGO_REGISTRY_TOKEN -and -not $isDryRun) {
+            Write-Error "CARGO_REGISTRY_TOKEN secret is not configured in repository secrets."
+            exit 1
+          }
+
+          $crates = @(
+            "agent-otel-core",
+            "agent-otel-ipc",
+            "agent-otel-client",
+            "agent-otel-daemon",
+            "agent-otel-bridge"
+          )
+
+          foreach ($crate in $crates) {
+            Write-Host "========================================"
+            Write-Host "Publishing $crate (dry-run: $isDryRun)..."
+            Write-Host "========================================"
+
+            if ($dryRunFlag) {
+              cargo publish -p $crate --dry-run
+            } else {
+              cargo publish -p $crate
+              Write-Host "Waiting 15 seconds for crates.io index propagation..."
+              Start-Sleep -Seconds 15
+            }
+          }
+
+          Write-Host "All crates successfully published to crates.io!"

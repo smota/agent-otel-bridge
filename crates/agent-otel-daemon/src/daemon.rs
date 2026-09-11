@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use std::time::Instant;
-use agent_otel_core::model::{AntigravityHookInput, HookEvent};
-use agent_otel_core::otlp::build_span_from_hook;
-use agent_otel_core::quota::build_quota_metrics_request;
+use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent};
+use agent_otel_core::otlp::build_span_from_hook_opts;
+use agent_otel_core::quota::build_quota_metrics_request_opts;
 use agent_otel_ipc::frame::MsgType;
+use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -81,7 +81,8 @@ impl Daemon {
                             if !payload.is_empty() {
                                 let tag = payload[0];
                                 let json_bytes = &payload[1..];
-                                let event = HookEvent::from_tag(tag);
+                                let mut event = HookEvent::from_tag(tag);
+                                let client_kind = agent_otel_core::model::ClientKind::from_tag(tag);
 
                                 let now_nano = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
@@ -90,15 +91,65 @@ impl Daemon {
 
                                 salt_counter = salt_counter.wrapping_add(1);
 
-                                let input = AntigravityHookInput::parse_slice(json_bytes)
+                                let mut input = AntigravityHookInput::parse_slice(json_bytes)
                                     .unwrap_or_default();
 
-                                let span = build_span_from_hook(
+                                if event == HookEvent::Unknown {
+                                    if let Some(ref name) = input.hook_event_name {
+                                        event = HookEvent::from_str_name(name);
+                                    }
+                                }
+
+                                if input.agent_name.is_none() {
+                                    if let Some(c) = client_kind.as_str() {
+                                        input.agent_name = Some(c.to_string());
+                                    }
+                                }
+
+                                // Populate execution_mode if missing
+                                if input.execution_mode.is_none() {
+                                    let mode = if std::env::var("CI").is_ok()
+                                        || std::env::var("GITHUB_ACTIONS").is_ok()
+                                        || std::env::var("AUTOMATION").is_ok()
+                                    {
+                                        ExecutionMode::Automacao
+                                    } else {
+                                        ExecutionMode::Iterativo
+                                    };
+                                    input.execution_mode = Some(mode);
+                                }
+
+                                // On Stop event, collect Git stats from workspace
+                                if event == HookEvent::Stop {
+                                    let ws = input
+                                        .workspace_paths
+                                        .as_ref()
+                                        .and_then(|v| v.first().cloned())
+                                        .or_else(|| {
+                                            std::env::current_dir()
+                                                .ok()
+                                                .map(|p| p.to_string_lossy().to_string())
+                                        });
+                                    if let Some(ws_path) = ws {
+                                        let stats = crate::git::collect_git_stats(&ws_path);
+                                        if stats.lines_added.is_some() || stats.files_changed.is_some() {
+                                            input.git_lines_added = stats.lines_added;
+                                            input.git_lines_deleted = stats.lines_deleted;
+                                            input.git_files_changed = stats.files_changed;
+                                        }
+                                        if stats.self_revert.is_some() {
+                                            input.git_self_revert = stats.self_revert;
+                                        }
+                                    }
+                                }
+
+                                let span = build_span_from_hook_opts(
                                     event,
                                     &input,
                                     now_nano.saturating_sub(1_000_000), // ~1ms approximate duration if not given
                                     now_nano,
                                     salt_counter,
+                                    self.config.emit_legacy_aliases,
                                 );
 
                                 if batcher.push(span) {
@@ -132,6 +183,7 @@ impl Daemon {
                 }
 
                 _ = quota_interval.tick() => {
+                    last_activity = Instant::now();
                     self.emit_quota_metrics().await;
                 }
 
@@ -165,7 +217,11 @@ impl Daemon {
 
     async fn emit_quota_metrics(&self) {
         let snapshot = self.quota_engine.snapshot();
-        let request = build_quota_metrics_request(self.config.resource(), &snapshot);
+        let request = build_quota_metrics_request_opts(
+            self.config.resource(),
+            &snapshot,
+            self.config.emit_legacy_aliases,
+        );
         if let Err(e) = self.exporter.export_metrics(request).await {
             eprintln!("[agent-otel-daemon] Failed to export quota metrics: {e}");
         }

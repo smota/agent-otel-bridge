@@ -5,11 +5,14 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
 description = "Background daemon for agent-otel-bridge: micro-batching, OTLP HTTP/Protobuf export, and quota ticker"
 
 [dependencies]
-agent-otel-core = { path = "../agent-otel-core" }
-agent-otel-ipc = { path = "../agent-otel-ipc", default-features = false, features = ["server-async"] }
+agent-otel-core = { workspace = true }
+agent-otel-ipc = { workspace = true, default-features = false, features = ["server-async"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
 reqwest = { workspace = true }

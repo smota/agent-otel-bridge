@@ -1,20 +1,23 @@
 [package]
-name = "agent-otel-cli"
+name = "agent-otel-bridge"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Unified CLI for agent-otel-bridge: hook, daemon, doctor, emit-quota"
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+description = "High-Performance OpenTelemetry Bridge for AI CLI Agent Harnesses"
 
 [[bin]]
 name = "agent-otel-bridge"
 path = "src/main.rs"
 
 [dependencies]
-agent-otel-core = { path = "../agent-otel-core" }
-agent-otel-ipc = { path = "../agent-otel-ipc" }
-agent-otel-daemon = { path = "../agent-otel-daemon" }
+agent-otel-core = { workspace = true }
+agent-otel-ipc = { workspace = true, default-features = true }
+agent-otel-daemon = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }

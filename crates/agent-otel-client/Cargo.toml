@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
 description = "Ultra-fast hook client for AI Agent CLIs (< 1ms execution)"
 
 [[bin]]
@@ -12,4 +15,4 @@ name = "agent-hook"
 path = "src/main.rs"
 
 [dependencies]
-agent-otel-ipc = { path = "../agent-otel-ipc", default-features = false, features = ["client-sync"] }
+agent-otel-ipc = { workspace = true, default-features = false, features = ["client-sync"] }

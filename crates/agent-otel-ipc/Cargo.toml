@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
 description = "High-performance Win32 named pipe IPC for agent-otel-bridge"
 
 [features]
@@ -13,7 +16,7 @@ client-sync = ["windows-sys"]
 server-async = ["tokio", "tokio-util"]
 
 [dependencies]
-agent-otel-core = { path = "../agent-otel-core" }
+agent-otel-core = { workspace = true }
 windows-sys = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["net", "io-util", "sync", "macros", "rt", "time"] }
 tokio-util = { workspace = true, optional = true }

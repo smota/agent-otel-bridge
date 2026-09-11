@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-pub mod config;
-pub mod exporter;
-pub mod quota;
 pub mod batch;
+pub mod config;
 pub mod daemon;
+pub mod exporter;
+pub mod git;
+pub mod quota;
 
 pub use config::DaemonConfig;
 pub use daemon::Daemon;

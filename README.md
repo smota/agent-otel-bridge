@@ -7,18 +7,30 @@
 </p>
 
 <p align="center">
+  <a href="https://crates.io/crates/agent-otel-bridge"><img src="https://img.shields.io/crates/v/agent-otel-bridge?style=for-the-badge&logo=rust&color=blue" alt="Crates.io"/></a>
+  <a href="https://docs.rs/agent-otel-bridge"><img src="https://img.shields.io/docsrs/agent-otel-bridge?style=for-the-badge&logo=docs.rs" alt="docs.rs"/></a>
+  <a href="https://github.com/smota/agent-otel-bridge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/smota/agent-otel-bridge/ci.yml?branch=master&style=for-the-badge&logo=github&label=CI" alt="CI Status"/></a>
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OpenTelemetry-OTel_GenAI_v1.28-4B5563?style=for-the-badge&logo=opentelemetry&logoColor=4B78E6" alt="OpenTelemetry"/></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-2021_Edition-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust"/></a>
-  <a href="https://signoz.io/"><img src="https://img.shields.io/badge/SigNoz-Ready-F43F5E?style=for-the-badge&logo=signoz&logoColor=white" alt="SigNoz"/></a>
+  <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OTLP-Traces_%26_Metrics-0284C7?style=for-the-badge&logo=opentelemetry&logoColor=white" alt="OTLP Standards"/></a>
+  <a href="docs/COMMUNITY_BENCHMARKS.md"><img src="https://img.shields.io/badge/Community_Benchmarks-Leaderboard-7C3AED?style=for-the-badge&logo=speedtest&logoColor=white" alt="Community Benchmarks"/></a>
   <a href="#benchmarks"><img src="https://img.shields.io/badge/Hot--Path_Latency-%3C_3ms-10B981?style=for-the-badge&logo=speedtest&logoColor=white" alt="Latency SLA"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-0284C7?style=for-the-badge" alt="License"/></a>
+</p>
+
+<p align="center">
+  <strong>Supported Agent Harnesses:</strong><br/>
+  <a href="https://deepmind.google/technologies/gemini/"><img src="https://img.shields.io/badge/Google_Antigravity-Supported-4285F4?style=flat-square&logo=google&logoColor=white" alt="Google Antigravity"/></a>
+  <a href="https://claude.ai/"><img src="https://img.shields.io/badge/Claude_Code-Supported-D97706?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code"/></a>
+  <a href="https://openai.com/"><img src="https://img.shields.io/badge/OpenAI_Codex-Supported-10A37F?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Codex"/></a>
+  <a href="https://x.ai/"><img src="https://img.shields.io/badge/xAI_Grok-Supported-1D9BF0?style=flat-square&logo=x&logoColor=white" alt="xAI Grok"/></a>
+  <a href="https://inflection.ai/"><img src="https://img.shields.io/badge/Inflection_Pi-Supported-6366F1?style=flat-square&logo=sparkles&logoColor=white" alt="Inflection Pi"/></a>
 </p>
 
 ---
 
 ## Overview
 
-**`agent-otel-bridge`** is a high-performance, native OpenTelemetry sidecar bridge designed to solve the **hot-path lifecycle hook latency bottleneck** in autonomous AI CLI agent harnesses (Google Antigravity / `agy`, Claude Code, OpenAI Codex CLI, Aider, and custom LLM developer tools).
+**`agent-otel-bridge`** is a high-performance, native OpenTelemetry sidecar bridge designed to solve the **hot-path lifecycle hook latency bottleneck** in autonomous AI CLI agent harnesses (**Google Antigravity**, **Claude Code**, **OpenAI Codex CLI**, **xAI Grok**, **Inflection Pi**, and custom LLM developer agents).
 
 Modern AI coding agents invoke synchronous lifecycle hooks (`PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) dozens to hundreds of times per session. Traditional script-based hooks (Python, Node.js, PowerShell) impose **150ms to 1,200ms of cold-start latency per tool call**, accumulating up to several minutes of wasted developer time in a single pairing session.
 
@@ -32,27 +44,33 @@ Modern AI coding agents invoke synchronous lifecycle hooks (`PostToolUse`, `PreI
 
 ```mermaid
 flowchart TD
-    subgraph AgentHarness ["AI CLI Agent (Antigravity / agy / Claude / Codex)"]
+    subgraph AgentHarness ["AI CLI Agent Harnesses (Antigravity / Claude / Codex / Grok / Pi)"]
         HookEvent["Synchronous Lifecycle Hook (e.g. PostToolUse)"]
     end
 
     subgraph ClientPath ["Ultra-Fast Client (< 1ms execution)"]
         HookBin["agent-hook.exe (242 KB Native PE32)"]
         Watchdog["Hard Watchdog Thread (3ms Deadline)"]
-        PipeClient["Win32 Overlapped Client (\\.\\pipe\\agy-otel)"]
+        PipeClient["Win32 Overlapped Client (\\.\\pipe\\agent-otel)"]
     end
 
     subgraph DaemonProcess ["agent-otel-bridge daemon (Tokio Background Process)"]
         PipeServer["Named Pipe Server (64KB Ring Buffer)"]
         Parser["ProtoJSON Parser & SemConv Mapper"]
-        Batcher["Micro-Batcher (50 Spans / 200ms)"]
-        QuotaEngine["Quota & Heartbeat Ticker (60s)"]
+        Batcher["Micro-Batcher (Configurable Buffer)"]
+        QuotaEngine["Quota & Heartbeat Engine"]
         OtlpExporter["OTLP HTTP/Protobuf Exporter (Keep-Alive Pool)"]
     end
 
-    subgraph ObservabilityStack ["OpenTelemetry Observability Stack"]
-        Collector["OTel Collector (:4318)"]
-        SigNoz["SigNoz Dashboard (:8080)"]
+    subgraph OTelPipeline ["OpenTelemetry Collector Pipeline"]
+        Collector["OTel Collector (:4318 / :4317)"]
+        Processor["Batch / Transform Processor (OTTL)"]
+    end
+
+    subgraph ObservabilityBackends ["Pluggable Observability Ecosystem"]
+        Traces["Distributed Traces (Jaeger / Tempo / SigNoz / Datadog)"]
+        Metrics["Metrics & Gauges (Prometheus / Mimir / VictoriaMetrics)"]
+        Dashboards["Dashboards (Grafana / SigNoz / Honeycomb)"]
     end
 
     HookEvent -->|"stdin (ProtoJSON)"| HookBin
@@ -67,7 +85,10 @@ flowchart TD
     Batcher -->|"Traces"| OtlpExporter
     OtlpExporter -->|"POST /v1/traces (Protobuf)"| Collector
     OtlpExporter -->|"POST /v1/metrics (Protobuf)"| Collector
-    Collector --> SigNoz
+    Collector --> Processor
+    Processor --> Traces
+    Processor --> Metrics
+    Processor --> Dashboards
 ```
 
 ---
@@ -95,24 +116,31 @@ Measured on Windows 11 (AMD Ryzen / NVMe) via the dedicated benchmark suite (`ag
 
 Fully aligned with canonical **CNCF OpenTelemetry GenAI & Agent Semantic Conventions (v1.28+ / v1.36)**:
 
-### Spans & Attributes
+### Spans & Canonical Attributes
 - **Span Names**:
-  - `execute_tool {tool_name}` (`SpanKind::Internal`)
-  - `invoke_agent {agent_name}` (`SpanKind::Internal`)
-  - `agent.stop`
+  - `execute_tool {gen_ai.tool.name}` (`SpanKind::Internal`)
+  - `invoke_agent {gen_ai.agent.name}` (`SpanKind::Internal`)
+  - `agent.stop` (`SpanKind::Internal`)
 - **GenAI Attributes**:
   - `gen_ai.operation.name`: `execute_tool`, `invoke_agent`
-  - `gen_ai.provider.name`: `"google"`, `"anthropic"`, `"openai"`
-  - `gen_ai.agent.name`: `"antigravity"`
-  - `gen_ai.conversation.id`: Correlated session identifier
+  - `gen_ai.provider.name`: dynamically inferred (`"anthropic"`, `"google"`, `"openai"`, `"xai"`, `"inflection"`)
+  - `gen_ai.agent.name`: dynamically inferred (`"antigravity"`, `"claude-code"`, `"codex"`, `"grok"`, `"pi"`, `"ai-agent"`)
+  - `gen_ai.conversation.id`: correlated session identifier (mapped from `conversationId` or Claude Code `session_id`)
   - `gen_ai.tool.name` & `gen_ai.tool.call.id`
-  - `gen_ai.request.model`: e.g. `gemini-2.5-pro`
-- **Dashboard Backward-Compatibility**:
-  - Preserves `agy.hook.event` (`PostToolUse`, `PostInvocation`, `Stop`).
-  - Preserves `agy.step.index`, `agy.execution.num`, `agy.fully_idle`.
-- **Station Quota Gauges**:
-  - `agy.quota.remaining_fraction`: Gauge (unit `"1"`, `0.0..=1.0`), attributes `bucket="gemini-weekly"`, `group="gemini"`.
-  - `agy.quota.seconds_to_reset`: Gauge (unit `"s"`, `>= 0.0`), attributes `bucket="gemini-weekly"`, `group="gemini"`.
+  - `gen_ai.request.model`: e.g. `claude-3-5-sonnet`, `gemini-2.5-pro`, `gpt-4o`, `grok-2`
+- **Canonical Agent Attributes**:
+  - `agent.hook.event`: `PostToolUse`, `PreToolUse`, `PostInvocation`, `PreInvocation`, `Stop`
+  - `agent.step.index` & `gen_ai.agent.step_index`: integer turn index
+  - `agent.execution.num`: execution sequence number
+  - `agent.fully_idle`: boolean quiescence indicator
+  - `agent.termination_reason`: stop / completion reason (e.g. `NO_TOOL_CALL`, `model_stop`)
+- **Agent Quota Gauges**:
+  - `agent.quota.remaining_fraction`: Gauge (unit `"1"`, `0.0..=1.0`).
+  - `agent.quota.seconds_to_reset`: Gauge (unit `"s"`, `>= 0.0`).
+  - Attributes: `bucket`, `group`.
+- **OpenTelemetry Layering & Opt-In Compatibility**:
+  - Emits purely canonical, vendor-neutral attributes by default so all AI agents (Antigravity, Claude Code, Codex, Grok, Pi) share a clean data model without vendor pollution.
+  - Optional `AGENT_OTEL_LEGACY_ATTRIBUTES=true` enables legacy `agy.*` aliases for older dashboards, or use an OpenTelemetry Collector `transformprocessor` (OTTL) to alias attributes in the collection tier.
 
 ---
 
@@ -121,79 +149,95 @@ Fully aligned with canonical **CNCF OpenTelemetry GenAI & Agent Semantic Convent
 | Crate | Binary / Role | Description |
 |---|---|---|
 | [`agent-otel-core`](crates/agent-otel-core) | Library | Domain models, SemConv constants, deterministic 16-byte `trace_id` / 8-byte `span_id` generators, OTLP Protobuf builders. |
-| [`agent-otel-ipc`](crates/agent-otel-ipc) | Library | Binary wire protocol (`MAGIC: AG`), Win32 Overlapped client (`windows-sys`), Tokio Named Pipe server. |
+| [`agent-otel-ipc`](crates/agent-otel-ipc) | Library | Binary wire protocol (`MAGIC: AG`), Win32 Overlapped client (`windows-sys`), Tokio Named Pipe server (`\\.\pipe\agent-otel`). |
 | [`agent-otel-client`](crates/agent-otel-client) | `agent-hook.exe` | 242 KB static PE32 binary with 3ms watchdog fail-open backstop. |
 | [`agent-otel-daemon`](crates/agent-otel-daemon) | Library | Tokio micro-batcher, `reqwest` keep-alive exporter, quota ticker, 30-min idle shutdown. |
-| [`agent-otel-cli`](crates/agent-otel-cli) | `agent-otel-bridge.exe` | Unified CLI (`hook`, `daemon`, `doctor`, `emit-quota`, `stop`). |
+| [`agent-otel-bridge`](crates/agent-otel-cli) | `agent-otel-bridge.exe` | Unified CLI (`hook`, `daemon`, `doctor`, `hooks`, `install-hooks`, `emit-quota`, `stop`). |
 | [`agent-otel-bench`](crates/agent-otel-bench) | `agent-otel-bench.exe` | High-precision microsecond benchmark suite. |
 
 ---
 
 ## Installation & Setup
 
-### 1. Build and Install
+### 1. Install via Cargo or Pre-built Binaries
+
+From [crates.io](https://crates.io/crates/agent-otel-bridge):
 ```powershell
-# From repository root
+cargo install agent-otel-bridge
+cargo install agent-otel-client
+```
+
+Or download pre-compiled release archives directly from [GitHub Releases](https://github.com/smota/agent-otel-bridge/releases).
+
+Or build locally from repository:
+```powershell
 cargo install --path crates/agent-otel-client --force
 cargo install --path crates/agent-otel-cli --force
 ```
 
-### 2. Verify Installation (`doctor`)
+### 2. Automated Hook Installation (`install-hooks`)
+
+`agent-otel-bridge` automatically detects and configures lifecycle hooks for your AI agents:
+
+```powershell
+# Automatically detects installed agents (Antigravity, Claude Code, Codex, Grok, Pi) and registers hooks
+agent-otel-bridge install-hooks
+
+# Or target a specific client
+agent-otel-bridge install-hooks --client antigravity
+agent-otel-bridge install-hooks --client claude
+agent-otel-bridge install-hooks --client codex
+agent-otel-bridge install-hooks --client grok
+agent-otel-bridge install-hooks --client pi
+
+# Or register hooks for all supported clients
+agent-otel-bridge install-hooks --client all
+
+# Or install at project level (.claude/settings.json or .gemini/hooks.json, etc.)
+agent-otel-bridge install-hooks --client claude --project
+```
+
+Check hook status anytime:
+```powershell
+agent-otel-bridge hooks status
+```
+
+### 3. Verify Installation (`doctor`)
 ```powershell
 agent-otel-bridge doctor
 ```
 Output:
 ```text
 === agent-otel-bridge doctor ===
-[1/4] Checking environment contract variables...
+Diagnosing station telemetry pipeline & OpenTelemetry invariants
+
+[1/5] Checking environment contract variables...
   [ok] OTEL_EXPORTER_OTLP_ENDPOINT = http://127.0.0.1:4318
+  [info] OTEL_SERVICE_NAME is unset (using default 'agent-otel-bridge')
   [ok] OTEL_RESOURCE_ATTRIBUTES = deployment.environment=homelab
 
-[2/4] Checking named pipe IPC (\\.\pipe\agy-otel)...
+[2/5] Checking named pipe IPC (\\.\pipe\agent-otel)...
   [ok] Daemon is RUNNING and responding on named pipe!
 
-[3/4] Checking OTLP Collector HTTP endpoint...
+[3/5] Checking OTLP Collector HTTP endpoint...
   [ok] OTLP Collector reachable at http://127.0.0.1:4318/v1/traces
 
-[4/4] Checking SigNoz UI reachability (http://localhost:8080)...
-  [ok] SigNoz UI reachable at http://localhost:8080
-  [dashboard] http://localhost:8080/dashboard/01a08f6b-fbeb-7439-a6a9-0809f9da72a0
-```
+[4/5] Checking Observability UI reachability (http://localhost:8080)...
+  [ok] Observability UI reachable at http://localhost:8080
 
-### 3. Register Antigravity Lifecycle Hooks
-In `~/.gemini/config/hooks.json`:
-```json
-{
-  "agent-otel-bridge": {
-    "PostToolUse": [
-      {
-        "command": "agent-hook PostToolUse",
-        "timeout": 5,
-        "type": "command"
-      }
-    ],
-    "PostInvocation": [
-      {
-        "command": "agent-hook PostInvocation",
-        "timeout": 5,
-        "type": "command"
-      }
-    ],
-    "Stop": [
-      {
-        "command": "agent-hook Stop",
-        "timeout": 5,
-        "type": "command"
-      }
-    ]
-  }
-}
+[5/5] Checking Client Hook Registrations...
+  agent-hook in PATH: [ok] present
+  Google Antigravity: [ok] registered (C:\Users\samue\.gemini\config\hooks.json)
+  Claude Code:        [ok] registered (C:\Users\samue\.claude\settings.json)
+  OpenAI Codex:       [info] not registered (C:\Users\samue\.codex\hooks.json)
+  xAI Grok:           [info] not registered (C:\Users\samue\.grok\hooks.json)
+  Inflection Pi:      [info] not registered (C:\Users\samue\.pi\hooks.json)
 ```
 
 ### 4. Run CLI Commands
 ```powershell
 # Start background daemon
-agent-otel-bridge daemon
+agent-otel-bridge start
 
 # Send manual quota probe to collector
 agent-otel-bridge emit-quota --ping
@@ -201,18 +245,29 @@ agent-otel-bridge emit-quota --ping
 # Gracefully stop daemon
 agent-otel-bridge stop
 
-# Run benchmarks
-cargo run --release -p agent-otel-bench
+# Run benchmarks and submit results to community leaderboard
+cargo run --release -p agent-otel-bench -- --submit --open-browser
+# Or via unified CLI:
+agent-otel-bridge benchmark --submit --open-browser
 ```
 
 ---
 
 ## Documentation
 
-- [Architecture & Sequence Diagrams](docs/ARCHITECTURE.md)
-- [Performance Benchmark Report](docs/BENCHMARKS.md)
-- [SigNoz Dashboard Configuration Guide](docs/SIGNOZ_DASHBOARD.md)
-- [Agent Observability Skill](skills/agent-otel/SKILL.md)
+| Guide | Description |
+|---|---|
+| [AI Agent Harness Integration](docs/CLIENTS.md) | Setup & hook configs for Antigravity, Claude Code, Codex, Grok, Pi, and Custom Agents. |
+| [Configuration & Environment](docs/CONFIGURATION.md) | Complete environment variable catalog and OTel Collector recipes (`config.yaml`). |
+| [Telemetry Taxonomy & Variable Dictionary](docs/TELEMETRY_DICTIONARY.md) | Complete captured attribute dictionary, 6-dimension taxonomy, and Codex dashboard evaluation. |
+| [OpenTelemetry Dashboard & Visualization Guide](docs/DASHBOARDS.md) | Panel queries and visualization recipes across Grafana, SigNoz, Jaeger, and Prometheus. |
+| [SigNoz Contrib Dashboard Template](contrib/dashboards/signoz/README.md) | Ready-to-import agent-native JSON template (`contrib/dashboards/signoz/ai-agent-observability.json`). |
+| [Troubleshooting & Diagnostic Runbook](docs/TROUBLESHOOTING.md) | Step-by-step resolution for common issues and fail-open verification. |
+| [Performance Benchmark Report](docs/BENCHMARKS.md) | Detailed microsecond measurement methodology and hardware SLA evaluation. |
+| [Community Benchmark Matrix](docs/COMMUNITY_BENCHMARKS.md) | Living leaderboard comparing benchmark results across community hardware. |
+| [Benchmark Submission Guide](docs/BENCHMARK_SUBMISSION.md) | Instructions on running automated benchmarks and contributing hardware results. |
+| [Architecture & Sequence Diagrams](docs/ARCHITECTURE.md) | Zero-copy IPC wire protocol and Win32 Named Pipe architecture. |
+| [Agent Observability Skill](skills/agent-otel/SKILL.md) | Built-in pair programming skill for inspecting and diagnosing telemetry pipelines. |
 
 ---
 

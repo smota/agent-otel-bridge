@@ -1,0 +1,412 @@
+{
+  "tags": [
+    {
+      "key": "persona",
+      "value": "sre"
+    },
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    }
+  ],
+  "spec": {
+    "display": {
+      "name": "AI Agent SRE & Loop Protection",
+      "description": "Operational reliability dashboard for platform engineers: runaway loop detection, recursion depth, quota countdown, and tool latency."
+    },
+    "duration": "",
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service_name",
+          "display": {
+            "name": "Service",
+            "description": "Filter by OpenTelemetry service name"
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": "",
+          "capturingRegexp": "",
+          "sort": "alphabetical-asc",
+          "plugin": {
+            "kind": "signoz/DynamicVariable",
+            "spec": {
+              "name": "service.name",
+              "signal": "all"
+            }
+          }
+        }
+      }
+    ],
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Runaway Loop & Anti-Recursion Protection",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "content": {
+                "$ref": "#/spec/panels/loop-detector"
+              },
+              "height": 6,
+              "width": 12,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/quota-remaining"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 6
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/quota-reset"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 6
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/tool-p95"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 12
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/tool-errors"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 12
+            }
+          ]
+        }
+      }
+    ],
+    "panels": {
+      "loop-detector": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Loop Invocations (Runaway Recursion Alert)",
+            "description": "Rate of agent reasoning loop cycles. Sudden vertical spikes indicate infinite recursion."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0",
+                "unit": ""
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.hook.event = 'PostInvocation'"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.agent.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{gen_ai.agent.name}}",
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "quota-remaining": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Provider Quotas Remaining",
+            "description": "Individual provider quota fractions."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "formatting": {
+                "columnUnits": {
+                  "A": "percentunit"
+                },
+                "decimalPrecision": "1"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "metrics",
+                    "aggregations": [
+                      {
+                        "metricName": "agent.quota.remaining_fraction",
+                        "reduceTo": "last",
+                        "spaceAggregation": "min",
+                        "timeAggregation": "latest",
+                        "temporality": ""
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "bucket",
+                        "signal": "metrics",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "quota-reset": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Time to Quota Window Reset",
+            "description": "Seconds until provider rate limiting windows reset."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "formatting": {
+                "columnUnits": {
+                  "A": "s"
+                },
+                "decimalPrecision": "0"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "metrics",
+                    "aggregations": [
+                      {
+                        "metricName": "agent.quota.seconds_to_reset",
+                        "reduceTo": "last",
+                        "spaceAggregation": "min",
+                        "timeAggregation": "latest",
+                        "temporality": ""
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "bucket",
+                        "signal": "metrics",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tool-p95": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Tool Execution Latency (P95)",
+            "description": "95th percentile execution duration of agent tools in nanoseconds."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "2",
+                "unit": "ns"
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "p95(duration_nano)"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.hook.event = 'PostToolUse'"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.tool.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{gen_ai.tool.name}}",
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tool-errors": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Tool Failures & Exceptions",
+            "description": "Failed tool executions across reasoning steps."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/PieChartPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "1",
+                "unit": ""
+              },
+              "legend": {
+                "position": "right",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND has_error = true"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.tool.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{gen_ai.tool.name}}",
+                    "limit": 10,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

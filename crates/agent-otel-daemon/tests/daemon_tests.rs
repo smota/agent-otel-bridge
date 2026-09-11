@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+use agent_otel_core::model::{AntigravityHookInput, HookEvent};
+use agent_otel_core::otlp::{build_resource, build_span_from_hook};
 use agent_otel_daemon::batch::SpanBatcher;
 use agent_otel_daemon::config::DaemonConfig;
 use agent_otel_daemon::quota::QuotaEngine;
-use agent_otel_core::model::{AntigravityHookInput, HookEvent};
-use agent_otel_core::otlp::{build_resource, build_span_from_hook};
 
 #[test]
 fn test_daemon_config_defaults() {

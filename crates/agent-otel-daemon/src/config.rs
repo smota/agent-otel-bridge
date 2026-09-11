@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use std::time::Duration;
 use agent_otel_core::otlp::build_resource;
 use opentelemetry_proto::tonic::resource::v1::Resource;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct DaemonConfig {
@@ -18,6 +18,7 @@ pub struct DaemonConfig {
     pub batch_timeout: Duration,
     pub quota_interval: Duration,
     pub idle_timeout: Duration,
+    pub emit_legacy_aliases: bool,
 }
 
 impl Default for DaemonConfig {
@@ -31,8 +32,8 @@ impl DaemonConfig {
         let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
             .unwrap_or_else(|_| "http://127.0.0.1:4318".to_string());
 
-        let service_name = std::env::var("OTEL_SERVICE_NAME")
-            .unwrap_or_else(|_| "antigravity-cli".to_string());
+        let service_name =
+            std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "agent-otel-bridge".to_string());
 
         let environment = std::env::var("OTEL_RESOURCE_ATTRIBUTES")
             .ok()
@@ -53,7 +54,7 @@ impl DaemonConfig {
 
         let pipe_name = std::env::var("AGENT_OTEL_PIPE")
             .or_else(|_| std::env::var("AGY_OTEL_PIPE"))
-            .unwrap_or_else(|_| r"\\.\pipe\agy-otel".to_string());
+            .unwrap_or_else(|_| r"\\.\pipe\agent-otel".to_string());
 
         let batch_size = std::env::var("AGENT_OTEL_BATCH_SIZE")
             .ok()
@@ -73,7 +74,17 @@ impl DaemonConfig {
         let idle_timeout_secs = std::env::var("AGENT_OTEL_IDLE_TIMEOUT_SECS")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(1800); // 30 minutes
+            .unwrap_or(0); // 0 = disabled (persistent background service by default)
+        let idle_timeout = if idle_timeout_secs == 0 {
+            Duration::MAX
+        } else {
+            Duration::from_secs(idle_timeout_secs)
+        };
+
+        let emit_legacy_aliases = std::env::var("AGENT_OTEL_LEGACY_ATTRIBUTES")
+            .or_else(|_| std::env::var("AGENT_OTEL_EMIT_AGY_ALIASES"))
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
         Self {
             otlp_endpoint,
@@ -84,7 +95,8 @@ impl DaemonConfig {
             batch_size,
             batch_timeout: Duration::from_millis(batch_timeout_ms),
             quota_interval: Duration::from_secs(quota_interval_secs),
-            idle_timeout: Duration::from_secs(idle_timeout_secs),
+            idle_timeout,
+            emit_legacy_aliases,
         }
     }
 

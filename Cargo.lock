@@ -8,14 +8,16 @@ version = "0.1.0"
 dependencies = [
  "agent-otel-core",
  "agent-otel-ipc",
+ "clap",
  "serde",
  "serde_json",
  "tokio",
  "tokio-util",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
-name = "agent-otel-cli"
+name = "agent-otel-bridge"
 version = "0.1.0"
 dependencies = [
  "agent-otel-core",

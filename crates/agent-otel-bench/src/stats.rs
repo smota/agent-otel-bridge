@@ -61,4 +61,31 @@ impl Stats {
     pub fn p999(&self) -> u64 {
         self.percentile(99.9)
     }
+
+    pub fn summary(&self) -> StatsSummary {
+        StatsSummary {
+            count: self.count(),
+            min_us: self.min(),
+            mean_us: (self.mean() * 10.0).round() / 10.0,
+            p50_us: self.p50(),
+            p90_us: self.p90(),
+            p95_us: self.p95(),
+            p99_us: self.p99(),
+            p999_us: self.p999(),
+            max_us: self.max(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StatsSummary {
+    pub count: usize,
+    pub min_us: u64,
+    pub mean_us: f64,
+    pub p50_us: u64,
+    pub p90_us: u64,
+    pub p95_us: u64,
+    pub p99_us: u64,
+    pub p999_us: u64,
+    pub max_us: u64,
 }

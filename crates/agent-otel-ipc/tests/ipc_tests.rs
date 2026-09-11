@@ -32,7 +32,11 @@ fn test_client_fails_open_when_no_server() {
 
     // Should return Err (fail open) in < 10ms
     assert!(res.is_err());
-    assert!(elapsed.as_millis() < 50, "fail-open took too long: {:?}", elapsed);
+    assert!(
+        elapsed.as_millis() < 50,
+        "fail-open took too long: {:?}",
+        elapsed
+    );
 }
 
 #[tokio::test]
@@ -58,10 +62,11 @@ async fn test_ipc_roundtrip_named_pipe() {
     assert!(send_res.is_ok(), "try_send failed on live server");
 
     // Receive on server channel
-    let (msg_type, received) = tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv())
-        .await
-        .expect("timeout waiting for rx")
-        .expect("channel closed");
+    let (msg_type, received) =
+        tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv())
+            .await
+            .expect("timeout waiting for rx")
+            .expect("channel closed");
 
     assert_eq!(msg_type, MsgType::HookPayload);
     assert_eq!(received, payload);

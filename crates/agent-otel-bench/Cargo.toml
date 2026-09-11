@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 description = "Performance benchmark suite for agent-otel-bridge"
 
 [[bin]]
@@ -12,9 +13,11 @@ name = "agent-otel-bench"
 path = "src/main.rs"
 
 [dependencies]
-agent-otel-core = { path = "../agent-otel-core" }
-agent-otel-ipc = { path = "../agent-otel-ipc" }
+agent-otel-core = { workspace = true }
+agent-otel-ipc = { workspace = true, default-features = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+clap = { workspace = true }
+windows-sys = { workspace = true }

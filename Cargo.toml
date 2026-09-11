@@ -16,9 +16,16 @@ authors = ["Samuel Mota <samuel@movetheneedle.info>"]
 license = "Apache-2.0"
 repository = "https://github.com/smota/agent-otel-bridge"
 homepage = "https://github.com/smota/agent-otel-bridge"
+documentation = "https://docs.rs/agent-otel-bridge"
+readme = "README.md"
 description = "High-Performance OpenTelemetry Bridge for AI CLI Agent Harnesses"
 
 [workspace.dependencies]
+agent-otel-core = { version = "0.1.0", path = "crates/agent-otel-core" }
+agent-otel-ipc = { version = "0.1.0", path = "crates/agent-otel-ipc", default-features = false }
+agent-otel-client = { version = "0.1.0", path = "crates/agent-otel-client" }
+agent-otel-daemon = { version = "0.1.0", path = "crates/agent-otel-daemon" }
+agent-otel-bridge = { version = "0.1.0", path = "crates/agent-otel-cli" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 prost = "0.14"
@@ -35,7 +42,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Pipes",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
-    "Win32_System_Threading"
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation"
 ] }
 
 [profile.release]

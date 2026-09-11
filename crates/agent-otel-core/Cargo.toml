@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
 description = "Core domain models, SemConv, deterministic IDs, and OTLP Protobuf mapping for agent-otel-bridge"
 
 [dependencies]

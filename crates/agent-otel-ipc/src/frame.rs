@@ -6,7 +6,8 @@
 pub const MAGIC: [u8; 2] = [0x41, 0x47]; // "AG"
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const HEADER_LEN: usize = 8;
-pub const DEFAULT_PIPE_NAME: &str = r"\\.\pipe\agy-otel";
+pub const DEFAULT_PIPE_NAME: &str = r"\\.\pipe\agent-otel";
+pub const LEGACY_PIPE_NAME: &str = r"\\.\pipe\agy-otel";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

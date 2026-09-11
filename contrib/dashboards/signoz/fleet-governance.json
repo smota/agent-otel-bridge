@@ -1,0 +1,454 @@
+{
+  "tags": [
+    {
+      "key": "persona",
+      "value": "executive"
+    },
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    }
+  ],
+  "spec": {
+    "display": {
+      "name": "AI Fleet Executive & AI Governance",
+      "description": "Executive dashboard for engineering leadership: fleet-wide quota bottleneck, developer adoption, terminal distribution, and execution mode breakdown."
+    },
+    "duration": "",
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service_name",
+          "display": {
+            "name": "Service",
+            "description": "Filter by OpenTelemetry service name"
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": "",
+          "capturingRegexp": "",
+          "sort": "alphabetical-asc",
+          "plugin": {
+            "kind": "signoz/DynamicVariable",
+            "spec": {
+              "name": "service.name",
+              "signal": "all"
+            }
+          }
+        }
+      }
+    ],
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Fleet Health & Adoption",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "content": {
+                "$ref": "#/spec/panels/fleet-bottleneck"
+              },
+              "height": 4,
+              "width": 6,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/active-devs"
+              },
+              "height": 4,
+              "width": 6,
+              "x": 6,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/exec-mode"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 4
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/agent-share"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 4
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/terminals"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 10
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/dev-emails"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 10
+            }
+          ]
+        }
+      }
+    ],
+    "panels": {
+      "fleet-bottleneck": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Fleet Quota Headroom (Bottleneck Gauge)",
+            "description": "Minimum available quota fraction across all active AI providers."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "2",
+                "unit": "percentunit"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "metrics",
+                    "aggregations": [
+                      {
+                        "metricName": "agent.fleet.bottleneck_ratio",
+                        "reduceTo": "last",
+                        "spaceAggregation": "min",
+                        "timeAggregation": "latest",
+                        "temporality": ""
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "active-devs": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Active Agent Sessions",
+            "description": "Total unique conversations across the fleet."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0",
+                "unit": ""
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "alias": "Sessions",
+                        "expression": "count_distinct(gen_ai.conversation.id)"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.hook.event EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "exec-mode": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Execution Mode (Iterativo vs Automacao)",
+            "description": "Interactive developer sessions vs automated headless runs."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/PieChartPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "1",
+                "unit": ""
+              },
+              "legend": {
+                "position": "right",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.execution.mode EXISTS"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "agent.execution.mode",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{agent.execution.mode}}",
+                    "limit": 10,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "agent-share": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Agent Ecosystem Share",
+            "description": "Distribution across AI Agent harnesses (Antigravity, Claude Code, Codex, Grok, Pi)."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/PieChartPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "1",
+                "unit": ""
+              },
+              "legend": {
+                "position": "right",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND gen_ai.agent.name EXISTS"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.agent.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{gen_ai.agent.name}}",
+                    "limit": 10,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "terminals": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Terminal Environments",
+            "description": "Terminal emulators hosting AI agent sessions."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/PieChartPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "1",
+                "unit": ""
+              },
+              "legend": {
+                "position": "right",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND terminal.type EXISTS"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "terminal.type",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{terminal.type}}",
+                    "limit": 10,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "dev-emails": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Developer Attribution",
+            "description": "Sessions attributed by operator email."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "alias": "Sessions",
+                        "expression": "count_distinct(gen_ai.conversation.id)"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND user.email EXISTS"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "user.email",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "limit": 50,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

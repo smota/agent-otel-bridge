@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use std::time::Instant;
 use agent_otel_ipc::client::try_send;
 use agent_otel_ipc::frame::MsgType;
 use agent_otel_ipc::server::run_server;
+use std::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use crate::stats::Stats;
@@ -20,9 +20,8 @@ pub async fn run(iterations: usize) -> Result<Stats, Box<dyn std::error::Error>>
     let shutdown_server = shutdown.clone();
     let pipe_name_server = pipe_name.clone();
 
-    let server_handle = tokio::spawn(async move {
-        run_server(Some(&pipe_name_server), tx, shutdown_server).await
-    });
+    let server_handle =
+        tokio::spawn(async move { run_server(Some(&pipe_name_server), tx, shutdown_server).await });
 
     // Warm-up and wait for pipe server
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;

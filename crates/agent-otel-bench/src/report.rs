@@ -3,23 +3,86 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use crate::parse_bench::ParseBenchResult;
-use crate::stats::Stats;
+use crate::metadata::SystemMetadata;
+use crate::parse_bench::{ParseBenchResult, ParseBenchSummary};
+use crate::stats::{Stats, StatsSummary};
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone)]
 pub struct BenchmarkReport {
+    pub metadata: SystemMetadata,
     pub pipe: Stats,
     pub parse: ParseBenchResult,
     pub spawn: Stats,
     pub sla_target_us: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkJsonReport {
+    pub schema_version: String,
+    pub metadata: SystemMetadata,
+    pub sla_target_us: u64,
+    pub results: BenchmarkResultsSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkResultsSummary {
+    pub pipe: StatsSummary,
+    pub parse: ParseBenchSummary,
+    pub spawn: StatsSummary,
+    pub verdict: BenchmarkVerdict,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkVerdict {
+    pub pipe_sla_passed: bool,
+    pub spawn_sla_passed: bool,
+    pub overall_passed: bool,
+}
+
 impl BenchmarkReport {
+    pub fn to_json_report(&self) -> BenchmarkJsonReport {
+        let pipe_passed = self.pipe.p99() <= self.sla_target_us;
+        let spawn_passed = self.spawn.p99() <= 10_000;
+        let overall_passed = pipe_passed && spawn_passed;
+
+        BenchmarkJsonReport {
+            schema_version: "1.0.0".to_string(),
+            metadata: self.metadata.clone(),
+            sla_target_us: self.sla_target_us,
+            results: BenchmarkResultsSummary {
+                pipe: self.pipe.summary(),
+                parse: self.parse.summary(),
+                spawn: self.spawn.summary(),
+                verdict: BenchmarkVerdict {
+                    pipe_sla_passed: pipe_passed,
+                    spawn_sla_passed: spawn_passed,
+                    overall_passed,
+                },
+            },
+        }
+    }
+
+    pub fn to_json(&self) -> String {
+        let json_report = self.to_json_report();
+        serde_json::to_string_pretty(&json_report).unwrap_or_else(|_| "{}".to_string())
+    }
+
     pub fn to_markdown(&self) -> String {
         let sla_ms = self.sla_target_us / 1000;
 
         format!(
             "# agent-otel-bridge — Performance Benchmark Report\n\n\
             SLA Target: **< {sla_ms} ms** per hot lifecycle event.\n\n\
+            ## System & Environment Specifications\n\n\
+            | Component | Specification |\n\
+            |---|---|\n\
+            | **Operating System** | {os_name} {os_version} (Build {os_build}, {os_arch}) |\n\
+            | **Processor (CPU)** | {cpu_brand} ({cpu_cores} logical cores) |\n\
+            | **System RAM** | {ram_gb:.1} GB |\n\
+            | **Rust Toolchain** | {rustc_version} |\n\
+            | **Bridge Version** | v{bridge_version} |\n\
+            | **Benchmark Timestamp** | {timestamp_utc} |\n\n\
             ## Executive Summary\n\n\
             | Operation | p50 (µs) | p90 (µs) | p95 (µs) | p99 (µs) | SLA ({sla_ms} ms) |\n\
             |---|---:|---:|---:|---:|---|\n\
@@ -42,6 +105,16 @@ impl BenchmarkReport {
             | **PowerShell script** | ~450ms – 1,200ms | 90s – 240s | ❌ Violates AGENTS.md |\n\
             | **Python script** | ~150ms – 280ms | 30s – 56s | ❌ Violates AGENTS.md |\n\
             | **agent-hook.exe (Rust)** | **< 3ms** | **< 0.6s** | ✅ Compliant (Native binary) |\n",
+            os_name = self.metadata.os_name,
+            os_version = self.metadata.os_version,
+            os_build = self.metadata.os_build,
+            os_arch = self.metadata.os_arch,
+            cpu_brand = self.metadata.cpu_brand,
+            cpu_cores = self.metadata.cpu_cores,
+            ram_gb = self.metadata.ram_gb,
+            rustc_version = self.metadata.rustc_version,
+            bridge_version = self.metadata.bridge_version,
+            timestamp_utc = self.metadata.timestamp_utc,
             pipe_p50 = self.pipe.p50(),
             pipe_p90 = self.pipe.p90(),
             pipe_p95 = self.pipe.p95(),

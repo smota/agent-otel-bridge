@@ -3,11 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use std::path::PathBuf;
 use agent_otel_core::quota::QuotaSnapshot;
+use std::path::PathBuf;
 
 pub struct QuotaEngine {
     state_file: Option<PathBuf>,
+}
+
+impl Default for QuotaEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QuotaEngine {
@@ -16,8 +22,15 @@ impl QuotaEngine {
             .ok()
             .map(PathBuf::from)
             .or_else(|| {
-                // Check default state directory if present
-                dirs_fallback().map(|d| d.join(".state").join("quota.json"))
+                // Check default state directory and common agent state fallbacks
+                dirs_fallback().and_then(|home| {
+                    let candidates = [
+                        home.join(".state").join("quota.json"),
+                        home.join(".gemini").join("quota.json"),
+                        home.join(".agent-otel").join("quota.json"),
+                    ];
+                    candidates.into_iter().find(|p| p.exists())
+                })
             });
 
         Self { state_file }
@@ -40,31 +53,58 @@ impl QuotaEngine {
                             .and_then(|v| v.as_f64())
                             .unwrap_or(0.0);
 
+                        let bucket = parsed
+                            .get("bucket")
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                            .or_else(|| std::env::var("AGENT_OTEL_QUOTA_BUCKET").ok())
+                            .unwrap_or_else(|| {
+                                agent_otel_core::semconv::QUOTA_DEFAULT_BUCKET.to_string()
+                            });
+
+                        let group = parsed
+                            .get("group")
+                            .or_else(|| parsed.get("provider"))
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                            .or_else(|| std::env::var("AGENT_OTEL_QUOTA_GROUP").ok())
+                            .unwrap_or_else(|| {
+                                agent_otel_core::semconv::QUOTA_DEFAULT_GROUP.to_string()
+                            });
+
                         return QuotaSnapshot {
                             remaining_fraction: remaining.clamp(0.0, 1.0),
                             seconds_to_reset: reset.max(0.0),
                             observed_at_unix_nano: current_unix_nano(),
-                            bucket: "gemini-weekly".to_string(),
-                            group: "gemini".to_string(),
+                            bucket,
+                            group,
                         };
                     }
                 }
             }
         }
 
+        let default_bucket = std::env::var("AGENT_OTEL_QUOTA_BUCKET")
+            .unwrap_or_else(|_| agent_otel_core::semconv::QUOTA_DEFAULT_BUCKET.to_string());
+        let default_group = std::env::var("AGENT_OTEL_QUOTA_GROUP")
+            .unwrap_or_else(|_| agent_otel_core::semconv::QUOTA_DEFAULT_GROUP.to_string());
+
         // Heartbeat / Synthetic default when no cached file is found
         QuotaSnapshot {
             remaining_fraction: 1.0,
             seconds_to_reset: 0.0,
             observed_at_unix_nano: current_unix_nano(),
-            bucket: "gemini-weekly".to_string(),
-            group: "gemini".to_string(),
+            bucket: default_bucket,
+            group: default_group,
         }
     }
 }
 
 fn dirs_fallback() -> Option<PathBuf> {
-    std::env::var("USERPROFILE").ok().map(PathBuf::from)
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(PathBuf::from)
 }
 
 fn current_unix_nano() -> u64 {

@@ -1,0 +1,441 @@
+{
+  "tags": [
+    {
+      "key": "persona",
+      "value": "velocity"
+    },
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    }
+  ],
+  "spec": {
+    "display": {
+      "name": "AI Developer Productivity & Git Churn",
+      "description": "Productivity and workspace intelligence: lines of code added/deleted, files modified per turn, self-revert detection, and human approval decisions."
+    },
+    "duration": "",
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service_name",
+          "display": {
+            "name": "Service",
+            "description": "Filter by OpenTelemetry service name"
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": "",
+          "capturingRegexp": "",
+          "sort": "alphabetical-asc",
+          "plugin": {
+            "kind": "signoz/DynamicVariable",
+            "spec": {
+              "name": "service.name",
+              "signal": "all"
+            }
+          }
+        }
+      }
+    ],
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Git Velocity & Workspace Churn",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "content": {
+                "$ref": "#/spec/panels/loc-added"
+              },
+              "height": 4,
+              "width": 4,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/loc-deleted"
+              },
+              "height": 4,
+              "width": 4,
+              "x": 4,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/self-reverts"
+              },
+              "height": 4,
+              "width": 4,
+              "x": 8,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/files-changed"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 4
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/human-decisions"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 4
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/turns-timeline"
+              },
+              "height": 6,
+              "width": 12,
+              "x": 0,
+              "y": 10
+            }
+          ]
+        }
+      }
+    ],
+    "panels": {
+      "loc-added": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Lines of Code Added",
+            "description": "Total insertions produced by the agent."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0",
+                "unit": ""
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "sum(agent.git.lines_added)"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.git.lines_added EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "loc-deleted": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Lines of Code Deleted",
+            "description": "Total deletions produced by the agent."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0",
+                "unit": ""
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "sum(agent.git.lines_deleted)"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.git.lines_deleted EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "self-reverts": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Self-Revert Anomaly Count",
+            "description": "Turns where the agent rolled back its own code edits due to circular reasoning."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0",
+                "unit": ""
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.git.self_revert = true"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "files-changed": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Files Changed Distribution",
+            "description": "Distribution of files modified per completed reasoning turn."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/PieChartPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "1",
+                "unit": ""
+              },
+              "legend": {
+                "position": "right",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.git.files_changed EXISTS"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "agent.git.files_changed",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "int64"
+                      }
+                    ],
+                    "legend": "{{agent.git.files_changed}} files",
+                    "limit": 10,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "human-decisions": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Human Approval Decisions",
+            "description": "Distribution of user decisions on tool actions (allow, deny, ask)."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/PieChartPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "1",
+                "unit": ""
+              },
+              "legend": {
+                "position": "right",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.decision EXISTS"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "agent.decision",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{agent.decision}}",
+                    "limit": 10,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "turns-timeline": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Reasoning Turns Completed Over Time",
+            "description": "Completed agent turns split by model."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "formatting": {
+                "decimalPrecision": "0",
+                "unit": ""
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.hook.event = 'Stop'"
+                    },
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.request.model",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "legend": "{{gen_ai.request.model}}",
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

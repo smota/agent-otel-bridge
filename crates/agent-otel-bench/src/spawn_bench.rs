@@ -10,7 +10,8 @@ use std::time::Instant;
 
 use crate::stats::Stats;
 
-const HOOK_PAYLOAD: &str = r#"{"conversationId":"bench-session","stepIdx":10,"toolCall":{"name":"run_command"}}"#;
+const HOOK_PAYLOAD: &str =
+    r#"{"conversationId":"bench-session","stepIdx":10,"toolCall":{"name":"run_command"}}"#;
 
 pub fn find_agent_hook_binary() -> PathBuf {
     // Check release dir, then debug dir, then PATH
@@ -25,9 +26,11 @@ pub fn find_agent_hook_binary() -> PathBuf {
     PathBuf::from("agent-hook.exe")
 }
 
-pub fn run(iterations: usize) -> Result<Stats, Box<dyn std::error::Error>> {
+pub fn run(iterations: usize, quiet: bool) -> Result<Stats, Box<dyn std::error::Error>> {
     let bin_path = find_agent_hook_binary();
-    println!("  [spawn-bench] Using binary: {:?}", bin_path);
+    if !quiet {
+        println!("  [spawn-bench] Using binary: {:?}", bin_path);
+    }
 
     let mut samples = Vec::with_capacity(iterations);
 
