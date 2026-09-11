@@ -1,0 +1,20 @@
+[package]
+name = "agent-otel-daemon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Background daemon for agent-otel-bridge: micro-batching, OTLP HTTP/Protobuf export, and quota ticker"
+
+[dependencies]
+agent-otel-core = { path = "../agent-otel-core" }
+agent-otel-ipc = { path = "../agent-otel-ipc", default-features = false, features = ["server-async"] }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
+reqwest = { workspace = true }
+prost = { workspace = true }
+opentelemetry-proto = { workspace = true }
+bytes = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
