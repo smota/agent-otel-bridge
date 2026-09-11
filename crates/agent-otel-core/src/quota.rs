@@ -57,6 +57,7 @@ pub fn quota_gauge(
                 attributes: vec![
                     kv_string(QUOTA_ATTR_BUCKET, bucket),
                     kv_string(QUOTA_ATTR_GROUP, group),
+                    kv_string("gen_ai.provider.name", group),
                 ],
                 start_time_unix_nano: 0,
                 time_unix_nano: observed_ns,
@@ -80,32 +81,45 @@ pub fn build_quota_metrics_request_opts(
     snapshot: &QuotaSnapshot,
     emit_legacy_aliases: bool,
 ) -> ExportMetricsServiceRequest {
-    let mut metrics = Vec::new();
+    build_multi_quota_metrics_request_opts(
+        resource,
+        std::slice::from_ref(snapshot),
+        emit_legacy_aliases,
+    )
+}
 
-    if snapshot.remaining_fraction.is_finite() && (0.0..=1.0).contains(&snapshot.remaining_fraction)
-    {
-        // Canonical generic agent metric
-        metrics.push(quota_gauge(
-            METRIC_AGENT_QUOTA_REMAINING,
-            "1",
-            snapshot.remaining_fraction,
-            snapshot.observed_at_unix_nano,
-            &snapshot.bucket,
-            &snapshot.group,
-        ));
-        // Fleet-wide normalized bottleneck gauge (0.0..=1.0)
-        metrics.push(quota_gauge(
-            METRIC_FLEET_BOTTLENECK_RATIO,
-            "1",
-            snapshot.remaining_fraction,
-            snapshot.observed_at_unix_nano,
-            "fleet-bottleneck",
-            "all",
-        ));
-        // Optional legacy alias for backward compatibility with older v0.1 dashboards
-        if emit_legacy_aliases {
+pub fn build_multi_quota_metrics_request(
+    resource: Resource,
+    snapshots: &[QuotaSnapshot],
+) -> ExportMetricsServiceRequest {
+    build_multi_quota_metrics_request_opts(resource, snapshots, false)
+}
+
+pub fn build_multi_quota_metrics_request_opts(
+    resource: Resource,
+    snapshots: &[QuotaSnapshot],
+    emit_legacy_aliases: bool,
+) -> ExportMetricsServiceRequest {
+    let mut metrics = Vec::new();
+    let mut min_remaining = 1.0f64;
+    let mut has_finite_remaining = false;
+    let mut latest_observed_ns = 0u64;
+
+    for snapshot in snapshots {
+        if snapshot.remaining_fraction.is_finite()
+            && (0.0..=1.0).contains(&snapshot.remaining_fraction)
+        {
+            has_finite_remaining = true;
+            if snapshot.remaining_fraction < min_remaining {
+                min_remaining = snapshot.remaining_fraction;
+            }
+            if snapshot.observed_at_unix_nano > latest_observed_ns {
+                latest_observed_ns = snapshot.observed_at_unix_nano;
+            }
+
+            // Canonical generic agent metric for this provider/bucket
             metrics.push(quota_gauge(
-                METRIC_AGY_QUOTA_REMAINING,
+                METRIC_AGENT_QUOTA_REMAINING,
                 "1",
                 snapshot.remaining_fraction,
                 snapshot.observed_at_unix_nano,
@@ -115,26 +129,71 @@ pub fn build_quota_metrics_request_opts(
         }
     }
 
-    if snapshot.seconds_to_reset.is_finite() && snapshot.seconds_to_reset >= 0.0 {
-        // Canonical generic agent metric
+    // Fleet-wide normalized bottleneck gauge (0.0..=1.0) computed across all active providers
+    if has_finite_remaining && latest_observed_ns > 0 {
         metrics.push(quota_gauge(
-            METRIC_AGENT_QUOTA_RESET,
-            "s",
-            snapshot.seconds_to_reset,
-            snapshot.observed_at_unix_nano,
-            &snapshot.bucket,
-            &snapshot.group,
+            METRIC_FLEET_BOTTLENECK_RATIO,
+            "1",
+            min_remaining,
+            latest_observed_ns,
+            "fleet-bottleneck",
+            "all",
         ));
-        // Optional legacy alias for backward compatibility with older v0.1 dashboards
-        if emit_legacy_aliases {
+    }
+
+    // Optional legacy remaining alias for backward compatibility with older v0.1 dashboards
+    if emit_legacy_aliases {
+        for snapshot in snapshots {
+            if snapshot.remaining_fraction.is_finite()
+                && (0.0..=1.0).contains(&snapshot.remaining_fraction)
+                && (snapshot.group == "gemini" || snapshot.bucket.contains("gemini"))
+            {
+                metrics.push(quota_gauge(
+                    METRIC_AGY_QUOTA_REMAINING,
+                    "1",
+                    snapshot.remaining_fraction,
+                    snapshot.observed_at_unix_nano,
+                    &snapshot.bucket,
+                    &snapshot.group,
+                ));
+            }
+        }
+    }
+
+    // Canonical reset seconds for each provider/bucket
+    for snapshot in snapshots {
+        if snapshot.seconds_to_reset.is_finite() && snapshot.seconds_to_reset >= 0.0 {
+            if snapshot.observed_at_unix_nano > latest_observed_ns {
+                latest_observed_ns = snapshot.observed_at_unix_nano;
+            }
+
             metrics.push(quota_gauge(
-                METRIC_AGY_QUOTA_RESET,
+                METRIC_AGENT_QUOTA_RESET,
                 "s",
                 snapshot.seconds_to_reset,
                 snapshot.observed_at_unix_nano,
                 &snapshot.bucket,
                 &snapshot.group,
             ));
+        }
+    }
+
+    // Optional legacy reset alias for backward compatibility with older v0.1 dashboards
+    if emit_legacy_aliases {
+        for snapshot in snapshots {
+            if snapshot.seconds_to_reset.is_finite()
+                && snapshot.seconds_to_reset >= 0.0
+                && (snapshot.group == "gemini" || snapshot.bucket.contains("gemini"))
+            {
+                metrics.push(quota_gauge(
+                    METRIC_AGY_QUOTA_RESET,
+                    "s",
+                    snapshot.seconds_to_reset,
+                    snapshot.observed_at_unix_nano,
+                    &snapshot.bucket,
+                    &snapshot.group,
+                ));
+            }
         }
     }
 

@@ -8,8 +8,8 @@
 
 <p align="center">
   <a href="https://crates.io/crates/agent-otel-bridge"><img src="https://img.shields.io/crates/v/agent-otel-bridge?style=for-the-badge&logo=rust&color=blue" alt="Crates.io"/></a>
-  <a href="https://docs.rs/agent-otel-bridge"><img src="https://img.shields.io/docsrs/agent-otel-bridge?style=for-the-badge&logo=docs.rs" alt="docs.rs"/></a>
-  <a href="https://github.com/smota/agent-otel-bridge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/smota/agent-otel-bridge/ci.yml?branch=master&style=for-the-badge&logo=github&label=CI" alt="CI Status"/></a>
+  <a href="https://docs.rs/agent-otel-core"><img src="https://img.shields.io/docsrs/agent-otel-core?style=for-the-badge&logo=docs.rs&label=docs.rs" alt="docs.rs"/></a>
+  <a href="https://github.com/smota/agent-otel-bridge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/smota/agent-otel-bridge/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI" alt="CI Status"/></a>
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OpenTelemetry-OTel_GenAI_v1.28-4B5563?style=for-the-badge&logo=opentelemetry&logoColor=4B78E6" alt="OpenTelemetry"/></a>
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OTLP-Traces_%26_Metrics-0284C7?style=for-the-badge&logo=opentelemetry&logoColor=white" alt="OTLP Standards"/></a>
   <a href="docs/COMMUNITY_BENCHMARKS.md"><img src="https://img.shields.io/badge/Community_Benchmarks-Leaderboard-7C3AED?style=for-the-badge&logo=speedtest&logoColor=white" alt="Community Benchmarks"/></a>

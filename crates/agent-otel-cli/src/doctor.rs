@@ -73,7 +73,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|_| std::env::var("SIGNOZ_UI_URL"))
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
 
-    println!("\n[4/5] Checking Observability UI reachability ({})...", ui_url);
+    println!(
+        "\n[4/5] Checking Observability UI reachability ({})...",
+        ui_url
+    );
     match client.get(&ui_url).send().await {
         Ok(resp) => {
             println!(

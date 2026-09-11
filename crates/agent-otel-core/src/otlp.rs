@@ -228,7 +228,11 @@ pub fn build_span_from_hook_opts(
         .terminal_type
         .clone()
         .or_else(|| std::env::var("TERM_PROGRAM").ok())
-        .or_else(|| std::env::var("WT_SESSION").ok().map(|_| "windows-terminal".to_string()))
+        .or_else(|| {
+            std::env::var("WT_SESSION")
+                .ok()
+                .map(|_| "windows-terminal".to_string())
+        })
         .or_else(|| std::env::var("TERM").ok());
     if let Some(term) = terminal_opt {
         attributes.push(kv_string(TERMINAL_TYPE, &term));

@@ -18,24 +18,24 @@ pub enum HookEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ExecutionMode {
-    #[serde(rename = "iterativo")]
-    Iterativo,
-    #[serde(rename = "automacao")]
-    Automacao,
+    #[serde(rename = "interactive", alias = "iterativo")]
+    Interactive,
+    #[serde(rename = "automation", alias = "automacao")]
+    Automation,
 }
 
 impl ExecutionMode {
     pub fn as_str(&self) -> &'static str {
         match self {
-            ExecutionMode::Iterativo => "iterativo",
-            ExecutionMode::Automacao => "automacao",
+            ExecutionMode::Interactive => "interactive",
+            ExecutionMode::Automation => "automation",
         }
     }
 
     pub fn from_str_name(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
-            "iterativo" | "interactive" | "repl" | "tui" => ExecutionMode::Iterativo,
-            _ => ExecutionMode::Automacao,
+            "interactive" | "iterativo" | "repl" | "tui" => ExecutionMode::Interactive,
+            _ => ExecutionMode::Automation,
         }
     }
 }
@@ -239,7 +239,12 @@ pub struct AgentHookInput {
     #[serde(default)]
     pub success: Option<bool>,
 
-    #[serde(alias = "execution_mode", alias = "executionMode", alias = "mode", default)]
+    #[serde(
+        alias = "execution_mode",
+        alias = "executionMode",
+        alias = "mode",
+        default
+    )]
     pub execution_mode: Option<ExecutionMode>,
 
     #[serde(

@@ -214,7 +214,7 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "Execution Mode (Iterativo vs Automacao)",
+            "name": "Execution Mode (Interactive vs Automation)",
             "description": "Interactive developer sessions vs automated headless runs."
           },
           "links": null,

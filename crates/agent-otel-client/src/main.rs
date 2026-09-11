@@ -41,19 +41,17 @@ fn resolve_tag() -> u8 {
     let mut i = 0;
     while i < args.len() {
         let arg = &args[i];
-        if arg == "--client" || arg == "--agent" {
-            if i + 1 < args.len() {
-                client_id = match args[i + 1].to_ascii_lowercase().as_str() {
-                    "antigravity" | "agy" | "gemini" => 1,
-                    "claude" | "claude-code" => 2,
-                    "codex" | "openai" => 3,
-                    "grok" | "xai" => 4,
-                    "pi" | "inflection" => 5,
-                    _ => 0,
-                };
-                i += 2;
-                continue;
-            }
+        if (arg == "--client" || arg == "--agent") && i + 1 < args.len() {
+            client_id = match args[i + 1].to_ascii_lowercase().as_str() {
+                "antigravity" | "agy" | "gemini" => 1,
+                "claude" | "claude-code" => 2,
+                "codex" | "openai" => 3,
+                "grok" | "xai" => 4,
+                "pi" | "inflection" => 5,
+                _ => 0,
+            };
+            i += 2;
+            continue;
         }
 
         match arg.as_str() {

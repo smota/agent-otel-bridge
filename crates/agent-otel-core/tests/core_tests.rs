@@ -127,7 +127,14 @@ fn test_otlp_span_generation_with_legacy_aliases() {
         "fullyIdle": false
     }"#;
     let input = AntigravityHookInput::parse_slice(json.as_bytes()).unwrap();
-    let span = build_span_from_hook_opts(HookEvent::PostToolUse, &input, 1_000_000, 2_000_000, 0, true);
+    let span = build_span_from_hook_opts(
+        HookEvent::PostToolUse,
+        &input,
+        1_000_000,
+        2_000_000,
+        0,
+        true,
+    );
 
     let has_agent_event = span.attributes.iter().any(|kv| kv.key == AGENT_HOOK_EVENT);
     let has_agy_event = span.attributes.iter().any(|kv| kv.key == AGY_HOOK_EVENT);
@@ -242,28 +249,43 @@ fn test_enriched_attributes_and_tokens() {
     let span = build_span_from_hook(HookEvent::PostToolUse, &input, 1000, 2000, 5);
 
     let find_attr = |key: &str| -> Option<String> {
-        span.attributes.iter().find(|kv| kv.key == key).and_then(|kv| {
-            kv.value.as_ref().and_then(|v| match &v.value {
-                Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s)) => {
-                    Some(s.clone())
-                }
-                Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i)) => {
-                    Some(i.to_string())
-                }
-                Some(opentelemetry_proto::tonic::common::v1::any_value::Value::BoolValue(b)) => {
-                    Some(b.to_string())
-                }
-                _ => None,
+        span.attributes
+            .iter()
+            .find(|kv| kv.key == key)
+            .and_then(|kv| {
+                kv.value.as_ref().and_then(|v| match &v.value {
+                    Some(
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s),
+                    ) => Some(s.clone()),
+                    Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i)) => {
+                        Some(i.to_string())
+                    }
+                    Some(opentelemetry_proto::tonic::common::v1::any_value::Value::BoolValue(
+                        b,
+                    )) => Some(b.to_string()),
+                    _ => None,
+                })
             })
-        })
     };
 
-    assert_eq!(find_attr(GEN_AI_USAGE_INPUT_TOKENS), Some("1500".to_string()));
-    assert_eq!(find_attr(GEN_AI_USAGE_OUTPUT_TOKENS), Some("350".to_string()));
-    assert_eq!(find_attr(GEN_AI_USAGE_CACHE_READ_TOKENS), Some("800".to_string()));
+    assert_eq!(
+        find_attr(GEN_AI_USAGE_INPUT_TOKENS),
+        Some("1500".to_string())
+    );
+    assert_eq!(
+        find_attr(GEN_AI_USAGE_OUTPUT_TOKENS),
+        Some("350".to_string())
+    );
+    assert_eq!(
+        find_attr(GEN_AI_USAGE_CACHE_READ_TOKENS),
+        Some("800".to_string())
+    );
     assert_eq!(find_attr(AGENT_DECISION), Some("allow".to_string()));
     assert_eq!(find_attr(AGENT_SUCCESS), Some("true".to_string()));
-    assert_eq!(find_attr(USER_EMAIL), Some("engineer@example.com".to_string()));
+    assert_eq!(
+        find_attr(USER_EMAIL),
+        Some("engineer@example.com".to_string())
+    );
     assert_eq!(find_attr(TERMINAL_TYPE), Some("xterm-256color".to_string()));
 }
 
@@ -283,10 +305,13 @@ fn test_w3c_traceparent_parsing() {
     // Invalid length
     assert!(parse_w3c_traceparent("00-short-01").is_none());
     // All zeros invalid
-    assert!(parse_w3c_traceparent("00-00000000000000000000000000000000-0000000000000000-01").is_none());
+    assert!(
+        parse_w3c_traceparent("00-00000000000000000000000000000000-0000000000000000-01").is_none()
+    );
 
     // Resolve traceparent from explicit parameter
-    let (resolved_trace, resolved_parent) = resolve_trace_and_parent_id(Some(valid_header), Some("conv-123"));
+    let (resolved_trace, resolved_parent) =
+        resolve_trace_and_parent_id(Some(valid_header), Some("conv-123"));
     assert_eq!(resolved_trace, trace_id);
     assert_eq!(resolved_parent, Some(parent_id));
 
@@ -303,7 +328,7 @@ fn test_v02_git_and_execution_mode_attributes() {
     let json = r#"{
         "conversationId": "test-v02-git",
         "stepIdx": 10,
-        "mode": "automacao",
+        "mode": "automation",
         "linesAdded": 42,
         "linesDeleted": 7,
         "filesChanged": 3,
@@ -312,11 +337,17 @@ fn test_v02_git_and_execution_mode_attributes() {
     }"#;
 
     let input = AntigravityHookInput::parse_slice(json.as_bytes()).expect("parse failed");
-    assert_eq!(input.execution_mode, Some(ExecutionMode::Automacao));
+    assert_eq!(input.execution_mode, Some(ExecutionMode::Automation));
     assert_eq!(input.git_lines_added, Some(42));
     assert_eq!(input.git_lines_deleted, Some(7));
     assert_eq!(input.git_files_changed, Some(3));
     assert_eq!(input.git_self_revert, Some(true));
+
+    // Also verify Portuguese backward compatibility
+    let input_pt = AntigravityHookInput::parse_slice(br#"{"mode":"automacao"}"#).unwrap();
+    assert_eq!(input_pt.execution_mode, Some(ExecutionMode::Automation));
+    let input_it = AntigravityHookInput::parse_slice(br#"{"mode":"iterativo"}"#).unwrap();
+    assert_eq!(input_it.execution_mode, Some(ExecutionMode::Interactive));
 
     let span = build_span_from_hook(HookEvent::Stop, &input, 1000, 2000, 1);
 
@@ -325,27 +356,31 @@ fn test_v02_git_and_execution_mode_attributes() {
     assert_eq!(span.trace_id[0], 0x11);
 
     let find_attr = |key: &str| -> Option<String> {
-        span.attributes.iter().find(|kv| kv.key == key).and_then(|kv| {
-            kv.value.as_ref().and_then(|v| match &v.value {
-                Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s)) => {
-                    Some(s.clone())
-                }
-                Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i)) => {
-                    Some(i.to_string())
-                }
-                Some(opentelemetry_proto::tonic::common::v1::any_value::Value::BoolValue(b)) => {
-                    Some(b.to_string())
-                }
-                _ => None,
+        span.attributes
+            .iter()
+            .find(|kv| kv.key == key)
+            .and_then(|kv| {
+                kv.value.as_ref().and_then(|v| match &v.value {
+                    Some(
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s),
+                    ) => Some(s.clone()),
+                    Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i)) => {
+                        Some(i.to_string())
+                    }
+                    Some(opentelemetry_proto::tonic::common::v1::any_value::Value::BoolValue(
+                        b,
+                    )) => Some(b.to_string()),
+                    _ => None,
+                })
             })
-        })
     };
 
-    assert_eq!(find_attr(AGENT_EXECUTION_MODE), Some("automacao".to_string()));
+    assert_eq!(
+        find_attr(AGENT_EXECUTION_MODE),
+        Some("automation".to_string())
+    );
     assert_eq!(find_attr(AGENT_GIT_LINES_ADDED), Some("42".to_string()));
     assert_eq!(find_attr(AGENT_GIT_LINES_DELETED), Some("7".to_string()));
     assert_eq!(find_attr(AGENT_GIT_FILES_CHANGED), Some("3".to_string()));
     assert_eq!(find_attr(AGENT_GIT_SELF_REVERT), Some("true".to_string()));
 }
-
-

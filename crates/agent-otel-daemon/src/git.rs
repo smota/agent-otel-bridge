@@ -85,7 +85,10 @@ pub fn collect_git_stats(workspace: &str) -> GitStats {
         {
             if log_out.status.success() {
                 let subject = String::from_utf8_lossy(&log_out.stdout).to_ascii_lowercase();
-                if subject.starts_with("revert ") || subject.contains("revert:") || subject.contains("undo ") {
+                if subject.starts_with("revert ")
+                    || subject.contains("revert:")
+                    || subject.contains("undo ")
+                {
                     stats.self_revert = Some(true);
                 }
             }

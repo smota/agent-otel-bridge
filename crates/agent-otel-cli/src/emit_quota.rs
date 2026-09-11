@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use agent_otel_core::quota::build_quota_metrics_request_opts;
+use agent_otel_core::quota::build_multi_quota_metrics_request_opts;
 use agent_otel_daemon::config::DaemonConfig;
 use agent_otel_daemon::exporter::OtlpExporter;
 use agent_otel_daemon::quota::QuotaEngine;
@@ -26,18 +26,24 @@ pub async fn run(ping: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("[emit-quota] Emitting quota metrics directly to OTLP collector...");
+    println!("[emit-quota] Emitting multi-provider quota metrics directly to OTLP collector...");
     let config = DaemonConfig::from_env();
     let engine = QuotaEngine::new();
-    let snapshot = engine.snapshot();
+    let snapshots = engine.snapshots();
 
-    println!(
-        "  [quota] remaining_fraction: {:.2}, seconds_to_reset: {:.0}s, bucket: {}, group: {}",
-        snapshot.remaining_fraction, snapshot.seconds_to_reset, snapshot.bucket, snapshot.group
-    );
+    for snapshot in &snapshots {
+        println!(
+            "  [quota] remaining_fraction: {:.2}, seconds_to_reset: {:.0}s, bucket: {}, group: {}",
+            snapshot.remaining_fraction, snapshot.seconds_to_reset, snapshot.bucket, snapshot.group
+        );
+    }
 
     let exporter = OtlpExporter::new(config.traces_url(), config.metrics_url())?;
-    let request = build_quota_metrics_request_opts(config.resource(), &snapshot, config.emit_legacy_aliases);
+    let request = build_multi_quota_metrics_request_opts(
+        config.resource(),
+        &snapshots,
+        config.emit_legacy_aliases,
+    );
 
     exporter.export_metrics(request).await?;
     println!(

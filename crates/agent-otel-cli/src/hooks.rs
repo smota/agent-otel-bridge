@@ -18,6 +18,7 @@ pub enum ClientTarget {
 }
 
 impl ClientTarget {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "antigravity" | "agy" | "gemini" => ClientTarget::Antigravity,
@@ -27,6 +28,14 @@ impl ClientTarget {
             "pi" | "inflection" | "pi-cli" => ClientTarget::Pi,
             _ => ClientTarget::All,
         }
+    }
+}
+
+impl std::str::FromStr for ClientTarget {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from_str(s))
     }
 }
 
@@ -75,7 +84,12 @@ pub fn get_grok_config_path(project: bool) -> Option<PathBuf> {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
             .ok()
-            .map(|home| PathBuf::from(home).join(".grok").join("hooks").join("agent-otel.json"))
+            .map(|home| {
+                PathBuf::from(home)
+                    .join(".grok")
+                    .join("hooks")
+                    .join("agent-otel.json")
+            })
     }
 }
 

@@ -25,7 +25,15 @@ fn test_frame_encoding_and_decoding() {
 
 #[test]
 fn test_client_fails_open_when_no_server() {
-    std::env::set_var("AGY_OTEL_PIPE", r"\\.\pipe\agy-otel-nonexistent-pipe");
+    let non_existent = format!(
+        r"\\.\pipe\agy-otel-nonexistent-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    std::env::set_var("AGENT_OTEL_PIPE", &non_existent);
+    std::env::set_var("AGY_OTEL_PIPE", &non_existent);
     let start = std::time::Instant::now();
     let res = client::try_send(MsgType::HookPayload, b"test");
     let elapsed = start.elapsed();
@@ -42,6 +50,7 @@ fn test_client_fails_open_when_no_server() {
 #[tokio::test]
 async fn test_ipc_roundtrip_named_pipe() {
     let pipe_name = format!(r"\\.\pipe\agy-otel-test-{}", std::process::id());
+    std::env::set_var("AGENT_OTEL_PIPE", &pipe_name);
     std::env::set_var("AGY_OTEL_PIPE", &pipe_name);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(16);

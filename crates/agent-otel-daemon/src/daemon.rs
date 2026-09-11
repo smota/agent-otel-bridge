@@ -5,7 +5,7 @@
 
 use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent};
 use agent_otel_core::otlp::build_span_from_hook_opts;
-use agent_otel_core::quota::build_quota_metrics_request_opts;
+use agent_otel_core::quota::build_multi_quota_metrics_request_opts;
 use agent_otel_ipc::frame::MsgType;
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -106,15 +106,25 @@ impl Daemon {
                                     }
                                 }
 
+                                if let Some(ref name) = input.agent_name {
+                                    let tokens = match (input.input_tokens, input.output_tokens) {
+                                        (Some(i), Some(o)) => Some((i + o).max(0) as u64),
+                                        (Some(i), None) => Some(i.max(0) as u64),
+                                        (None, Some(o)) => Some(o.max(0) as u64),
+                                        (None, None) => None,
+                                    };
+                                    self.quota_engine.record_activity(name, tokens);
+                                }
+
                                 // Populate execution_mode if missing
                                 if input.execution_mode.is_none() {
                                     let mode = if std::env::var("CI").is_ok()
                                         || std::env::var("GITHUB_ACTIONS").is_ok()
                                         || std::env::var("AUTOMATION").is_ok()
                                     {
-                                        ExecutionMode::Automacao
+                                        ExecutionMode::Automation
                                     } else {
-                                        ExecutionMode::Iterativo
+                                        ExecutionMode::Interactive
                                     };
                                     input.execution_mode = Some(mode);
                                 }
@@ -216,10 +226,10 @@ impl Daemon {
     }
 
     async fn emit_quota_metrics(&self) {
-        let snapshot = self.quota_engine.snapshot();
-        let request = build_quota_metrics_request_opts(
+        let snapshots = self.quota_engine.snapshots();
+        let request = build_multi_quota_metrics_request_opts(
             self.config.resource(),
-            &snapshot,
+            &snapshots,
             self.config.emit_legacy_aliases,
         );
         if let Err(e) = self.exporter.export_metrics(request).await {

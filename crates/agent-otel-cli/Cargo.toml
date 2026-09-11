@@ -10,6 +10,10 @@ documentation.workspace = true
 readme.workspace = true
 description = "High-Performance OpenTelemetry Bridge for AI CLI Agent Harnesses"
 
+[lib]
+name = "agent_otel_bridge"
+path = "src/lib.rs"
+
 [[bin]]
 name = "agent-otel-bridge"
 path = "src/main.rs"
