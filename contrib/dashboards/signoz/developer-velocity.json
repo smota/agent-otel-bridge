@@ -1,4 +1,6 @@
 {
+  "schemaVersion": "v6",
+  "name": "ai-developer-productivity-git-churn-nw3hifrl",
   "tags": [
     {
       "key": "persona",
@@ -242,7 +244,7 @@
                     ],
                     "disabled": false,
                     "filter": {
-                      "expression": "service.name IN $service_name AND agent.git.self_revert = true"
+                      "expression": "service.name IN $service_name AND (agent.git.self_revert = true OR agent.git.self_revert = 'true')"
                     },
                     "limit": 100,
                     "order": []

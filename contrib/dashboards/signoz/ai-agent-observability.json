@@ -44,7 +44,7 @@
     ],
     "display": {
       "name": "AI Agent Observability (OpenTelemetry)",
-      "description": "Production observability dashboard for autonomous AI coding agents (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi) instrumented via agent-otel-bridge. Built on canonical OpenTelemetry GenAI (gen_ai.*) and Agent Lifecycle (agent.*) standards."
+      "description": "Production observability dashboard for autonomous AI coding agents (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi [pi.dev]) instrumented via agent-otel-bridge. Built on canonical OpenTelemetry GenAI (gen_ai.*) and Agent Lifecycle (agent.*) standards."
     },
     "duration": "",
     "layouts": [

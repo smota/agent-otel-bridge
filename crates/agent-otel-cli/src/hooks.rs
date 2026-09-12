@@ -426,10 +426,7 @@ pub fn run_install(
             if should_install {
                 match install_antigravity_hooks(&path, binary, Some("pi")) {
                     Ok(_) => {
-                        println!(
-                            "  [ok] Inflection Pi hooks registered at: {}",
-                            path.display()
-                        );
+                        println!("  [ok] Pi (pi.dev) hooks registered at: {}", path.display());
                         installed_any = true;
                     }
                     Err(e) => println!("  [fail] Failed to install Pi hooks: {}", e),
@@ -512,12 +509,9 @@ pub fn run_uninstall(
     if target == ClientTarget::Pi || target == ClientTarget::All {
         if let Some(path) = get_pi_config_path(project) {
             match uninstall_antigravity_hooks(&path) {
-                Ok(true) => println!(
-                    "  [ok] Inflection Pi hooks removed from: {}",
-                    path.display()
-                ),
+                Ok(true) => println!("  [ok] Pi hooks removed from: {}", path.display()),
                 Ok(false) => println!(
-                    "  [info] Inflection Pi hooks were not configured in: {}",
+                    "  [info] Pi hooks were not configured in: {}",
                     path.display()
                 ),
                 Err(e) => println!("  [fail] Error uninstalling Pi hooks: {}", e),
@@ -618,14 +612,14 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Inflection Pi global
+    // Pi (pi.dev) global
     if let Some(p) = get_pi_config_path(false) {
         let configured = p.exists()
             && fs::read_to_string(&p)
                 .map(|s| s.contains("agent-otel-bridge"))
                 .unwrap_or(false);
         println!(
-            "  Inflection Pi:      {}",
+            "  Pi (pi.dev):        {}",
             if configured {
                 format!("[ok] configured ({})", p.display())
             } else {

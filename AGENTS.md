@@ -1,6 +1,6 @@
 # AGENTS.md: Architectural Invariants, Design Constraints, & Guidelines for AI Agents
 
-> **Audience**: Autonomous AI coding agents (Google Antigravity, Claude Code, OpenAI Codex CLI, xAI Grok, Inflection Pi), human core contributors, and automated reviewers.  
+> **Audience**: Autonomous AI coding agents (Google Antigravity, Claude Code, OpenAI Codex CLI, xAI Grok, Pi [pi.dev]), human core contributors, and automated reviewers.  
 > **Repository**: `smota/agent-otel-bridge`  
 > **Status**: Active & Enforced  
 
@@ -107,22 +107,26 @@ Every pull request and modification MUST satisfy:
    cargo doc --workspace --no-deps
    ```
 5. **Automated Guardrail Verification**:
-   Run the dedicated project guardrail check before committing:
+   Run the dedicated cross-platform project guardrail check before committing:
    ```powershell
-   .\scripts\check-guardrails.ps1
+   # Cross-platform Cargo alias (Windows, Linux, macOS)
+   cargo guardrails
+
+   # Or via unified CLI binary
+   agent-otel-bridge check-guardrails
    ```
 
 ---
 
 ## 5. Git Branching & Contribution Workflow
 
-* **`main`**: Production trunk. Protected branch. Releases are tagged from `main` (`v0.1.0`, `v0.2.0`, `v0.3.0`). Direct pushes to `main` are restricted to maintainers for release merges.
+* **`main`**: Production trunk. Protected branch. Releases are tagged from `main` (`v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.4.0`). Direct pushes to `main` are restricted to maintainers for release merges.
 * **Topic Branches**: All changes must be developed on descriptive feature branches:
   - `feat/<feature-name>`: New capabilities (e.g. `feat/tokenomics-dashboard`).
   - `fix/<issue-name>`: Bug fixes (e.g. `fix/worktree-detection`).
   - `docs/<topic>`: Documentation, benchmarks, or guides.
 * **Pull Request Checklist**:
   - [ ] Code compiles cleanly with 0 warnings on Rust stable.
-  - [ ] `check-guardrails.ps1` passes with all green checks.
+  - [ ] `cargo guardrails` passes with all green checks.
   - [ ] New semantic conventions are documented in `docs/TELEMETRY_DICTIONARY.md`.
   - [ ] Backward compatibility with existing dashboards is preserved.

@@ -12,7 +12,7 @@ This guide details dashboard construction, query specifications, and visualizati
 ## 1. OpenTelemetry Architecture & Layer Separation
 
 `agent-otel-bridge` adheres to OpenTelemetry architectural standards:
-1. **Instrumentation Layer**: Emits purely canonical, vendor-neutral semantic conventions. All supported agents (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi) produce uniform attributes.
+1. **Instrumentation Layer**: Emits purely canonical, vendor-neutral semantic conventions. All supported agents (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi) produce uniform attributes.
 2. **Collection Layer (OpenTelemetry Collector)**: Receives standard OTLP, applies batching, memory limiting, and optional OTTL transformations, then fans out to downstream backends.
 3. **Visualization Layer**: Dashboards query canonical OpenTelemetry attributes directly without vendor lock-in.
 
@@ -23,7 +23,7 @@ flowchart LR
         A2["Claude Code"]
         A3["OpenAI Codex"]
         A4["xAI Grok"]
-        A5["Inflection Pi"]
+        A5["Pi (pi.dev)"]
     end
 
     subgraph Bridge ["agent-otel-bridge"]
@@ -68,7 +68,7 @@ Every panel in your dashboard should query canonical OpenTelemetry conventions:
 | **5** | **Agent Quota Remaining** | Gauge (0–100%) | Metrics | `agent.quota.remaining_fraction` | Current quota percentage remaining (`0.0..=1.0`), grouped by `bucket`. |
 | **6** | **Seconds to Quota Reset** | Stat / Time Duration | Metrics | `agent.quota.seconds_to_reset` | Countdown time until quota resets for each provider bucket. |
 | **7** | **Error Rate by Agent & Tool** | Time Series | Traces | `status.code = ERROR` | Failed tool executions or hook errors grouped by `gen_ai.tool.name`. |
-| **8** | **AI Provider Breakdown** | Pie Chart | Traces | `gen_ai.provider.name` | Proportion of activity by AI provider (`google`, `anthropic`, `openai`, `xai`, `inflection`). |
+| **8** | **AI Provider Breakdown** | Pie Chart | Traces | `gen_ai.provider.name` | Proportion of activity by AI provider (`google`, `anthropic`, `openai`, `xai`, `pi`). |
 | **9** | **Turn Step Distribution** | Bar Chart / Histogram | Traces | `agent.step.index` | Depth of reasoning turns per session (`agent.step.index`). |
 | **10** | **Quiescence & Stop Reasons** | Table / Donut | Traces | `agent.termination_reason` | Agent stop breakdown (`NO_TOOL_CALL`, `model_stop`, `error`). |
 
@@ -264,10 +264,23 @@ The repository provides ready-to-import JSON templates in [`contrib/dashboards/s
 
 ### Importing into SigNoz
 To import or sync dashboards via the SigNoz v2 API:
+
+**PowerShell (Windows, macOS, Linux):**
 ```powershell
 $dashboard = Get-Content "contrib/dashboards/signoz/tokenomics-and-cost.json" -Raw
 Invoke-RestMethod -Uri "http://localhost:8080/api/v2/dashboards" `
   -Headers @{ "SIGNOZ-API-KEY" = $env:SIGNOZ_API_KEY; "Content-Type" = "application/json" } `
   -Method Post -Body $dashboard
 ```
+
+**Bash / cURL (Linux, macOS):**
+```bash
+curl -s -X POST "http://localhost:8080/api/v2/dashboards" \
+  -H "Content-Type: application/json" \
+  -H "SIGNOZ-API-KEY: $SIGNOZ_API_KEY" \
+  -d @"contrib/dashboards/signoz/tokenomics-and-cost.json"
+```
+
+### Visual Tour & Screenshots
+Full high-resolution screenshots captured across live multi-agent runs (Google Antigravity, Claude Code, xAI Grok, and OpenAI Codex) are available in the [SigNoz Dashboard Visual Tour](../contrib/dashboards/signoz/README.md#5-production-dashboard-gallery--visual-tour).
 

@@ -42,18 +42,29 @@ Output inspection:
 **Symptom**: Step [5/5] shows `agent-hook` is missing from system PATH.
 **Cause**: Cargo's bin directory is not in your environment PATH variable.
 **Fix**:
-1. Verify where `agent-hook.exe` is located:
-   ```powershell
-   Test-Path "$env:USERPROFILE\.cargo\bin\agent-hook.exe"
-   ```
-2. If missing, install it:
-   ```powershell
+1. Verify where `agent-hook` is located:
+   - **PowerShell (Windows)**:
+     ```powershell
+     Test-Path "$env:USERPROFILE\.cargo\bin\agent-hook.exe"
+     ```
+   - **Bash (Linux / macOS)**:
+     ```bash
+     which agent-hook || test -f "$HOME/.cargo/bin/agent-hook"
+     ```
+2. If missing, compile and install it:
+   ```bash
    cargo install --path crates/agent-otel-client --force
    ```
-3. Add Cargo bin to PATH permanently in PowerShell:
-   ```powershell
-   [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$env:USERPROFILE\.cargo\bin", "User")
-   ```
+3. Add Cargo bin to PATH:
+   - **PowerShell (Windows User Profile)**:
+     ```powershell
+     [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$env:USERPROFILE\.cargo\bin", "User")
+     ```
+   - **Bash / Zsh (Linux / macOS)**:
+     ```bash
+     echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc # or ~/.zshrc
+     source ~/.bashrc
+     ```
 
 ---
 

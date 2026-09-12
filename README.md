@@ -23,7 +23,7 @@
   <a href="https://claude.ai/"><img src="https://img.shields.io/badge/Claude_Code-Supported-D97706?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code"/></a>
   <a href="https://openai.com/"><img src="https://img.shields.io/badge/OpenAI_Codex-Supported-10A37F?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Codex"/></a>
   <a href="https://x.ai/"><img src="https://img.shields.io/badge/xAI_Grok-Supported-1D9BF0?style=flat-square&logo=x&logoColor=white" alt="xAI Grok"/></a>
-  <a href="https://inflection.ai/"><img src="https://img.shields.io/badge/Inflection_Pi-Supported-6366F1?style=flat-square&logo=sparkles&logoColor=white" alt="Inflection Pi"/></a>
+  <a href="https://pi.dev/"><img src="https://img.shields.io/badge/Pi-Supported-6366F1?style=flat-square&logo=sparkles&logoColor=white" alt="Pi"/></a>
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@
 
 ## Overview
 
-**`agent-otel-bridge`** is a high-performance, native OpenTelemetry sidecar bridge designed to solve the **hot-path lifecycle hook latency bottleneck** in autonomous AI CLI agent harnesses (**Google Antigravity**, **Claude Code**, **OpenAI Codex CLI**, **xAI Grok**, **Inflection Pi**, and custom LLM developer agents).
+**`agent-otel-bridge`** is a high-performance, native OpenTelemetry sidecar bridge designed to solve the **hot-path lifecycle hook latency bottleneck** in autonomous AI CLI agent harnesses (**Google Antigravity**, **Claude Code**, **OpenAI Codex CLI**, **xAI Grok**, **Pi [pi.dev]**, and custom LLM developer agents).
 
 Modern AI coding agents invoke synchronous lifecycle hooks (`PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) dozens to hundreds of times per session. Traditional script-based hooks (Python, Node.js, PowerShell) impose **150ms to 1,200ms of cold-start latency per tool call**, accumulating up to several minutes of wasted developer time in a single pairing session.
 
@@ -131,7 +131,7 @@ Fully aligned with canonical **CNCF OpenTelemetry GenAI & Agent Semantic Convent
   - `agent.stop` (`SpanKind::Internal`)
 - **GenAI Attributes**:
   - `gen_ai.operation.name`: `execute_tool`, `invoke_agent`
-  - `gen_ai.provider.name`: dynamically inferred (`"anthropic"`, `"google"`, `"openai"`, `"xai"`, `"inflection"`)
+  - `gen_ai.provider.name`: dynamically inferred (`"anthropic"`, `"google"`, `"openai"`, `"xai"`, `"pi"`)
   - `gen_ai.agent.name`: dynamically inferred (`"antigravity"`, `"claude-code"`, `"codex"`, `"grok"`, `"pi"`, `"ai-agent"`)
   - `gen_ai.conversation.id`: correlated session identifier (mapped from `conversationId` or Claude Code `session_id`)
   - `gen_ai.tool.name` & `gen_ai.tool.call.id`
@@ -244,7 +244,7 @@ Diagnosing station telemetry pipeline & OpenTelemetry invariants
   Claude Code:        [ok] registered (C:\Users\samue\.claude\settings.json)
   OpenAI Codex:       [info] not registered (C:\Users\samue\.codex\hooks.json)
   xAI Grok:           [info] not registered (C:\Users\samue\.grok\hooks.json)
-  Inflection Pi:      [info] not registered (C:\Users\samue\.pi\hooks.json)
+  Pi (pi.dev):        [info] not registered (C:\Users\samue\.pi\hooks.json)
 ```
 
 ### 4. Run CLI Commands
@@ -268,21 +268,43 @@ agent-otel-bridge benchmark --submit --open-browser
 
 ## Documentation
 
-| Guide | Description |
+### 🏛️ Architecture & Core Principles
+| Document | Description |
 |---|---|
-| [AI Agent Harness Integration](docs/CLIENTS.md) | Setup & hook configs for Antigravity, Claude Code, Codex, Grok, Pi, and Custom Agents. |
+| [Native CLI Instrumentation Design](docs/NATIVE_CLI_INSTRUMENTATION.md) | Sub-millisecond architecture, 1-byte bitwise protocol, watchdog fail-open, and zero prompt pollution. |
+| [Architecture & Sequence Diagrams](docs/ARCHITECTURE.md) | Zero-copy IPC wire protocol and Win32 Named Pipe / Unix Domain Socket architecture. |
 | [AI Agent Architectural Invariants & SLAs](AGENTS.md) | Enforced design constraints, sub-millisecond SLAs, and AI agent operating instructions. |
-| [Contributing & Branching Policy](CONTRIBUTING.md) | Branching strategy (`feat/*`, `fix/*`), PR workflow, and automated guardrail verification. |
-| [Configuration & Environment](docs/CONFIGURATION.md) | Complete environment variable catalog and OTel Collector recipes (`config.yaml`). |
-| [Telemetry Taxonomy & Variable Dictionary](docs/TELEMETRY_DICTIONARY.md) | Complete captured attribute dictionary, 6-dimension taxonomy, and Codex dashboard evaluation. |
+
+### 🤖 Harness Integrations & Client Setup
+| Document | Description |
+|---|---|
+| [AI Agent Harness Integration](docs/CLIENTS.md) | Setup & hook configs for Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi, and Custom Agents. |
+| [Agent Observability Skill](skills/agent-otel/SKILL.md) | Built-in pair programming skill for inspecting and diagnosing telemetry pipelines. |
+
+### 📊 Telemetry Standards & Dashboards
+| Document | Description |
+|---|---|
+| [Telemetry Taxonomy & Variable Dictionary](docs/TELEMETRY_DICTIONARY.md) | Complete captured attribute dictionary, 6-dimension taxonomy, and GenAI conventions. |
 | [OpenTelemetry Dashboard & Visualization Guide](docs/DASHBOARDS.md) | Panel queries and visualization recipes across Grafana, SigNoz, Jaeger, and Prometheus. |
-| [SigNoz Contrib Dashboard Template](contrib/dashboards/signoz/README.md) | Ready-to-import agent-native JSON template (`contrib/dashboards/signoz/ai-agent-observability.json`). |
+| [SigNoz Contrib Dashboard Templates](contrib/dashboards/signoz/README.md) | Ready-to-import production JSON templates (Tokenomics, Archetypes, Fleet Governance, SRE Loops). |
+
+### ⚙️ Configuration & Diagnostics
+| Document | Description |
+|---|---|
+| [Configuration & Environment](docs/CONFIGURATION.md) | Complete environment variable catalog and OTel Collector recipes (`config.yaml`). |
 | [Troubleshooting & Diagnostic Runbook](docs/TROUBLESHOOTING.md) | Step-by-step resolution for common issues and fail-open verification. |
+
+### ⚡ Benchmarks & Performance SLAs
+| Document | Description |
+|---|---|
 | [Performance Benchmark Report](docs/BENCHMARKS.md) | Detailed microsecond measurement methodology and hardware SLA evaluation. |
 | [Community Benchmark Matrix](docs/COMMUNITY_BENCHMARKS.md) | Living leaderboard comparing benchmark results across community hardware. |
 | [Benchmark Submission Guide](docs/BENCHMARK_SUBMISSION.md) | Instructions on running automated benchmarks and contributing hardware results. |
-| [Architecture & Sequence Diagrams](docs/ARCHITECTURE.md) | Zero-copy IPC wire protocol and Win32 Named Pipe architecture. |
-| [Agent Observability Skill](skills/agent-otel/SKILL.md) | Built-in pair programming skill for inspecting and diagnosing telemetry pipelines. |
+
+### 🤝 Contributing & Quality Guardrails
+| Document | Description |
+|---|---|
+| [Contributing & Branching Policy](CONTRIBUTING.md) | Branching strategy (`feat/*`, `fix/*`), PR workflow, and automated guardrail verification. |
 
 ---
 

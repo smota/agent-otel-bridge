@@ -238,15 +238,14 @@
           },
           "links": null,
           "plugin": {
-            "kind": "signoz/BarChartPanel",
+            "kind": "signoz/PieChartPanel",
             "spec": {
               "formatting": {
                 "unit": "",
                 "decimalPrecision": "0"
               },
               "legend": {
-                "position": "bottom",
-                "customColors": null,
+                "position": "right",
                 "mode": "list"
               },
               "visualization": {
@@ -266,12 +265,8 @@
                     "signal": "traces",
                     "aggregations": [
                       {
-                        "expression": "sum(gen_ai.usage.input_tokens)",
-                        "alias": "Prompt Tokens"
-                      },
-                      {
-                        "expression": "sum(gen_ai.usage.output_tokens)",
-                        "alias": "Completion Tokens"
+                        "expression": "sum(gen_ai.usage.input_tokens) + sum(gen_ai.usage.output_tokens)",
+                        "alias": "Total Tokens"
                       }
                     ],
                     "groupBy": [
@@ -282,9 +277,10 @@
                         "fieldDataType": "string"
                       }
                     ],
+                    "legend": "{{gen_ai.request.model}}",
                     "disabled": false,
                     "filter": {
-                      "expression": "service.name IN $service_name AND gen_ai.request.model EXISTS"
+                      "expression": "service.name IN $service_name AND gen_ai.request.model EXISTS AND (gen_ai.usage.input_tokens > 0 OR gen_ai.usage.output_tokens > 0)"
                     },
                     "limit": 100,
                     "order": []
@@ -304,15 +300,14 @@
           },
           "links": null,
           "plugin": {
-            "kind": "signoz/BarChartPanel",
+            "kind": "signoz/PieChartPanel",
             "spec": {
               "formatting": {
                 "unit": "",
                 "decimalPrecision": "0"
               },
               "legend": {
-                "position": "bottom",
-                "customColors": null,
+                "position": "right",
                 "mode": "list"
               },
               "visualization": {
@@ -344,9 +339,10 @@
                         "fieldDataType": "string"
                       }
                     ],
+                    "legend": "{{gen_ai.request.model}}",
                     "disabled": false,
                     "filter": {
-                      "expression": "service.name IN $service_name AND gen_ai.request.model EXISTS"
+                      "expression": "service.name IN $service_name AND gen_ai.request.model EXISTS AND gen_ai.usage.cache_read_tokens > 0"
                     },
                     "limit": 100,
                     "order": []

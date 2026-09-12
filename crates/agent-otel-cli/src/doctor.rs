@@ -177,7 +177,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.contains("agent-otel-bridge"))
                 .unwrap_or(false);
         println!(
-            "  Inflection Pi:      {}",
+            "  Pi (pi.dev):        {}",
             if configured {
                 format!("[ok] registered ({})", p.display())
             } else {

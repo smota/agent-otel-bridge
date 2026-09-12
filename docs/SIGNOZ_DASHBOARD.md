@@ -11,10 +11,10 @@ This document specifies the integration between `agent-otel-bridge` and the stat
 
 ### A. Semantic Standardization at the Bridge Layer
 In alignment with OpenTelemetry best practices, telemetry emitters (SDKs, hooks, and bridges) produce **canonical, vendor-neutral semantic conventions**:
-- **GenAI SemConv (`gen_ai.*`)**: Standardized operations (`execute_tool`, `invoke_agent`), providers (`google`, `anthropic`, `openai`, `xai`, `inflection`), and models.
+- **GenAI SemConv (`gen_ai.*`)**: Standardized operations (`execute_tool`, `invoke_agent`), providers (`google`, `anthropic`, `openai`, `xai`, `pi`), and models.
 - **Agent Lifecycle SemConv (`agent.*`)**: Universal agent hooks (`agent.hook.event`, `agent.step.index`, `agent.execution.num`, `agent.fully_idle`, `agent.termination_reason`, `agent.quota.*`).
 
-Hardcoding client-specific prefixes (such as `agy.*`) in an agent bridge violates the *Single Responsibility Principle* and pollutes spans produced when instrumenting other agents (Claude Code, OpenAI Codex, xAI Grok, Inflection Pi).
+Hardcoding client-specific prefixes (such as `agy.*`) in an agent bridge violates the *Single Responsibility Principle* and pollutes spans produced when instrumenting other agents (Claude Code, OpenAI Codex, xAI Grok, Pi).
 
 ### B. Transformation Belongs in the OpenTelemetry Collector
 When backward compatibility or proprietary dialect translation is needed for legacy dashboards, OpenTelemetry architecture specifies that transformations belong in the **OpenTelemetry Collector** using the `transformprocessor` (OTTL):
@@ -73,7 +73,7 @@ Every panel in the dashboard queries standard conventions applicable to all supp
 | **5** | **Agent Quota Remaining** | Gauge (0–100%) | Metrics | `agent.quota.remaining_fraction` | `last_value` grouped by `bucket`, `group` |
 | **6** | **Seconds to Quota Reset** | Stat / Time | Metrics | `agent.quota.seconds_to_reset` | `last_value` formatted as duration / HH:MM |
 | **7** | **Error Rates by Tool** | Time Series | Traces | `status.code = 2` | `count()` where `status_code = 'STATUS_CODE_ERROR'` by `gen_ai.tool.name` |
-| **8** | **AI Provider Breakdown** | Pie Chart | Traces | `gen_ai.provider.name` | `count()` by `gen_ai.provider.name` (`google`, `anthropic`, `openai`, `xai`, `inflection`) |
+| **8** | **AI Provider Breakdown** | Pie Chart | Traces | `gen_ai.provider.name` | `count()` by `gen_ai.provider.name` (`google`, `anthropic`, `openai`, `xai`, `pi`) |
 | **9** | **Turn Step Distribution** | Histogram / Bar | Traces | `agent.step.index` | `max(attributes['agent.step.index'])` by `gen_ai.conversation.id` |
 | **10** | **Quiescence & Stop Reasons** | Table / Pie | Traces | `agent.termination_reason` | `count()` where `agent.hook.event = 'Stop'` by `agent.termination_reason` |
 

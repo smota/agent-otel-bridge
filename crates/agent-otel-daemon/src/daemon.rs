@@ -143,11 +143,17 @@ impl Daemon {
                                     if let Some(ws_path) = ws {
                                         let stats = crate::git::collect_git_stats(&ws_path);
                                         if stats.lines_added.is_some() || stats.files_changed.is_some() {
-                                            input.git_lines_added = stats.lines_added;
-                                            input.git_lines_deleted = stats.lines_deleted;
-                                            input.git_files_changed = stats.files_changed;
+                                            if input.git_lines_added.is_none() {
+                                                input.git_lines_added = stats.lines_added;
+                                            }
+                                            if input.git_lines_deleted.is_none() {
+                                                input.git_lines_deleted = stats.lines_deleted;
+                                            }
+                                            if input.git_files_changed.is_none() {
+                                                input.git_files_changed = stats.files_changed;
+                                            }
                                         }
-                                        if stats.self_revert.is_some() {
+                                        if stats.self_revert.is_some() && input.git_self_revert.is_none() {
                                             input.git_self_revert = stats.self_revert;
                                         }
                                     }

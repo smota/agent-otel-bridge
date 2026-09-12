@@ -61,7 +61,7 @@ Monitors input/output tokens, prompt caching efficiency, and provider quota wind
 
 The table below details all attributes captured, enriched, and emitted by `agent-otel-bridge`, mapped across the 5 primary AI CLI harnesses:
 
-| Taxonomy Dimension | Canonical OTel Attribute / Metric | OTel Signal | Type | Antigravity | Claude Code | OpenAI Codex | xAI Grok | Inflection Pi | Source & Description |
+| Taxonomy Dimension | Canonical OTel Attribute / Metric | OTel Signal | Type | Antigravity | Claude Code | OpenAI Codex | xAI Grok | Pi (pi.dev) | Source & Description |
 |---|---|---|---|:---:|:---:|:---:|:---:|:---:|---|
 | **Identity & Session** | `gen_ai.conversation.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Conversation / session identifier. Deterministic trace correlation ID. |
 | **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email. Captured from payload or enriched from `$USER_EMAIL` / `$GIT_AUTHOR_EMAIL`. |
@@ -82,7 +82,7 @@ The table below details all attributes captured, enriched, and emitted by `agent
 | **Tool Invocations** | `gen_ai.tool.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Specific tool name (`run_command`, `Bash`, `view_file`, `grep_search`, etc.). |
 | **Tool Invocations** | `gen_ai.tool.call.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | *Optional* | Unique call ID associated with the specific tool execution. |
 | **Tool Invocations** | `durationNano` / `duration_ms` | Span Field | `int64` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Precise execution duration of the tool or invocation span. |
-| **Model & Provider** | `gen_ai.provider.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Provider inferred from model: `google`, `anthropic`, `openai`, `xai`, `inflection`. |
+| **Model & Provider** | `gen_ai.provider.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Provider inferred from model: `google`, `anthropic`, `openai`, `xai`, `pi`. |
 | **Model & Provider** | `gen_ai.request.model` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Active model identifier (`gemini-2.5-pro`, `claude-3-7-sonnet`, `o3-mini`, etc.). |
 | **Economics & Quota** | `gen_ai.usage.input_tokens` | Span Attr | `int64` | *Wrapper* | **Yes** | **Yes** | **Yes** | *Optional* | Input / prompt token consumption count per turn. |
 | **Economics & Quota** | `gen_ai.usage.output_tokens` | Span Attr | `int64` | *Wrapper* | **Yes** | **Yes** | **Yes** | *Optional* | Output / generation token consumption count per turn. |

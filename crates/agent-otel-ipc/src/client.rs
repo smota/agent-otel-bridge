@@ -3,27 +3,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#[cfg(windows)]
 use std::ptr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(windows)]
+use std::time::Instant;
 
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::{
     CloseHandle, GetLastError, ERROR_IO_PENDING, ERROR_PIPE_BUSY, FALSE, HANDLE,
     INVALID_HANDLE_VALUE, TRUE,
 };
+#[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, WriteFile, FILE_FLAG_OVERLAPPED, FILE_GENERIC_WRITE, OPEN_EXISTING,
 };
+#[cfg(windows)]
 use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
+#[cfg(windows)]
 use windows_sys::Win32::System::Threading::CreateEventW;
+#[cfg(windows)]
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResultEx, OVERLAPPED};
 
-use crate::frame::{encode_frame, MsgType, DEFAULT_PIPE_NAME};
+#[cfg(windows)]
+use crate::frame::DEFAULT_PIPE_NAME;
+use crate::frame::{encode_frame, MsgType};
 
 const TOTAL_BUDGET: Duration = Duration::from_millis(3);
+#[cfg(windows)]
 const CONNECT_BUDGET_CAP: Duration = Duration::from_millis(2);
 
+#[cfg(windows)]
 struct HandleGuard(HANDLE);
 
+#[cfg(windows)]
 impl Drop for HandleGuard {
     fn drop(&mut self) {
         if !self.0.is_null() && self.0 != INVALID_HANDLE_VALUE {
@@ -34,10 +47,12 @@ impl Drop for HandleGuard {
     }
 }
 
+#[cfg(windows)]
 fn to_wide(name: &str) -> Vec<u16> {
     name.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+#[cfg(windows)]
 fn wide_pipe_name() -> Vec<u16> {
     let name = std::env::var("AGENT_OTEL_PIPE")
         .or_else(|_| std::env::var("AGY_OTEL_PIPE"))
@@ -45,6 +60,7 @@ fn wide_pipe_name() -> Vec<u16> {
     to_wide(&name)
 }
 
+#[cfg(windows)]
 fn open_pipe(pipe_wide: &[u16]) -> Option<HANDLE> {
     let h = unsafe {
         CreateFileW(
@@ -64,10 +80,12 @@ fn open_pipe(pipe_wide: &[u16]) -> Option<HANDLE> {
     }
 }
 
+#[cfg(windows)]
 pub fn send_fire_and_forget(msg_type: MsgType, payload: &[u8]) {
     let _ = try_send(msg_type, payload);
 }
 
+#[cfg(windows)]
 #[allow(clippy::result_unit_err)]
 pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
     let deadline = Instant::now() + TOTAL_BUDGET;
@@ -188,7 +206,60 @@ pub fn spawn_daemon_detached() {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+pub fn send_fire_and_forget(msg_type: MsgType, payload: &[u8]) {
+    let _ = try_send(msg_type, payload);
+}
+
+#[cfg(unix)]
+#[allow(clippy::result_unit_err)]
+pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
+    use std::io::Write;
+    use std::os::unix::net::UnixStream;
+    let socket_path = std::env::var("AGENT_OTEL_SOCKET")
+        .unwrap_or_else(|_| "/tmp/agent_otel_bridge.sock".to_string());
+    let mut stream = UnixStream::connect(socket_path).map_err(|_| ())?;
+    let _ = stream.set_write_timeout(Some(TOTAL_BUDGET));
+    let frame = encode_frame(msg_type, payload);
+    stream.write_all(&frame).map_err(|_| ())?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn spawn_daemon_detached() {
+    static LAST_SPAWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let prev = LAST_SPAWN.load(std::sync::atomic::Ordering::Relaxed);
+    if now.saturating_sub(prev) < 5 {
+        return;
+    }
+    LAST_SPAWN.store(now, std::sync::atomic::Ordering::Relaxed);
+
+    if let Some(exe) = find_bridge_binary() {
+        use std::os::unix::process::CommandExt;
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg("daemon")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        cmd.process_group(0);
+        let _ = cmd.spawn();
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+pub fn send_fire_and_forget(_msg_type: MsgType, _payload: &[u8]) {}
+
+#[cfg(not(any(windows, unix)))]
+#[allow(clippy::result_unit_err)]
+pub fn try_send(_msg_type: MsgType, _payload: &[u8]) -> Result<(), ()> {
+    Ok(())
+}
+
+#[cfg(not(any(windows, unix)))]
 pub fn spawn_daemon_detached() {}
 
 pub fn find_bridge_binary() -> Option<std::path::PathBuf> {
