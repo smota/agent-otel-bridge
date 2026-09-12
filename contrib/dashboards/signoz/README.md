@@ -1,54 +1,90 @@
-# SigNoz Dashboard: AI Agent Observability (OpenTelemetry)
+# SigNoz Dashboards for AI Agent Observability (OpenTelemetry)
 
-This directory contains the production SigNoz dashboard template for `agent-otel-bridge`.
+Production-grade, role-based dashboards for **SigNoz v6** (Perses/v2 native format) powered by `agent-otel-bridge`. Built on CNCF OpenTelemetry GenAI (`gen_ai.*`), Agent Lifecycle SemConv (`agent.*`), and extended v0.3 execution context conventions.
 
-- **File**: [`ai-agent-observability.json`](./ai-agent-observability.json)
-- **Schema Version**: SigNoz `v6` (Perses / V2 agent-native format)
-- **Standards**: OpenTelemetry GenAI (`gen_ai.*`) and Agent Lifecycle (`agent.*`)
-- **Compatibility**: Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi
+Compatible with **Google Antigravity**, **Claude Code**, **OpenAI Codex**, **xAI Grok**, and **Inflection Pi**.
 
 ---
 
-## How to Import into SigNoz
+## 1. Observability Personas & Target Missions
 
-1. Open your SigNoz UI (e.g., `http://localhost:8080` or your SigNoz Cloud instance).
+Observability across autonomous coding agents spans distinct organizational responsibilities. Each template is tailored for a specific operational persona:
+
+| Persona | Operational Mission | Primary Dashboard Template | Key Decisions Enabled |
+| :--- | :--- | :--- | :--- |
+| **FinOps & VP of Engineering** | Token economy governance, cost attribution, model unit economics | [`tokenomics-and-cost.json`](./tokenomics-and-cost.json) | Budget forecasting, Foundation Model cost arbitrage, prompt cache ROI. |
+| **Platform Engineers & SREs** | Agent runtime stability, runaway loop prevention, quota management | [`agent-sre-loops.json`](./agent-sre-loops.json) | Preventing infinite tool loops, alerting on provider quota depletion windows. |
+| **AI Agent Architects** | Tool effectiveness, capability taxonomy (MCP vs Skills), schema bloat | [`tool-archetypes-and-waste.json`](./tool-archetypes-and-waste.json) | Eliminating inactive MCP server deadweight, measuring tool compression ratios. |
+| **Engineering Managers & Tech Leads** | Developer flow velocity, git output impact, agent hallucination detection | [`developer-velocity.json`](./developer-velocity.json) | Measuring net lines merged vs reverted, cognitive thinking vs tool execution latency. |
+| **Individual Developers & Turn Debuggers** | Single-session execution trace inspection, failure root-cause analysis | [`turn-inspector.json`](./turn-inspector.json) | Auditing tool input/output payloads, quiescence reasons (`NO_TOOL_CALL`, `USER_INTERRUPT`). |
+| **Fleet Operators (All-in-One)** | Single-pane-of-glass executive overview across the entire AI agent harness | [`ai-agent-observability.json`](./ai-agent-observability.json) | High-level fleet health, active developers, tool frequency, and provider distribution. |
+
+---
+
+## 2. Available Templates & Download Links
+
+All templates adhere to the **SigNoz v6** schema and can be downloaded directly from GitHub or copied from your local repository clone:
+
+| Dashboard Name | Target Persona | Schema | Local Path | Download / Raw Link | Key Metrics & Visualizations |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **AI Agent Tokenomics & Cost Attribution** | FinOps & Executive | `v6` | [`tokenomics-and-cost.json`](./tokenomics-and-cost.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/tokenomics-and-cost.json) | Prompt vs completion vs cached tokens, Cache Efficiency Ratio (CER), spend by model (`gemini`, `claude`, `o3-mini`, `grok-3`). |
+| **AI Tool Archetypes & Capability Waste** | Agent Architects | `v6` | [`tool-archetypes-and-waste.json`](./tool-archetypes-and-waste.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/tool-archetypes-and-waste.json) | 6 behavioral archetypes (`filter_compressor`, `structured_parser`, etc.), MCP vs Skill breakdown, schema token bloat ranking. |
+| **AI Agent SRE & Loop Protection** | Platform & SRE | `v6` | [`agent-sre-loops.json`](./agent-sre-loops.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/agent-sre-loops.json) | Runaway loop detection (`agent.hook.event = PostInvocation`), multi-provider quota countdown (`agent.quota.seconds_to_reset`). |
+| **AI Fleet Governance & Concurrency** | Engineering Leadership | `v6` | [`fleet-governance.json`](./fleet-governance.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/fleet-governance.json) | Active developers (`user.email`), agent distribution (`gen_ai.agent.name`), execution mode (interactive vs automation). |
+| **Developer Velocity & Engineering Impact** | Tech Leads & EMs | `v6` | [`developer-velocity.json`](./developer-velocity.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/developer-velocity.json) | Net git lines added/deleted, file blast radius (`agent.git.files_changed`), git self-reverts, turn duration. |
+| **AI Turn Inspector & Debugger** | Prompt Engineers & Devs | `v6` | [`turn-inspector.json`](./turn-inspector.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/turn-inspector.json) | Deep-dive trace audit feed, step index chronology (`agent.step.index`), quiescence termination reason breakdown. |
+| **Consolidated AI Agent Observability** | Single-Pane-of-Glass | `v6` | [`ai-agent-observability.json`](./ai-agent-observability.json) | [Download JSON](https://raw.githubusercontent.com/smota/agent-otel-bridge/main/contrib/dashboards/signoz/ai-agent-observability.json) | Unified executive dashboard combining quota gauges, top tools, loop monitoring, and live session traces. |
+
+---
+
+## 3. How to Install & Import Templates
+
+### Option A: Import via SigNoz Web UI (Manual)
+
+1. Open your SigNoz UI (e.g. `http://localhost:8080` or your SigNoz Cloud instance).
 2. In the left navigation menu, click **Dashboards**.
 3. Click **+ New dashboard** in the top right corner.
 4. Select the **Import JSON** tab.
-5. Either:
-   - Click **Upload JSON file** and select `ai-agent-observability.json`, OR
-   - Open `ai-agent-observability.json` in an editor, copy its contents, and paste it into the JSON text box.
-6. Click **Import**.
+5. Click **Upload JSON file** and select any `.json` template from `contrib/dashboards/signoz/`, or paste the raw JSON text directly.
+6. Click **Import**. The dashboard will immediately render all panels, time-series, tables, and dropdown variables.
 
-The dashboard will instantly render all panels, layout grids, and dropdown variables.
+### Option B: Automated Import via PowerShell (Instant API Sync)
+
+You can import all 6 dashboards into your SigNoz instance with a single command:
+
+```powershell
+$apiKey = $env:SIGNOZ_API_KEY
+$headers = @{ "Content-Type" = "application/json" }
+if ($apiKey) { $headers["SIGNOZ-API-KEY"] = $apiKey }
+
+Get-ChildItem "contrib/dashboards/signoz/*.json" | ForEach-Object {
+    $jsonContent = Get-Content $_.FullName -Raw
+    $res = Invoke-RestMethod -Uri "http://localhost:8080/api/v2/dashboards" `
+        -Method Post -Headers $headers -Body $jsonContent
+    Write-Host "Imported: $($_.Name) -> ID: $($res.data.id)" -ForegroundColor Green
+}
+```
+
+### Option C: Automated Import via Bash / cURL (Linux & macOS)
+
+```bash
+SIGNOZ_URL="http://localhost:8080"
+
+for f in contrib/dashboards/signoz/*.json; do
+  echo "Importing $f..."
+  curl -s -X POST "$SIGNOZ_URL/api/v2/dashboards" \
+    -H "Content-Type: application/json" \
+    -H "SIGNOZ-API-KEY: $SIGNOZ_API_KEY" \
+    -d @"$f" | grep -o '"id":"[^"]*'
+done
+```
 
 ---
 
-## Dashboard Structure & Operator Panels
+## 4. Dynamic Dashboard Variables
 
-### Section 1: Quota & Token Economics (Guardrails & Spend)
-- **Current Quota Remaining**: Real-time gauge of the active provider quota fraction (`0.0..=1.0`), grouped by `bucket` and model `group`.
-- **Seconds to Quota Reset**: Countdown timer until the current rate-limiting window resets.
-- **Active Sessions**: Total distinct interactive conversations (`gen_ai.conversation.id`) observed in the time window.
-- **Quota Burn-Down Timeline**: Time series showing the rate of quota depletion over time.
+Every dashboard includes pre-configured templating variables located in the header bar:
 
-### Section 2: Agent Health, Concurrency & Loop Protection
-- **Agent Loop Invocations (Runaway Loop Detection)**: Time series of `PostInvocation` events. Rapid spikes indicate infinite tool-calling or recursion loops.
-- **Tool Calls Over Time**: Granular time series of `PostToolUse` events categorized by `gen_ai.tool.name`.
-- **Top Tools & Execution Summary**: Table comparing total calls and distinct sessions per tool.
-- **Model Distribution**: Donut breakdown of requests across Foundation Models (`gemini-2.5-pro`, `claude-3-7-sonnet`, `o3-mini`, etc.).
-
-### Section 3: Turn Outcomes & Safety Governance
-- **Why Turns Ended (Quiescence Breakdown)**: Categorizes `agent.termination_reason`:
-  - `NO_TOOL_CALL`: Natural, healthy turn completion in Antigravity.
-  - `USER_INTERRUPT`: Cancellation by the developer.
-  - `TURN_LIMIT`: Safety threshold reached.
-- **Turns Completed Over Time**: Completed reasoning turns per model.
-- **Recent Turn Audit Feed**: Live tabular trace feed with timestamp, agent name, termination reason, model, session ID, and step index.
-
----
-
-## Dynamic Filtering Variables
-
-- **`$service_name`**: Filter by OpenTelemetry service name (default `agent-otel-bridge`).
-- **`$agent_name`**: Filter to specific AI agents (`antigravity`, `claude-code`, `codex`, `grok`, `pi`, or `ALL`).
+- **`$service_name`**: Filters telemetry by OpenTelemetry service name (default: `agent-otel-bridge`).
+- **`$agent_name`**: Filters to specific AI agents (`antigravity`, `claude-code`, `codex`, `grok`, `pi`, or `ALL`).
+- **`$environment`**: Multi-cluster / station scoping (`deployment.environment = homelab | production | staging`).
