@@ -98,11 +98,9 @@ pub fn try_send(msg_type: MsgType, payload: &[u8]) -> Result<(), ()> {
                 if let Some(h) = open_pipe(&legacy_wide) {
                     h
                 } else {
-                    spawn_daemon_detached();
                     return Err(());
                 }
             } else {
-                spawn_daemon_detached();
                 return Err(());
             }
         }

@@ -26,6 +26,14 @@
   <a href="https://inflection.ai/"><img src="https://img.shields.io/badge/Inflection_Pi-Supported-6366F1?style=flat-square&logo=sparkles&logoColor=white" alt="Inflection Pi"/></a>
 </p>
 
+<p align="center">
+  <a href="https://www.movetheneedle.info">
+    <img src="assets/move-the-needle-logo.png" alt="Sponsored by Move the Needle" width="260"/>
+  </a>
+  <br/>
+  <em>Proudly sponsored and incubated by <a href="https://www.movetheneedle.info">Move the Needle</a></em>
+</p>
+
 ---
 
 ## Overview
@@ -138,6 +146,11 @@ Fully aligned with canonical **CNCF OpenTelemetry GenAI & Agent Semantic Convent
   - `agent.quota.remaining_fraction`: Gauge (unit `"1"`, `0.0..=1.0`).
   - `agent.quota.seconds_to_reset`: Gauge (unit `"s"`, `>= 0.0`).
   - Attributes: `bucket`, `group`.
+- **Universal Agent Intelligence & Context (v0.3)**:
+  - **Behavioral CLI Archetypes (Preference-Agnostic)**: Commands are categorized into 6 functional archetypes (`filter_compressor`, `structured_parser`, `inspector_diff`, `search_retrieval`, `build_test_verify`, `generic_exec`) instead of hardcoding developer-specific tools (`rtk`, `jq`, `bat`). Tracks compression ratio, tokens saved, and pipeline depth.
+  - **Universal MCP & Skills Taxonomy + Waste Tracking**: Standardizes tool calls across `mcp` servers, `skill` bundles, and `native` tools. Quantifies **Schema Tax** (dead-weight prompt tokens spent on inactive tools), retry thrashing, and response payload bloat.
+  - **Multi-Tier Zero-Subprocess Context Harvester (< 150 µs)**: Extracts workspace path, project root, project type (`rust`, `node`, `python`, `go`), and direct file-based Git metadata (`.git/HEAD`, sanitized remote origin, worktrees) with zero external process calls (`git.exe` is never spawned).
+  - **Cross-Agent Distributed Tracing (W3C `traceparent`)**: Injects and propagates W3C trace context via process environment variables (`$env:TRACEPARENT`). Heterogeneous subagents (e.g. Antigravity spawning Claude Code, which delegates to Codex) are unified into a single distributed trace DAG in SigNoz.
 - **OpenTelemetry Layering & Opt-In Compatibility**:
   - Emits purely canonical, vendor-neutral attributes by default so all AI agents (Antigravity, Claude Code, Codex, Grok, Pi) share a clean data model without vendor pollution.
   - Optional `AGENT_OTEL_LEGACY_ATTRIBUTES=true` enables legacy `agy.*` aliases for older dashboards, or use an OpenTelemetry Collector `transformprocessor` (OTTL) to alias attributes in the collection tier.
@@ -258,6 +271,8 @@ agent-otel-bridge benchmark --submit --open-browser
 | Guide | Description |
 |---|---|
 | [AI Agent Harness Integration](docs/CLIENTS.md) | Setup & hook configs for Antigravity, Claude Code, Codex, Grok, Pi, and Custom Agents. |
+| [AI Agent Architectural Invariants & SLAs](AGENTS.md) | Enforced design constraints, sub-millisecond SLAs, and AI agent operating instructions. |
+| [Contributing & Branching Policy](CONTRIBUTING.md) | Branching strategy (`feat/*`, `fix/*`), PR workflow, and automated guardrail verification. |
 | [Configuration & Environment](docs/CONFIGURATION.md) | Complete environment variable catalog and OTel Collector recipes (`config.yaml`). |
 | [Telemetry Taxonomy & Variable Dictionary](docs/TELEMETRY_DICTIONARY.md) | Complete captured attribute dictionary, 6-dimension taxonomy, and Codex dashboard evaluation. |
 | [OpenTelemetry Dashboard & Visualization Guide](docs/DASHBOARDS.md) | Panel queries and visualization recipes across Grafana, SigNoz, Jaeger, and Prometheus. |
@@ -273,4 +288,4 @@ agent-otel-bridge benchmark --submit --open-browser
 
 ## License
 
-Copyright The OpenTelemetry Authors. Licensed under the [Apache License, Version 2.0](LICENSE).
+Copyright (c) 2026 Samuel Mota. Licensed under the [Apache License, Version 2.0](LICENSE).

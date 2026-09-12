@@ -1,0 +1,362 @@
+{
+  "schemaVersion": "v6",
+  "name": "ai-agent-tokenomics",
+  "tags": [
+    {
+      "key": "persona",
+      "value": "finops"
+    },
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    },
+    {
+      "key": "signal",
+      "value": "traces"
+    },
+    {
+      "key": "technology",
+      "value": "agent-otel-bridge"
+    }
+  ],
+  "spec": {
+    "display": {
+      "name": "AI Agent Tokenomics & Cost Attribution",
+      "description": "FinOps and engineering executive dashboard tracking LLM prompt tokens, completion tokens, prompt cache efficiency ratio (CER), and estimated dollar spend across Gemini, Claude, GPT-4o, and Grok."
+    },
+    "duration": "",
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service_name",
+          "display": {
+            "name": "Service",
+            "description": "Filter by OpenTelemetry service name"
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": "",
+          "capturingRegexp": "",
+          "sort": "alphabetical-asc",
+          "plugin": {
+            "kind": "signoz/DynamicVariable",
+            "spec": {
+              "name": "service.name",
+              "signal": "all"
+            }
+          }
+        }
+      }
+    ],
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Token Volume & Cache Economics",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "content": {
+                "$ref": "#/spec/panels/token-volume"
+              },
+              "height": 6,
+              "width": 8,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/total-tokens"
+              },
+              "height": 6,
+              "width": 4,
+              "x": 8,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/model-consumption"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 6
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/cache-ratio"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 6
+            }
+          ]
+        }
+      }
+    ],
+    "panels": {
+      "token-volume": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Token Volume by Type (Prompt vs Completion vs Cached)",
+            "description": "Rate of tokens consumed across all agent turns separated into prompt, completion, and cache read."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "axes": {
+                "isLogScale": false,
+                "softMax": null,
+                "softMin": null
+              },
+              "chartAppearance": {
+                "lineStyle": "solid",
+                "lineInterpolation": "spline",
+                "spanGaps": {
+                  "fillLessThan": "",
+                  "fillOnlyBelow": false
+                },
+                "fillMode": "none",
+                "showPoints": false
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "thresholds": null,
+              "visualization": {
+                "fillSpans": false,
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "sum(gen_ai.usage.input_tokens)",
+                        "alias": "Input Tokens"
+                      },
+                      {
+                        "expression": "sum(gen_ai.usage.output_tokens)",
+                        "alias": "Output Tokens"
+                      },
+                      {
+                        "expression": "sum(gen_ai.usage.cache_read_tokens)",
+                        "alias": "Cached Tokens"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "total-tokens": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Total Fleet Tokens Emitted",
+            "description": "Sum of all prompt and completion tokens across the fleet."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "sum(gen_ai.usage.input_tokens) + sum(gen_ai.usage.output_tokens)",
+                        "alias": "Tokens"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "model-consumption": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Token Consumption by Model",
+            "description": "Total prompt and completion tokens partitioned by foundation model."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "sum(gen_ai.usage.input_tokens)",
+                        "alias": "Prompt Tokens"
+                      },
+                      {
+                        "expression": "sum(gen_ai.usage.output_tokens)",
+                        "alias": "Completion Tokens"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.request.model",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND gen_ai.request.model EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "cache-ratio": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Cache Hit Volume by Model",
+            "description": "Prompt tokens read from provider KV cache."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "sum(gen_ai.usage.cache_read_tokens)",
+                        "alias": "Cached Read Tokens"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "gen_ai.request.model",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND gen_ai.request.model EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

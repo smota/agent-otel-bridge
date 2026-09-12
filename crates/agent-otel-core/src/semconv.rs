@@ -51,6 +51,46 @@ pub const AGENT_GIT_LINES_DELETED: &str = "agent.git.lines_deleted";
 pub const AGENT_GIT_FILES_CHANGED: &str = "agent.git.files_changed";
 pub const AGENT_GIT_SELF_REVERT: &str = "agent.git.self_revert";
 
+// --- Execution Context & Workspace SemConv ---
+pub const WORKSPACE_PATH: &str = "workspace.path";
+pub const WORKSPACE_PROJECT_NAME: &str = "workspace.project_name";
+pub const WORKSPACE_PROJECT_ROOT: &str = "workspace.project_root";
+pub const WORKSPACE_PROJECT_TYPE: &str = "workspace.project_type";
+
+// --- VCS / Git Attributes (Opportunistic) ---
+pub const VCS_SYSTEM: &str = "vcs.system";
+pub const VCS_REPOSITORY_NAME: &str = "vcs.repository.name";
+pub const VCS_BRANCH_NAME: &str = "vcs.branch.name";
+pub const VCS_COMMIT_SHA: &str = "vcs.commit.sha";
+pub const VCS_WORKTREE_ACTIVE: &str = "vcs.worktree.active";
+
+// --- Tool Archetypes & I/O Economics ---
+pub const AGENT_TOOL_ARCHETYPE: &str = "agent.tool.archetype";
+pub const AGENT_TOOL_BINARY: &str = "agent.tool.binary";
+pub const AGENT_TOOL_WRAPPED_BINARY: &str = "agent.tool.wrapped_binary";
+pub const AGENT_TOOL_PIPELINE_DEPTH: &str = "agent.tool.pipeline_depth";
+pub const AGENT_TOOL_COMPRESSION_RATIO: &str = "agent.tool.compression_ratio";
+pub const AGENT_TOOL_TOKENS_SAVED: &str = "agent.tool.tokens_saved";
+
+// --- Universal Capabilities (MCP & Skills) & Waste ---
+pub const CAPABILITY_KIND: &str = "capability.kind";
+pub const CAPABILITY_NAMESPACE: &str = "capability.namespace";
+pub const CAPABILITY_NAME: &str = "capability.name";
+pub const CAPABILITY_SCHEMA_TOKENS: &str = "capability.schema_tokens";
+pub const CAPABILITY_RESPONSE_BYTES: &str = "capability.response_bytes";
+pub const CAPABILITY_RESPONSE_TOKENS: &str = "capability.response_tokens";
+pub const CAPABILITY_CONSECUTIVE_RETRIES: &str = "capability.consecutive_retries";
+pub const CAPABILITY_IS_WASTE: &str = "capability.is_waste";
+
+// --- Cross-Agent Lineage & Hierarchy ---
+pub const GEN_AI_AGENT_DEPTH: &str = "gen_ai.agent.depth";
+pub const GEN_AI_AGENT_PARENT_NAME: &str = "gen_ai.agent.parent_name";
+pub const GEN_AI_AGENT_ROOT_ID: &str = "gen_ai.agent.root_id";
+pub const GEN_AI_AGENT_IS_ROOT: &str = "gen_ai.agent.is_root";
+
+// --- Multi-Layer Error Categorization ---
+pub const AGENT_ERROR_CATEGORY: &str = "agent.error.category";
+
 // --- Generic Agent Semantic Conventions ---
 pub const AGENT_HOOK_EVENT: &str = "agent.hook.event";
 pub const AGENT_STEP_INDEX: &str = "agent.step.index";

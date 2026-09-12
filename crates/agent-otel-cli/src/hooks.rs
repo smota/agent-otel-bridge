@@ -124,6 +124,7 @@ pub fn check_binary_in_path(binary: &str) -> bool {
 pub fn install_antigravity_hooks(
     path: &Path,
     binary: &str,
+    client_tag: Option<&str>,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -140,22 +141,27 @@ pub fn install_antigravity_hooks(
         root = json!({});
     }
 
+    let client_arg = match client_tag {
+        Some(tag) => format!(" --client {tag}"),
+        None => String::new(),
+    };
+
     let hook_spec = json!({
         "PreToolUse": [
             {
                 "matcher": ".*",
-                "hooks": [{ "command": format!("{binary} PreToolUse"), "timeout": 5, "type": "command" }]
+                "hooks": [{ "command": format!("{binary} PreToolUse{client_arg}"), "timeout": 5, "type": "command" }]
             }
         ],
         "PostToolUse": [
             {
                 "matcher": ".*",
-                "hooks": [{ "command": format!("{binary} PostToolUse"), "timeout": 5, "type": "command" }]
+                "hooks": [{ "command": format!("{binary} PostToolUse{client_arg}"), "timeout": 5, "type": "command" }]
             }
         ],
-        "PreInvocation": [{ "command": format!("{binary} PreInvocation"), "timeout": 5, "type": "command" }],
-        "PostInvocation": [{ "command": format!("{binary} PostInvocation"), "timeout": 5, "type": "command" }],
-        "Stop": [{ "command": format!("{binary} Stop"), "timeout": 5, "type": "command" }]
+        "PreInvocation": [{ "command": format!("{binary} PreInvocation{client_arg}"), "timeout": 5, "type": "command" }],
+        "PostInvocation": [{ "command": format!("{binary} PostInvocation{client_arg}"), "timeout": 5, "type": "command" }],
+        "Stop": [{ "command": format!("{binary} Stop{client_arg}"), "timeout": 5, "type": "command" }]
     });
 
     root["agent-otel-bridge"] = hook_spec;
@@ -347,7 +353,7 @@ pub fn run_install(
                 || project
                 || path.parent().map(|p| p.exists()).unwrap_or(false);
             if should_install {
-                match install_antigravity_hooks(&path, binary) {
+                match install_antigravity_hooks(&path, binary, None) {
                     Ok(_) => {
                         println!("  [ok] Antigravity hooks registered at: {}", path.display());
                         installed_any = true;
@@ -418,7 +424,7 @@ pub fn run_install(
                 || (project && target == ClientTarget::Pi)
                 || path.parent().map(|p| p.exists()).unwrap_or(false);
             if should_install {
-                match install_antigravity_hooks(&path, binary) {
+                match install_antigravity_hooks(&path, binary, Some("pi")) {
                     Ok(_) => {
                         println!(
                             "  [ok] Inflection Pi hooks registered at: {}",
@@ -642,7 +648,7 @@ mod tests {
         let hooks_path = temp_dir.join("hooks.json");
 
         // Install
-        let res = install_antigravity_hooks(&hooks_path, "agent-hook");
+        let res = install_antigravity_hooks(&hooks_path, "agent-hook", None);
         assert!(res.is_ok());
         assert!(hooks_path.exists());
 
@@ -730,7 +736,7 @@ mod tests {
         let pi_path = temp_dir.join(".pi").join("hooks.json");
 
         for path in &[&codex_path, &grok_path, &pi_path] {
-            let res = install_antigravity_hooks(path, "agent-hook");
+            let res = install_antigravity_hooks(path, "agent-hook", None);
             assert!(res.is_ok());
             assert!(path.exists());
             let content = fs::read_to_string(path).unwrap();

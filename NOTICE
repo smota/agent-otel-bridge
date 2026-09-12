@@ -1,5 +1,5 @@
-agy-otel: High-Performance OpenTelemetry Instrumentation for Google Antigravity
-Copyright 2026 Samuel Mota and agy-otel contributors
+agent-otel-bridge: High-Performance OpenTelemetry Bridge for AI CLI Agent Harnesses
+Copyright 2026 Samuel Mota and agent-otel-bridge contributors
 
 This product includes software developed at
 The OpenTelemetry Project (https://opentelemetry.io/).

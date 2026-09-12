@@ -384,3 +384,109 @@ fn test_v02_git_and_execution_mode_attributes() {
     assert_eq!(find_attr(AGENT_GIT_FILES_CHANGED), Some("3".to_string()));
     assert_eq!(find_attr(AGENT_GIT_SELF_REVERT), Some("true".to_string()));
 }
+
+#[test]
+fn test_v03_context_and_archetype_enrichment() {
+    let json = r#"{
+        "conversationId": "test-v03-turn",
+        "toolCall": {
+            "name": "run_command",
+            "arguments": { "command": "rtk cargo test --lib" }
+        },
+        "error": "rate limit reached on model gemini-2.5-pro"
+    }"#;
+
+    let mut input = AntigravityHookInput::parse_slice(json.as_bytes()).expect("parse failed");
+    input.auto_enrich();
+
+    assert_eq!(input.tool_archetype.as_deref(), Some("filter_compressor"));
+    assert_eq!(input.tool_binary.as_deref(), Some("rtk"));
+    assert_eq!(input.tool_wrapped_binary.as_deref(), Some("cargo"));
+    assert_eq!(input.capability_kind.as_deref(), Some("native"));
+    assert_eq!(input.capability_name.as_deref(), Some("run_command"));
+    assert_eq!(
+        input.error_category.as_deref(),
+        Some("provider_quota_exhausted")
+    );
+    assert!(input.workspace_path.is_some());
+    assert_eq!(input.vcs_system.as_deref(), Some("git"));
+
+    let span = build_span_from_hook(HookEvent::PostToolUse, &input, 1000, 2000, 1);
+    let find_attr = |key: &str| -> Option<String> {
+        span.attributes
+            .iter()
+            .find(|kv| kv.key == key)
+            .and_then(|kv| {
+                kv.value.as_ref().and_then(|v| match &v.value {
+                    Some(
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s),
+                    ) => Some(s.clone()),
+                    Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i)) => {
+                        Some(i.to_string())
+                    }
+                    _ => None,
+                })
+            })
+    };
+
+    assert_eq!(
+        find_attr(AGENT_TOOL_ARCHETYPE),
+        Some("filter_compressor".to_string())
+    );
+    assert_eq!(find_attr(AGENT_TOOL_BINARY), Some("rtk".to_string()));
+    assert_eq!(
+        find_attr(AGENT_TOOL_WRAPPED_BINARY),
+        Some("cargo".to_string())
+    );
+    assert_eq!(
+        find_attr(AGENT_ERROR_CATEGORY),
+        Some("provider_quota_exhausted".to_string())
+    );
+    assert_eq!(find_attr(VCS_SYSTEM), Some("git".to_string()));
+}
+
+#[test]
+fn test_v03_cross_agent_trace_propagation() {
+    use agent_otel_core::trace_id::format_w3c_traceparent;
+
+    // 1. Parent Orchestrator (Antigravity)
+    let parent_json = r#"{
+        "conversationId": "parent-orchestrator-conv",
+        "toolCall": { "name": "invoke_subagent" }
+    }"#;
+    let mut parent_input = AntigravityHookInput::parse_slice(parent_json.as_bytes()).unwrap();
+    parent_input.auto_enrich();
+
+    let parent_span = build_span_from_hook(HookEvent::PreToolUse, &parent_input, 1000, 2000, 1);
+    let mut parent_trace_id = [0u8; 16];
+    parent_trace_id.copy_from_slice(&parent_span.trace_id);
+    let mut parent_span_id = [0u8; 8];
+    parent_span_id.copy_from_slice(&parent_span.span_id);
+
+    // Formats W3C traceparent for child propagation:
+    let propagated_traceparent = format_w3c_traceparent(&parent_trace_id, &parent_span_id, true);
+
+    // 2. Child Subagent (Claude Code or Codex) receiving the traceparent
+    let child_json = format!(
+        r#"{{
+        "conversationId": "child-subagent-conv",
+        "traceparent": "{propagated_traceparent}",
+        "agentName": "claude-code",
+        "toolCall": {{ "name": "mcp__github__create_issue" }}
+    }}"#
+    );
+    let mut child_input = AntigravityHookInput::parse_slice(child_json.as_bytes()).unwrap();
+    child_input.auto_enrich();
+
+    assert_eq!(child_input.agent_depth, Some(1));
+    assert_eq!(child_input.agent_is_root, Some(false));
+    assert_eq!(child_input.capability_kind.as_deref(), Some("mcp"));
+    assert_eq!(child_input.capability_namespace.as_deref(), Some("github"));
+    assert_eq!(child_input.capability_name.as_deref(), Some("create_issue"));
+
+    let child_span = build_span_from_hook(HookEvent::PreToolUse, &child_input, 2100, 3000, 1);
+
+    // CRITICAL: Child MUST adopt parent's trace_id and point parent_span_id to parent
+    assert_eq!(child_span.trace_id, parent_span.trace_id);
+    assert_eq!(child_span.parent_span_id, parent_span.span_id);
+}

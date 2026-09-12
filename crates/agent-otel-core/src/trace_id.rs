@@ -115,3 +115,32 @@ pub fn resolve_trace_and_parent_id(
     }
     (derive_trace_id(conversation_id), None)
 }
+
+/// Formats a trace_id and span_id into a W3C traceparent header string.
+/// Format: 00-{trace_id:32hex}-{span_id:16hex}-01
+pub fn format_w3c_traceparent(trace_id: &[u8; 16], span_id: &[u8; 8], sampled: bool) -> String {
+    let trace_hex: String = trace_id.iter().map(|b| format!("{b:02x}")).collect();
+    let span_hex: String = span_id.iter().map(|b| format!("{b:02x}")).collect();
+    let flags = if sampled { "01" } else { "00" };
+    format!("00-{trace_hex}-{span_hex}-{flags}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_traceparent_roundtrip() {
+        let trace_id = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let span_id = [10u8, 20, 30, 40, 50, 60, 70, 80];
+        let formatted = format_w3c_traceparent(&trace_id, &span_id, true);
+        assert!(formatted.starts_with("00-"));
+        assert!(formatted.ends_with("-01"));
+
+        let parsed = parse_w3c_traceparent(&formatted);
+        assert!(parsed.is_some());
+        let (t, p) = parsed.unwrap();
+        assert_eq!(t, trace_id);
+        assert_eq!(p, span_id);
+    }
+}

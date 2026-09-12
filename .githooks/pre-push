@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# agent-otel-bridge pre-push hook
+# Enforces branch naming policy and clippy checks before push
+
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Verify branch naming conventions
+case "$current_branch" in
+    main|master|feat/*|fix/*|docs/*|perf/*|release/*)
+        ;;
+    *)
+        echo "[githooks] ERROR: Direct push to '$current_branch' violates branch naming policy."
+        echo "Allowed branch patterns: 'feat/*', 'fix/*', 'docs/*', 'perf/*', 'release/*', or 'main'."
+        exit 1
+        ;;
+esac
+
+echo "[githooks] Running clippy check..."
+cargo clippy --workspace --all-targets -- -D warnings
+if [ $? -ne 0 ]; then
+    echo "[githooks] Clippy check failed! Fix warnings before pushing."
+    exit 1
+fi
+
+echo "[githooks] Pre-push checks passed."
+exit 0

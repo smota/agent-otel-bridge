@@ -285,6 +285,115 @@ pub struct AgentHookInput {
 
     #[serde(alias = "traceparent", alias = "trace_parent", default)]
     pub traceparent: Option<String>,
+
+    // --- Execution Context & Workspace (v0.3) ---
+    #[serde(alias = "workspace_path", alias = "workspacePath", default)]
+    pub workspace_path: Option<String>,
+
+    #[serde(alias = "project_name", alias = "projectName", default)]
+    pub project_name: Option<String>,
+
+    #[serde(alias = "project_root", alias = "projectRoot", default)]
+    pub project_root: Option<String>,
+
+    #[serde(alias = "project_type", alias = "projectType", default)]
+    pub project_type: Option<String>,
+
+    #[serde(alias = "vcs_system", alias = "vcsSystem", default)]
+    pub vcs_system: Option<String>,
+
+    #[serde(alias = "vcs_repository", alias = "vcsRepository", default)]
+    pub vcs_repository: Option<String>,
+
+    #[serde(alias = "vcs_branch", alias = "vcsBranch", default)]
+    pub vcs_branch: Option<String>,
+
+    #[serde(alias = "vcs_commit", alias = "vcsCommit", default)]
+    pub vcs_commit: Option<String>,
+
+    #[serde(alias = "vcs_worktree", alias = "vcsWorktree", default)]
+    pub vcs_worktree: Option<bool>,
+
+    // --- Tool Archetypes & I/O Economics (v0.3) ---
+    #[serde(alias = "tool_archetype", alias = "toolArchetype", default)]
+    pub tool_archetype: Option<String>,
+
+    #[serde(alias = "tool_binary", alias = "toolBinary", default)]
+    pub tool_binary: Option<String>,
+
+    #[serde(alias = "tool_wrapped_binary", alias = "toolWrappedBinary", default)]
+    pub tool_wrapped_binary: Option<String>,
+
+    #[serde(alias = "tool_pipeline_depth", alias = "toolPipelineDepth", default)]
+    pub tool_pipeline_depth: Option<u32>,
+
+    #[serde(
+        alias = "tool_compression_ratio",
+        alias = "toolCompressionRatio",
+        default
+    )]
+    pub tool_compression_ratio: Option<f64>,
+
+    #[serde(alias = "tool_tokens_saved", alias = "toolTokensSaved", default)]
+    pub tool_tokens_saved: Option<i64>,
+
+    // --- Universal Capabilities (MCP & Skills) & Waste (v0.3) ---
+    #[serde(alias = "capability_kind", alias = "capabilityKind", default)]
+    pub capability_kind: Option<String>,
+
+    #[serde(alias = "capability_namespace", alias = "capabilityNamespace", default)]
+    pub capability_namespace: Option<String>,
+
+    #[serde(alias = "capability_name", alias = "capabilityName", default)]
+    pub capability_name: Option<String>,
+
+    #[serde(
+        alias = "capability_schema_tokens",
+        alias = "capabilitySchemaTokens",
+        default
+    )]
+    pub capability_schema_tokens: Option<i64>,
+
+    #[serde(
+        alias = "capability_response_bytes",
+        alias = "capabilityResponseBytes",
+        default
+    )]
+    pub capability_response_bytes: Option<u64>,
+
+    #[serde(
+        alias = "capability_response_tokens",
+        alias = "capabilityResponseTokens",
+        default
+    )]
+    pub capability_response_tokens: Option<i64>,
+
+    #[serde(
+        alias = "capability_consecutive_retries",
+        alias = "capabilityConsecutiveRetries",
+        default
+    )]
+    pub capability_consecutive_retries: Option<u32>,
+
+    #[serde(alias = "capability_is_waste", alias = "capabilityIsWaste", default)]
+    pub capability_is_waste: Option<bool>,
+
+    // --- Cross-Agent Lineage & Subagent Parenting (v0.3) ---
+    #[serde(alias = "agent_depth", alias = "agentDepth", default)]
+    pub agent_depth: Option<u32>,
+
+    #[serde(alias = "agent_parent_name", alias = "agentParentName", default)]
+    pub agent_parent_name: Option<String>,
+
+    #[serde(alias = "agent_root_id", alias = "agentRootId", default)]
+    pub agent_root_id: Option<String>,
+
+    #[serde(alias = "agent_is_root", alias = "agentIsRoot", default)]
+    pub agent_is_root: Option<bool>,
+
+    // --- Multi-Layer Error Categorization (v0.3) ---
+    #[serde(alias = "error_category", alias = "errorCategory", default)]
+    pub error_category: Option<String>,
 }
 
 /// Backward compatibility alias for Antigravity-specific integrations
@@ -314,5 +423,107 @@ impl AgentHookInput {
             return Ok(Self::default());
         }
         serde_json::from_slice(bytes)
+    }
+
+    /// Auto-enriches the input with execution context, tool archetypes,
+    /// capabilities, lineage, and error categories if not already specified.
+    pub fn auto_enrich(&mut self) {
+        // 1. Workspace and Project Context
+        if self.workspace_path.is_none() || self.project_root.is_none() {
+            let ctx = crate::context::WorkspaceContext::harvest_current();
+            if self.workspace_path.is_none() {
+                self.workspace_path = Some(ctx.current_dir);
+            }
+            if self.project_name.is_none() {
+                self.project_name = ctx.project_name;
+            }
+            if self.project_root.is_none() {
+                self.project_root = ctx.project_root;
+            }
+            if self.project_type.is_none() {
+                self.project_type = ctx.project_type;
+            }
+            if self.vcs_system.is_none() {
+                self.vcs_system = ctx.vcs_system;
+            }
+            if self.vcs_repository.is_none() {
+                self.vcs_repository = ctx.vcs_repository;
+            }
+            if self.vcs_branch.is_none() {
+                self.vcs_branch = ctx.vcs_branch;
+            }
+            if self.vcs_commit.is_none() {
+                self.vcs_commit = ctx.vcs_commit;
+            }
+            if self.vcs_worktree.is_none() {
+                self.vcs_worktree = ctx.vcs_worktree;
+            }
+        }
+
+        // 2. Capabilities (MCP, Skills, Subagents)
+        let tool_opt = self.resolved_tool_name().map(|s| s.to_string());
+        let cmd_str_opt = self.resolved_tool_arguments().and_then(|args| {
+            args.get("command")
+                .or_else(|| args.get("CommandLine"))
+                .or_else(|| args.get("cmd"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        });
+
+        if let Some(ref tool) = tool_opt {
+            if self.capability_kind.is_none() {
+                let cap = crate::capability::ClassifiedCapability::classify(tool);
+                self.capability_kind = Some(cap.kind.as_str().to_string());
+                self.capability_namespace = Some(cap.namespace);
+                self.capability_name = Some(cap.operation);
+            }
+
+            // 3. Tool Archetypes
+            if self.tool_archetype.is_none() {
+                let cmd_to_classify = cmd_str_opt.as_deref().unwrap_or(tool);
+                let classified = crate::archetype::ClassifiedCommand::classify(cmd_to_classify);
+                self.tool_archetype = Some(classified.archetype.as_str().to_string());
+                self.tool_binary = Some(classified.binary);
+                self.tool_wrapped_binary = classified.wrapped_binary;
+                self.tool_pipeline_depth = Some(classified.pipeline_depth as u32);
+            }
+        }
+
+        // 4. Lineage and Hierarchy
+        if self.agent_depth.is_none() {
+            let has_parent = self.traceparent.is_some()
+                || self.agent_parent_name.is_some()
+                || std::env::var("TRACEPARENT").is_ok();
+            if has_parent {
+                self.agent_depth = Some(1);
+                self.agent_is_root = Some(false);
+            } else {
+                self.agent_depth = Some(0);
+                self.agent_is_root = Some(true);
+            }
+        }
+
+        // 5. Multi-layer Error Categorization
+        if self.error.is_some() && self.error_category.is_none() {
+            let err_msg = self.error.as_deref().unwrap_or("").to_ascii_lowercase();
+            if err_msg.contains("rate limit")
+                || err_msg.contains("429")
+                || err_msg.contains("quota")
+            {
+                self.error_category = Some("provider_quota_exhausted".to_string());
+            } else if err_msg.contains("interrupted")
+                || err_msg.contains("sigint")
+                || err_msg.contains("user cancelled")
+            {
+                self.error_category = Some("user_interrupted".to_string());
+            } else if err_msg.contains("validation")
+                || err_msg.contains("schema")
+                || err_msg.contains("invalid argument")
+            {
+                self.error_category = Some("schema_validation_error".to_string());
+            } else {
+                self.error_category = Some("tool_verification_failed".to_string());
+            }
+        }
     }
 }

@@ -1,0 +1,350 @@
+{
+  "schemaVersion": "v6",
+  "name": "ai-tool-archetypes-and-waste",
+  "tags": [
+    {
+      "key": "persona",
+      "value": "sre"
+    },
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    },
+    {
+      "key": "signal",
+      "value": "traces"
+    },
+    {
+      "key": "technology",
+      "value": "agent-otel-bridge"
+    }
+  ],
+  "spec": {
+    "display": {
+      "name": "AI Tool Archetypes & Capability Waste Inspector",
+      "description": "Observability dashboard tracking behavioral tool execution archetypes, filter compression savings, MCP schema dead-weight tax, and retry thrashing waste."
+    },
+    "duration": "",
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service_name",
+          "display": {
+            "name": "Service",
+            "description": "Filter by OpenTelemetry service name"
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "customAllValue": "",
+          "capturingRegexp": "",
+          "sort": "alphabetical-asc",
+          "plugin": {
+            "kind": "signoz/DynamicVariable",
+            "spec": {
+              "name": "service.name",
+              "signal": "all"
+            }
+          }
+        }
+      }
+    ],
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "Tool Archetypes & Execution Economics",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "content": {
+                "$ref": "#/spec/panels/archetype-breakdown"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/capability-kind"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/error-categories"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 0,
+              "y": 6
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/project-types"
+              },
+              "height": 6,
+              "width": 6,
+              "x": 6,
+              "y": 6
+            }
+          ]
+        }
+      }
+    ],
+    "panels": {
+      "archetype-breakdown": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Tool Execution by Behavioral Archetype",
+            "description": "Distribution across filter_compressor, structured_parser, inspector_diff, search_retrieval, build_test_verify, generic_exec."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "agent.tool.archetype",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.tool.archetype EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "capability-kind": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Capability Kind Breakdown (MCP vs Skill vs Native)",
+            "description": "Proportion of tool executions partitioned by capability tier."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "capability.kind",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND capability.kind EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "error-categories": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Multi-Tier Error Categories",
+            "description": "Actionable error classification: tool_verification_failed, provider_quota_exhausted, schema_validation_error, user_interrupted."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "agent.error.category",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND agent.error.category EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "project-types": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Active Workspaces by Ecosystem",
+            "description": "Project environments discovered by the zero-subprocess context harvester (rust, node, python, go)."
+          },
+          "links": null,
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "0"
+              },
+              "legend": {
+                "position": "bottom",
+                "customColors": null,
+                "mode": "list"
+              },
+              "visualization": {
+                "timePreference": "global_time"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "workspace.project_type",
+                        "fieldContext": "attribute",
+                        "signal": "traces",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "disabled": false,
+                    "filter": {
+                      "expression": "service.name IN $service_name AND workspace.project_type EXISTS"
+                    },
+                    "limit": 100,
+                    "order": []
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
