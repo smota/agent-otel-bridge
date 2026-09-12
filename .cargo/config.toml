@@ -1,2 +1,3 @@
-[target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
+[alias]
+guardrails = "run -p agent-otel-bridge -- check-guardrails"
+bench-submit = "run --release -p agent-otel-bench -- --submit"

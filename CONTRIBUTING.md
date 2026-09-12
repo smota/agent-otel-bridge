@@ -44,7 +44,7 @@ gitGraph
 3. Implement changes following the [Design Constraints](#2-architectural-and-performance-guardrails).
 4. Run the automated guardrails checker:
    ```powershell
-   .\scripts\check-guardrails.ps1
+   cargo guardrails
    ```
 5. Commit with conventional commit messages (`feat: ...`, `fix: ...`, `docs: ...`, `perf: ...`).
 6. Submit a Pull Request targeting `main`.
@@ -56,10 +56,10 @@ gitGraph
 Before submitting a PR, ensure your contribution satisfies our core architectural invariants:
 
 1. **Sub-Millisecond Client Execution SLA**:
-   - `agent-hook.exe` must execute in **< 1.0 ms** on standard hardware.
+   - `agent-hook` must execute in **< 1.0 ms** on standard hardware.
    - Hard watchdog fail-open backstop: 3.0 ms maximum duration.
 2. **Zero LLM Prompt Pollution**:
-   - Tracing context must propagate exclusively through the OS transport layer (`$env:TRACEPARENT`).
+   - Tracing context must propagate exclusively through the OS transport layer (`$env:TRACEPARENT` / `export TRACEPARENT`).
    - Never instruct agents or LLMs to pass `--traceparent` CLI flags.
 3. **Preference-Agnostic Behavioral Archetypes**:
    - Do not hardcode specific CLI tools (`rtk`, `jq`, `bat`).
@@ -73,18 +73,23 @@ Before submitting a PR, ensure your contribution satisfies our core architectura
 
 ## 3. Automated Guardrails Verification
 
-We provide an automated verification tool in `scripts/check-guardrails.ps1` that checks:
+We provide an automated, cross-platform verification command built directly into the Rust workspace:
 
 - [x] Code formatting (`cargo fmt --check`)
 - [x] Linter purity with zero warnings (`cargo clippy --workspace --all-targets -- -D warnings`)
 - [x] Full workspace test suite (`cargo test --workspace`)
-- [x] Client binary size threshold (< 350 KB)
+- [x] Client binary size threshold (< 350 KB SLA)
 - [x] Documentation generation (`cargo doc --workspace --no-deps`)
-- [x] Copyright and license header integrity
+- [x] Git branch naming policy (`feat/*`, `fix/*`, `docs/*`, `perf/*`, `release/*`, `main`)
 
 Run it before pushing:
 ```powershell
-.\scripts\check-guardrails.ps1
+cargo guardrails
+```
+
+Or run via the unified CLI tool:
+```powershell
+agent-otel-bridge check-guardrails
 ```
 
 ---

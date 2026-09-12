@@ -12,7 +12,7 @@
 | **Claude Code** | `~/.claude/settings.json` | `.claude/settings.json` | JSON `hooks` Dictionary with Command Arrays |
 | **OpenAI Codex CLI** | `~/.codex/hooks.json` | `.codex/hooks.json` | JSON Array of Event Handlers |
 | **xAI Grok CLI** | `~/.grok/hooks.json` | `.grok/hooks.json` | JSON Array of Event Handlers |
-| **Inflection Pi CLI** | `~/.pi/hooks.json` | `.pi/hooks.json` | JSON Array of Event Handlers |
+| **Pi CLI (`pi`)** | `~/.pi/hooks.json` | `.pi/hooks.json` | JSON Array of Event Handlers |
 | **Custom Agent Harness** | Environment / Custom Config | Custom Config | Direct Process Execution (`agent-hook.exe`) |
 
 ---
@@ -250,9 +250,9 @@ Spans emitted from Grok sessions automatically receive:
 
 ---
 
-### 3.5 Inflection Pi CLI
+### 3.5 Pi CLI (pi.dev)
 
-Inflection Pi CLI hooks are configured via `~/.pi/hooks.json`.
+[Pi CLI](https://pi.dev/) hooks are configured via `~/.pi/hooks.json`.
 
 ```json
 {
@@ -273,7 +273,7 @@ Inflection Pi CLI hooks are configured via `~/.pi/hooks.json`.
 }
 ```
 Spans emitted from Pi sessions automatically receive:
-- `gen_ai.provider.name`: `"inflection"`
+- `gen_ai.provider.name`: `"pi"`
 - `gen_ai.agent.name`: `"pi"`
 
 ---

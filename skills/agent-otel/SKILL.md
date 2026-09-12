@@ -40,6 +40,6 @@ agent-otel-bridge emit-quota --ping
 
 - **Visualization Guide**: [docs/DASHBOARDS.md](../../docs/DASHBOARDS.md)
 - **Supported Backends**: Grafana (Tempo + Mimir), SigNoz, Jaeger, Prometheus, Datadog, Honeycomb
-- **Supported Clients**: Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi, and custom AI CLI agents
+- **Supported Clients**: Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi (pi.dev), and custom AI CLI agents
 - **Key Metrics**: `agent.quota.remaining_fraction`, `agent.quota.seconds_to_reset` (canonical OpenTelemetry gauges)
 - **Hot-Path Binary**: `agent-hook.exe` (sub-1ms execution, 3ms fail-open watchdog)

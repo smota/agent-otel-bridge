@@ -6,7 +6,7 @@
 //! # agent-otel-bridge
 //!
 //! Ultra-fast, zero-overhead OpenTelemetry instrumentation bridge for AI CLI agent harnesses
-//! (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi).
+//! (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi [pi.dev]).
 //!
 //! This crate provides the unified CLI and daemon bridge, delegating core types to [`agent_otel_core`]
 //! and IPC utilities to [`agent_otel_ipc`].

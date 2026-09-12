@@ -24,20 +24,38 @@ All environment variables follow standard OpenTelemetry conventions with project
 
 ---
 
-## 2. Windows Environment Variable Configuration
+## 2. Cross-Platform Environment Variable Configuration
 
-### Permanent Configuration (User Profile)
-In PowerShell:
+### PowerShell (Windows, macOS, Linux)
+
+#### Permanent Configuration (User Profile)
 ```powershell
 [System.Environment]::SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318", "User")
 [System.Environment]::SetEnvironmentVariable("OTEL_SERVICE_NAME", "agent-otel-bridge", "User")
 [System.Environment]::SetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=production", "User")
 ```
 
-### Session-Specific Configuration
+#### Session-Specific Configuration
 ```powershell
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://127.0.0.1:4318"
 $env:OTEL_SERVICE_NAME = "my-custom-workstation"
+$env:TRACEPARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+```
+
+### Bash / Zsh (Linux, macOS)
+
+#### Permanent Configuration (`~/.bashrc` or `~/.zshrc`)
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
+export OTEL_SERVICE_NAME="agent-otel-bridge"
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=production"
+```
+
+#### Session-Specific Configuration
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
+export OTEL_SERVICE_NAME="my-custom-workstation"
+export TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 ```
 
 ---

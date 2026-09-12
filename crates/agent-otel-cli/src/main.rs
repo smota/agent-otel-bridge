@@ -44,7 +44,7 @@ enum Commands {
     Start,
     /// Gracefully stops the running background daemon
     Stop,
-    /// Manage agent lifecycle hooks for supported clients (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Inflection Pi)
+    /// Manage agent lifecycle hooks for supported clients (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi [pi.dev])
     Hooks {
         #[command(subcommand)]
         action: HookAction,

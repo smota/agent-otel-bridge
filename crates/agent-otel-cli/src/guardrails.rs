@@ -81,9 +81,10 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
         .args(["build", "--release", "-p", "agent-otel-client"])
         .status();
     if build_rel.is_ok() {
-        let bin_path = Path::new("target/release/agent-hook.exe");
+        let exe_name = format!("agent-hook{}", std::env::consts::EXE_SUFFIX);
+        let bin_path = Path::new("target").join("release").join(&exe_name);
         if bin_path.exists() {
-            if let Ok(meta) = fs::metadata(bin_path) {
+            if let Ok(meta) = fs::metadata(&bin_path) {
                 let size_kb = (meta.len() as f64) / 1024.0;
                 if size_kb > 350.0 {
                     println!("FAILED ({:.1} KB exceeds 350 KB SLA)", size_kb);
@@ -95,11 +96,42 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
                 println!("PASSED");
             }
         } else {
-            println!("(skipped release check)");
+            println!("(skipped release check: {} not found)", bin_path.display());
         }
     } else {
         println!("FAILED to build release binary");
         failures += 1;
+    }
+
+    // 6. Branch Naming Policy Check (if git repository)
+    print!("[GUARDRAIL] Validating Git branch naming policy... ");
+    let git_branch = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output();
+    match git_branch {
+        Ok(out) if out.status.success() => {
+            let branch = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let is_allowed = branch == "main"
+                || branch == "master"
+                || branch.starts_with("feat/")
+                || branch.starts_with("fix/")
+                || branch.starts_with("docs/")
+                || branch.starts_with("perf/")
+                || branch.starts_with("release/")
+                || branch.starts_with("chore/");
+            if is_allowed {
+                println!("({}) PASSED", branch);
+            } else {
+                println!(
+                    "FAILED (Branch '{}' must follow 'feat/*', 'fix/*', 'docs/*', 'perf/*', or 'main')",
+                    branch
+                );
+                failures += 1;
+            }
+        }
+        _ => {
+            println!("(skipped: not in a git repository)");
+        }
     }
 
     println!();

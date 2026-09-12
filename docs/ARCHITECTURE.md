@@ -1,6 +1,6 @@
 # Architecture Design: agent-otel-bridge
 
-`agent-otel-bridge` is a native, high-performance OpenTelemetry instrumentation bridge engineered for autonomous AI CLI agent harnesses (Google Antigravity / `agy`, Claude Code, OpenAI Codex CLI, xAI Grok CLI, Inflection Pi CLI, and custom LLM developer tools).
+`agent-otel-bridge` is a native, high-performance OpenTelemetry instrumentation bridge engineered for autonomous AI CLI agent harnesses (Google Antigravity / `agy`, Claude Code, OpenAI Codex CLI, xAI Grok CLI, Pi CLI [pi.dev], and custom LLM developer tools).
 
 ---
 
@@ -37,7 +37,7 @@ flowchart TD
         Claude["Claude Code (~/.claude)"]
         Codex["OpenAI Codex (~/.codex)"]
         Grok["xAI Grok (~/.grok)"]
-        Pi["Inflection Pi (~/.pi)"]
+        Pi["Pi (~/.pi) [pi.dev]"]
         Custom["Custom LLM CLI / Harness"]
     end
 
@@ -122,7 +122,7 @@ The transport layer uses a zero-copy binary wire framing protocol:
 
 ### Architecture Layer Separation Principle
 1. **Bridge Layer (Standardized Instrumentation)**:
-   The bridge emits **purely canonical attributes**. Vendor-specific prefixes like `agy.*` are disabled by default to avoid semantic pollution when instrumenting other agents (Claude Code, OpenAI Codex, xAI Grok, Inflection Pi) and to avoid cardinality/payload bloat.
+   The bridge emits **purely canonical attributes**. Vendor-specific prefixes like `agy.*` are disabled by default to avoid semantic pollution when instrumenting other agents (Claude Code, OpenAI Codex, xAI Grok, Pi) and to avoid cardinality/payload bloat.
 2. **Collector Layer (Transformation & Aliasing)**:
    Per OpenTelemetry design, dialect transformations or vendor-specific backward compatibility belong in the **OpenTelemetry Collector** pipeline using the `transformprocessor` (OTTL).
 3. **Bridge Compatibility Toggle**:
@@ -136,7 +136,7 @@ The transport layer uses a zero-copy binary wire framing protocol:
 | **Span Name (Invocation)** | `invoke_agent {agent_name}` | — |
 | **Span Name (Stop)** | `agent.stop` | — |
 | `gen_ai.operation.name` | `execute_tool`, `invoke_agent` | — |
-| `gen_ai.provider.name` | `"anthropic"`, `"google"`, `"openai"`, `"xai"`, `"inflection"` | Inferred from model / client |
+| `gen_ai.provider.name` | `"anthropic"`, `"google"`, `"openai"`, `"xai"`, `"pi"` | Inferred from model / client |
 | `gen_ai.agent.name` | `"antigravity"`, `"claude-code"`, `"codex"`, `"grok"`, `"pi"` | Inferred from payload / client |
 | `gen_ai.conversation.id` | Session UUID | Mapped from `conversationId` or `sessionId` |
 | `gen_ai.tool.name` | `run_command`, `Bash`, `grep_search`, etc. | `gen_ai.tool.name` |
