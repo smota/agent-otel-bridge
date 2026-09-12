@@ -120,7 +120,7 @@ Every pull request and modification MUST satisfy:
 
 ## 5. Git Branching & Contribution Workflow
 
-* **`main`**: Production trunk. Protected branch. Releases are tagged from `main` (`v0.1.0`, `v0.2.0`, `v0.3.0`). Direct pushes to `main` are restricted to maintainers for release merges.
+* **`main`**: Production trunk. Protected branch. Releases are tagged from `main` (`v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.4.0`). Direct pushes to `main` are restricted to maintainers for release merges.
 * **Topic Branches**: All changes must be developed on descriptive feature branches:
   - `feat/<feature-name>`: New capabilities (e.g. `feat/tokenomics-dashboard`).
   - `fix/<issue-name>`: Bug fixes (e.g. `fix/worktree-detection`).

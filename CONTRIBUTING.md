@@ -22,9 +22,15 @@ gitGraph
     branch fix/worktree-read
     checkout fix/worktree-read
     commit id: "fix gitdir read"
-    checkout main
     merge fix/worktree-read id: "PR #13 Merge"
     commit id: "v0.3.0" tag: "v0.3.0"
+    branch feat/v0.4-cross-platform
+    checkout feat/v0.4-cross-platform
+    commit id: "unix domain sockets"
+    commit id: "native cli telemetry"
+    checkout main
+    merge feat/v0.4-cross-platform id: "PR #14 Merge"
+    commit id: "v0.4.0" tag: "v0.4.0"
 ```
 
 ### Branch Roles
