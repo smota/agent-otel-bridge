@@ -254,6 +254,108 @@ pub fn build_span_from_hook_opts(
         attributes.push(kv_bool(AGENT_GIT_SELF_REVERT, revert));
     }
 
+    // Execution Context & Workspace (v0.3)
+    if let Some(path) = input.workspace_path.as_deref() {
+        attributes.push(kv_string(WORKSPACE_PATH, path));
+    }
+    if let Some(pname) = input.project_name.as_deref() {
+        attributes.push(kv_string(WORKSPACE_PROJECT_NAME, pname));
+    }
+    if let Some(proot) = input.project_root.as_deref() {
+        attributes.push(kv_string(WORKSPACE_PROJECT_ROOT, proot));
+    }
+    if let Some(ptype) = input.project_type.as_deref() {
+        attributes.push(kv_string(WORKSPACE_PROJECT_TYPE, ptype));
+    }
+
+    // VCS / Git (v0.3)
+    if let Some(vcs) = input.vcs_system.as_deref() {
+        attributes.push(kv_string(VCS_SYSTEM, vcs));
+    }
+    if let Some(repo) = input.vcs_repository.as_deref() {
+        attributes.push(kv_string(VCS_REPOSITORY_NAME, repo));
+    }
+    if let Some(branch) = input.vcs_branch.as_deref() {
+        attributes.push(kv_string(VCS_BRANCH_NAME, branch));
+    }
+    if let Some(commit) = input.vcs_commit.as_deref() {
+        attributes.push(kv_string(VCS_COMMIT_SHA, commit));
+    }
+    if let Some(worktree) = input.vcs_worktree {
+        attributes.push(kv_bool(VCS_WORKTREE_ACTIVE, worktree));
+    }
+
+    // Tool Archetypes & I/O Economics (v0.3)
+    if let Some(arch) = input.tool_archetype.as_deref() {
+        attributes.push(kv_string(AGENT_TOOL_ARCHETYPE, arch));
+    }
+    if let Some(bin) = input.tool_binary.as_deref() {
+        attributes.push(kv_string(AGENT_TOOL_BINARY, bin));
+    }
+    if let Some(wbin) = input.tool_wrapped_binary.as_deref() {
+        attributes.push(kv_string(AGENT_TOOL_WRAPPED_BINARY, wbin));
+    }
+    if let Some(pdepth) = input.tool_pipeline_depth {
+        attributes.push(kv_int(AGENT_TOOL_PIPELINE_DEPTH, pdepth as i64));
+    }
+    if let Some(cratio) = input.tool_compression_ratio {
+        attributes.push(KeyValue {
+            key: AGENT_TOOL_COMPRESSION_RATIO.to_string(),
+            value: Some(AnyValue {
+                value: Some(any_value::Value::DoubleValue(cratio)),
+            }),
+            ..Default::default()
+        });
+    }
+    if let Some(tsaved) = input.tool_tokens_saved {
+        attributes.push(kv_int(AGENT_TOOL_TOKENS_SAVED, tsaved));
+    }
+
+    // Universal Capabilities & Waste (v0.3)
+    if let Some(ckind) = input.capability_kind.as_deref() {
+        attributes.push(kv_string(CAPABILITY_KIND, ckind));
+    }
+    if let Some(cns) = input.capability_namespace.as_deref() {
+        attributes.push(kv_string(CAPABILITY_NAMESPACE, cns));
+    }
+    if let Some(cname) = input.capability_name.as_deref() {
+        attributes.push(kv_string(CAPABILITY_NAME, cname));
+    }
+    if let Some(st) = input.capability_schema_tokens {
+        attributes.push(kv_int(CAPABILITY_SCHEMA_TOKENS, st));
+    }
+    if let Some(rb) = input.capability_response_bytes {
+        attributes.push(kv_int(CAPABILITY_RESPONSE_BYTES, rb as i64));
+    }
+    if let Some(rt) = input.capability_response_tokens {
+        attributes.push(kv_int(CAPABILITY_RESPONSE_TOKENS, rt));
+    }
+    if let Some(retries) = input.capability_consecutive_retries {
+        attributes.push(kv_int(CAPABILITY_CONSECUTIVE_RETRIES, retries as i64));
+    }
+    if let Some(is_waste) = input.capability_is_waste {
+        attributes.push(kv_bool(CAPABILITY_IS_WASTE, is_waste));
+    }
+
+    // Cross-Agent Lineage (v0.3)
+    if let Some(depth) = input.agent_depth {
+        attributes.push(kv_int(GEN_AI_AGENT_DEPTH, depth as i64));
+    }
+    if let Some(parent_name) = input.agent_parent_name.as_deref() {
+        attributes.push(kv_string(GEN_AI_AGENT_PARENT_NAME, parent_name));
+    }
+    if let Some(root_id) = input.agent_root_id.as_deref() {
+        attributes.push(kv_string(GEN_AI_AGENT_ROOT_ID, root_id));
+    }
+    if let Some(is_root) = input.agent_is_root {
+        attributes.push(kv_bool(GEN_AI_AGENT_IS_ROOT, is_root));
+    }
+
+    // Multi-Layer Error Categorization (v0.3)
+    if let Some(ecat) = input.error_category.as_deref() {
+        attributes.push(kv_string(AGENT_ERROR_CATEGORY, ecat));
+    }
+
     let (status_code, status_msg) = match &input.error {
         Some(err) => (StatusCode::Error as i32, err.clone()),
         None => (StatusCode::Ok as i32, String::new()),

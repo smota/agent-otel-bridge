@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 mod doctor;
 mod emit_quota;
+mod guardrails;
 mod hooks;
 mod stop;
 
@@ -81,6 +82,12 @@ enum Commands {
         /// Automatically open web browser when submitting benchmark
         #[arg(long)]
         open_browser: bool,
+    },
+    /// Verifies all architectural guardrails, SLAs, code formatting, clippy, and test suite
+    CheckGuardrails {
+        /// If set, automatically fixes formatting violations
+        #[arg(long)]
+        fix: bool,
     },
 }
 
@@ -189,6 +196,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             submit,
             open_browser,
         } => run_benchmark(json, markdown, export, submit, open_browser),
+        Commands::CheckGuardrails { fix } => guardrails::run_check(fix),
     }
 }
 

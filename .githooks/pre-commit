@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# agent-otel-bridge pre-commit hook
+# Validates code formatting before commit
+
+echo "[githooks] Running pre-commit formatting check..."
+cargo fmt --check
+if [ $? -ne 0 ]; then
+    echo "[githooks] Formatting violation detected! Run 'cargo fmt' before committing."
+    exit 1
+fi

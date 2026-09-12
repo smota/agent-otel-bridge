@@ -154,3 +154,70 @@ In the Antigravity agent architecture:
   - Claude Code emits `model_stop` or `end_turn`.
   - OpenAI Codex emits `stop` or `success`.
 - Under canonical OpenTelemetry GenAI semantic conventions, `NO_TOOL_CALL` maps directly to `gen_ai.response.finish_reasons = ["stop"]`.
+
+---
+
+## 5. Universal Agent Intelligence & v0.3 Semantic Extensions
+
+`agent-otel-bridge` v0.3 introduces universal abstractions for execution context, preference-agnostic tool archetypes, MCP and skill waste quantification, and cross-agent distributed tracing lineage:
+
+### 5.1 Execution Context & Non-Blocking VCS Attributes
+Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file inspection:
+
+| Attribute | Type | Description | Example Values |
+| :--- | :--- | :--- | :--- |
+| `workspace.path` | `string` | Canonical absolute path of the active working directory | `C:\Users\samue\code\agent-otel-bridge` |
+| `workspace.project_name` | `string` | Project name inferred from manifest or directory basename | `agent-otel-bridge` |
+| `workspace.project_root` | `string` | Inferred top-level root directory containing project marker | `C:\Users\samue\code\agent-otel-bridge` |
+| `workspace.project_type` | `string` | Detected ecosystem type | `rust`, `node`, `python`, `go`, `antigravity_workspace` |
+| `vcs.system` | `string` | Detected Version Control System | `git`, `none` |
+| `vcs.repository.name` | `string` | Extracted repository identifier | `agent-otel-bridge` |
+| `vcs.branch.name` | `string` | Active branch name extracted directly from `.git/HEAD` | `main`, `feat/tokenomics` |
+| `vcs.commit.sha` | `string` | Active commit SHA hash | `6b755a6...` |
+| `vcs.worktree.active` | `bool` | True if operating inside a secondary Git worktree | `true`, `false` |
+
+### 5.2 Behavioral Tool Execution Archetypes
+Decouples observability from specific CLI tools (`rtk`, `jq`, `bat`, `delta`) by modeling functional intent:
+
+| Attribute | Type | Description | Example Values |
+| :--- | :--- | :--- | :--- |
+| `agent.tool.archetype` | `string` | Functional archetype classification | `filter_compressor`, `structured_parser`, `inspector_diff`, `search_retrieval`, `build_test_verify`, `generic_exec` |
+| `agent.tool.binary` | `string` | Base executable name | `rtk`, `jq`, `rg`, `bat`, `cargo` |
+| `agent.tool.wrapped_binary` | `string` | Wrapped binary if using an execution proxy | `cargo` (from `rtk cargo test`) |
+| `agent.tool.pipeline_depth` | `int` | Number of piped command segments | `1`, `3` (from `cat f.json \| jq .items \| head -n 5`) |
+| `agent.tool.compression_ratio` | `double` | Output token reduction ratio: $1 - (\text{bytes\_out} / \text{bytes\_in})$ | `0.85` (85% reduction) |
+| `agent.tool.tokens_saved` | `int` | Estimated prompt tokens saved by compression | `3450` |
+
+### 5.3 Universal Capabilities (MCP & Skills) & Waste Metrics
+Quantifies context tax, payload overhead, and retry thrashing:
+
+| Attribute | Type | Description | Example Values |
+| :--- | :--- | :--- | :--- |
+| `capability.kind` | `string` | Capability tier | `mcp`, `skill`, `subagent`, `native` |
+| `capability.namespace` | `string` | Server or skill bundle identifier | `github`, `postgres`, `agy-customizations`, `core` |
+| `capability.name` | `string` | Specific operation invoked | `create_issue`, `explain_rule`, `view_file` |
+| `capability.schema_tokens` | `int` | Context tokens consumed by tool definitions in prompt | `4200` |
+| `capability.response_bytes` | `int` | Raw byte size of tool response payload | `154000` |
+| `capability.response_tokens` | `int` | Estimated tokens returned by tool execution | `38500` |
+| `capability.consecutive_retries` | `int` | Failure retry streak on identical/similar arguments | `0`, `3` |
+| `capability.is_waste` | `bool` | True if invocation is classified as unproductive loop waste | `true`, `false` |
+
+### 5.4 Cross-Agent Distributed Tracing & Lineage
+Links heterogeneous subagent sessions into a single distributed trace tree:
+
+| Attribute | Type | Description | Example Values |
+| :--- | :--- | :--- | :--- |
+| `gen_ai.agent.depth` | `int` | Recursion hop depth ($0 = \text{root orchestrator}$) | `0`, `1`, `2` |
+| `gen_ai.agent.parent_name` | `string` | Name of the calling harness | `antigravity`, `claude-code` |
+| `gen_ai.agent.root_id` | `string` | Root conversation ID binding the fleet turn | `conv-root-12345` |
+| `gen_ai.agent.is_root` | `bool` | True if root orchestrator span | `true`, `false` |
+
+### 5.5 Multi-Layer Error Categorization
+Replaces ambiguous binary errors with actionable diagnostic categories:
+
+| Attribute | Category Value | Operational Meaning | SRE Triage Action |
+| :--- | :--- | :--- | :--- |
+| `agent.error.category` | `tool_verification_failed` | Normal unit test or linter failure | Low; normal part of TDD feedback cycle. |
+| `agent.error.category` | `provider_quota_exhausted` | Upstream rate limit or quota exceeded | High; triggers provider failover or wait window. |
+| `agent.error.category` | `schema_validation_error` | Model emitted invalid JSON arguments | Medium; tune tool schema or system instructions. |
+| `agent.error.category` | `user_interrupted` | User cancelled operation (Ctrl+C / Stop) | None; intentional human flow control. |

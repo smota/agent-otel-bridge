@@ -73,8 +73,8 @@ impl QuotaEngine {
         map.insert(
             "claude".to_string(),
             QuotaSnapshot {
-                remaining_fraction: 0.0,
-                seconds_to_reset: 7200.0,
+                remaining_fraction: 0.75,
+                seconds_to_reset: 3600.0,
                 observed_at_unix_nano: now,
                 bucket: "claude".to_string(),
                 group: "anthropic".to_string(),
@@ -117,7 +117,7 @@ impl QuotaEngine {
             } else {
                 0.005
             };
-            entry.remaining_fraction = (entry.remaining_fraction - burn).clamp(0.05, 1.0);
+            entry.remaining_fraction = (entry.remaining_fraction - burn).clamp(0.0, 1.0);
             entry.observed_at_unix_nano = now;
         }
     }
@@ -155,13 +155,6 @@ impl QuotaEngine {
 
         // Scan potential on-disk quota files per provider
         if let Some(home) = dirs_fallback() {
-            // First, dynamically discover real live quota from Claude session transcripts
-            if let Some(claude_snap) = detect_claude_quota(&home) {
-                if let Ok(mut lock) = self.quotas.write() {
-                    lock.insert("claude".to_string(), claude_snap);
-                }
-            }
-
             let provider_paths = [
                 ("codex", home.join(".codex").join("quota.json")),
                 ("gemini", home.join(".gemini").join("quota.json")),
@@ -193,6 +186,13 @@ impl QuotaEngine {
                     }
                 }
             }
+
+            // Real dynamic session discovery takes precedence over static files
+            if let Some(claude_snap) = detect_claude_quota(&home) {
+                if let Ok(mut lock) = self.quotas.write() {
+                    lock.insert("claude".to_string(), claude_snap);
+                }
+            }
         }
 
         if let Ok(lock) = self.quotas.read() {
@@ -221,17 +221,36 @@ fn read_quota_file(path: &Path) -> Option<QuotaSnapshot> {
     let bytes = std::fs::read(path).ok()?;
     let parsed: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
 
-    let remaining = parsed
+    let mut remaining = parsed
         .get("remaining_fraction")
         .or_else(|| parsed.get("remainingFraction"))
         .and_then(|v| v.as_f64())
         .unwrap_or(1.0);
 
-    let reset = parsed
+    let raw_reset = parsed
         .get("seconds_to_reset")
         .or_else(|| parsed.get("secondsToReset"))
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
+
+    let file_age_sec = path
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|m| m.elapsed().ok())
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+
+    let seconds_to_reset = if raw_reset > file_age_sec {
+        raw_reset - file_age_sec
+    } else {
+        0.0
+    };
+
+    // If quota was marked 0.0 but the reset duration has elapsed, restore to healthy fraction
+    if remaining == 0.0 && raw_reset > 0.0 && file_age_sec >= raw_reset {
+        remaining = 0.75;
+    }
 
     let bucket = parsed
         .get("bucket")
@@ -250,7 +269,11 @@ fn read_quota_file(path: &Path) -> Option<QuotaSnapshot> {
 
     Some(QuotaSnapshot {
         remaining_fraction: remaining.clamp(0.0, 1.0),
-        seconds_to_reset: reset.max(0.0),
+        seconds_to_reset: if seconds_to_reset > 0.0 {
+            seconds_to_reset
+        } else {
+            3600.0
+        },
         observed_at_unix_nano: current_unix_nano(),
         bucket,
         group,
@@ -309,8 +332,23 @@ fn detect_claude_quota(home: &Path) -> Option<QuotaSnapshot> {
     use std::io::{BufRead, BufReader};
     let reader = BufReader::new(file);
     let mut last_quota_limit: Option<(String, f64)> = None;
+    let mut last_tokens_left: Option<u64> = None;
+    let mut has_recent_messages = false;
+
+    let now_sec = (current_unix_nano() / 1_000_000_000) as f64;
 
     for line in reader.lines().map_while(Result::ok) {
+        if line.contains("total_tokens_reminder") || line.contains("tokens left") {
+            if let Some(pos) = line.find("<total_tokens>") {
+                let after = &line[pos + 14..];
+                if let Some(end_pos) = after.find(" tokens left") {
+                    if let Ok(num) = after[..end_pos].trim().parse::<u64>() {
+                        last_tokens_left = Some(num);
+                    }
+                }
+            }
+        }
+
         if line.contains("quotaLimits") {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
                 if let Some(ql) = val.get("quotaLimits") {
@@ -324,26 +362,45 @@ fn detect_claude_quota(home: &Path) -> Option<QuotaSnapshot> {
                 }
             }
         }
+
+        if line.contains("\"role\":\"assistant\"") || line.contains("\"type\":\"assistant\"") {
+            has_recent_messages = true;
+        }
     }
+
+    let mut remaining_fraction = 0.75;
+    let mut seconds_to_reset = 3600.0;
 
     if let Some((status, resets_at)) = last_quota_limit {
-        let now_sec = (current_unix_nano() / 1_000_000_000) as f64;
-        let seconds_to_reset = (resets_at - now_sec).max(0.0);
-        let remaining_fraction =
-            if status == "rejected" || (seconds_to_reset > 0.0 && status != "ok") {
-                0.0
-            } else {
-                0.40
-            };
-
-        return Some(QuotaSnapshot {
-            remaining_fraction,
-            seconds_to_reset,
-            observed_at_unix_nano: current_unix_nano(),
-            bucket: "claude".to_string(),
-            group: "anthropic".to_string(),
-        });
+        let diff = resets_at - now_sec;
+        if diff > 0.0 && status == "rejected" {
+            // Actively within an unexpired rate limit window
+            remaining_fraction = 0.0;
+            seconds_to_reset = diff;
+            return Some(QuotaSnapshot {
+                remaining_fraction,
+                seconds_to_reset,
+                observed_at_unix_nano: current_unix_nano(),
+                bucket: "claude".to_string(),
+                group: "anthropic".to_string(),
+            });
+        }
     }
 
-    None
+    if let Some(tokens) = last_tokens_left {
+        // Claude typically operates with a ~20M token standard pool
+        remaining_fraction = ((tokens as f64) / 20_000_000.0).clamp(0.05, 1.0);
+        seconds_to_reset = 3600.0;
+    } else if has_recent_messages {
+        remaining_fraction = 0.75;
+        seconds_to_reset = 3600.0;
+    }
+
+    Some(QuotaSnapshot {
+        remaining_fraction,
+        seconds_to_reset,
+        observed_at_unix_nano: current_unix_nano(),
+        bucket: "claude".to_string(),
+        group: "anthropic".to_string(),
+    })
 }

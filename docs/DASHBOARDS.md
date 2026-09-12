@@ -246,3 +246,28 @@ service:
    agent-otel-bridge emit-quota --ping
    ```
 3. Open your visualization tool (Grafana, Jaeger, or SigNoz) and verify that traces with operation `execute_tool` and gauges with metric `agent.quota.remaining_fraction` appear in real time.
+
+---
+
+## 6. Pre-Built Contrib Dashboards (SigNoz v6 & Grafana)
+
+The repository provides ready-to-import JSON templates in [`contrib/dashboards/signoz/`](../contrib/dashboards/signoz/):
+
+| Dashboard Name | File | Live SigNoz ID | Target Persona | Key Capabilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **AI Fleet Executive & Governance** | `fleet-governance.json` | `01a091ef-5319-7646-8fdd-efabd14f5708` | Engineering Leadership | Fleet quota bottleneck gauge, active developer count, execution mode (interactive vs automation). |
+| **AI Agent SRE & Loop Protection** | `agent-sre-loops.json` | `01a091ef-533b-768a-917f-151c1c991f16` | SRE / DevOps | Runaway loop detection, high error operations, quota depletion velocity. |
+| **AI Developer Velocity & Git Churn** | `developer-velocity.json` | `01a091ef-5360-74d2-98d2-841f093849f6` | Tech Leads | Net lines added/deleted, file blast radius, git self-reverts, human review latency. |
+| **AI Turn Inspector & Debugger** | `turn-inspector.json` | `01a091ee-025a-7219-9695-eee9131b561b` | Prompt Engineers | Quiescence breakdown (`NO_TOOL_CALL`), cognitive vs tool latency split, live trace feed. |
+| **AI Tokenomics & Cost Attribution** | `tokenomics-and-cost.json` | `01a09381-6c85-798f-b036-3b3947bc3d82` | FinOps / Leads | Input vs output vs cached tokens, Prompt Cache Efficiency Ratio (CER), spend by foundation model. |
+| **Tool Archetypes & Capability Waste** | `tool-archetypes-and-waste.json` | `01a09381-6ccf-720c-b297-8c0a60b32d56` | Harness Architects | Behavioral archetypes (`filter_compressor`, `structured_parser`, etc.), MCP schema dead-weight tax, multi-tier error categories. |
+
+### Importing into SigNoz
+To import or sync dashboards via the SigNoz v2 API:
+```powershell
+$dashboard = Get-Content "contrib/dashboards/signoz/tokenomics-and-cost.json" -Raw
+Invoke-RestMethod -Uri "http://localhost:8080/api/v2/dashboards" `
+  -Headers @{ "SIGNOZ-API-KEY" = $env:SIGNOZ_API_KEY; "Content-Type" = "application/json" } `
+  -Method Post -Body $dashboard
+```
+

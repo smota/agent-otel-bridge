@@ -153,6 +153,9 @@ impl Daemon {
                                     }
                                 }
 
+                                // Enrich with workspace context, tool archetypes, capabilities, lineage, and error categories
+                                input.auto_enrich();
+
                                 let span = build_span_from_hook_opts(
                                     event,
                                     &input,
