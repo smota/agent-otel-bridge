@@ -1,4 +1,6 @@
 {
+  "schemaVersion": "v6",
+  "name": "ai-fleet-executive-ai-governance-djyd4gyf",
   "tags": [
     {
       "key": "persona",
@@ -113,7 +115,7 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "Fleet Quota Headroom (Bottleneck Gauge)",
+            "name": "Fleet Quota Headroom (Bottleneck Indicator)",
             "description": "Minimum available quota fraction across all active AI providers."
           },
           "links": null,

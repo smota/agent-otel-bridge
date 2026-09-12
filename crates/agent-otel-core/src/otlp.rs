@@ -219,7 +219,8 @@ pub fn build_span_from_hook_opts(
         .user_email
         .clone()
         .or_else(|| std::env::var("USER_EMAIL").ok())
-        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok());
+        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
+        .or_else(crate::context::harvest_user_email);
     if let Some(email) = email_opt {
         attributes.push(kv_string(USER_EMAIL, &email));
     }
