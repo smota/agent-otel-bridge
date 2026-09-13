@@ -33,6 +33,50 @@ fn main() {
     finish_ok(tag);
 }
 
+struct ClientMapping {
+    aliases: &'static [&'static str],
+    wire_id: u8,
+    allow_pre_tool: bool,
+}
+
+const CLIENT_MAPPINGS: &[ClientMapping] = &[
+    ClientMapping {
+        aliases: &["antigravity", "agy", "gemini"],
+        wire_id: 1,
+        allow_pre_tool: true,
+    },
+    ClientMapping {
+        aliases: &["claude", "claude-code", "claudecode"],
+        wire_id: 2,
+        allow_pre_tool: true,
+    },
+    ClientMapping {
+        aliases: &["codex", "openai", "codex-cli"],
+        wire_id: 3,
+        allow_pre_tool: false,
+    },
+    ClientMapping {
+        aliases: &["grok", "xai", "grok-cli"],
+        wire_id: 4,
+        allow_pre_tool: true,
+    },
+    ClientMapping {
+        aliases: &["pi", "pi-cli"],
+        wire_id: 5,
+        allow_pre_tool: true,
+    },
+];
+
+fn resolve_client_id(arg: &str) -> u8 {
+    let lower = arg.to_ascii_lowercase();
+    for m in CLIENT_MAPPINGS {
+        if m.aliases.contains(&lower.as_str()) {
+            return m.wire_id;
+        }
+    }
+    0
+}
+
 fn resolve_tag() -> u8 {
     let mut event_id = 0u8;
     let mut client_id = 0u8;
@@ -42,14 +86,7 @@ fn resolve_tag() -> u8 {
     while i < args.len() {
         let arg = &args[i];
         if (arg == "--client" || arg == "--agent") && i + 1 < args.len() {
-            client_id = match args[i + 1].to_ascii_lowercase().as_str() {
-                "antigravity" | "agy" | "gemini" => 1,
-                "claude" | "claude-code" => 2,
-                "codex" | "openai" => 3,
-                "grok" | "xai" => 4,
-                "pi" | "pi-cli" => 5,
-                _ => 0,
-            };
+            client_id = resolve_client_id(&args[i + 1]);
             i += 2;
             continue;
         }
@@ -101,7 +138,13 @@ fn finish_ok(tag: u8) -> ! {
     let mut stdout = io::stdout();
     let client_id = tag >> 4;
     let event_id = tag & 0x0F;
-    if event_id == 3 && client_id != 3 {
+    let allow_pre_tool = CLIENT_MAPPINGS
+        .iter()
+        .find(|m| m.wire_id == client_id)
+        .map(|m| m.allow_pre_tool)
+        .unwrap_or(true);
+
+    if event_id == 3 && allow_pre_tool {
         let _ = stdout.write_all(b"{\"decision\":\"allow\"}");
     } else {
         let _ = stdout.write_all(b"{}");

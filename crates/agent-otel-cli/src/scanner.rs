@@ -124,17 +124,23 @@ pub fn is_pruned_dir_name(name: &str) -> bool {
 
 /// Determines if a directory represents a project root.
 pub fn is_project_root(path: &Path) -> bool {
-    // Recognized markers of software repositories or agent workspaces
-    path.join(".git").exists()
-        || path.join(".claude").is_dir()
-        || path.join(".gemini").is_dir()
-        || path.join(".agents").is_dir()
+    // 1. Recognized standard markers of software repositories
+    if path.join(".git").exists()
         || path.join("Cargo.toml").is_file()
         || path.join("package.json").is_file()
         || path.join("pyproject.toml").is_file()
         || path.join("go.mod").is_file()
         || path.join("pom.xml").is_file()
         || path.join("build.gradle").is_file()
+    {
+        return true;
+    }
+
+    // 2. Dynamically check workspace markers registered across all platform adapters
+    CLIENT_ADAPTERS
+        .iter()
+        .flat_map(|a| a.workspace_markers)
+        .any(|&marker| path.join(marker).exists())
 }
 
 /// Recursively scans candidate roots for projects, respecting max_depth and pruned directories.

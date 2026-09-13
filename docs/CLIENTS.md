@@ -2,6 +2,8 @@
 
 `agent-otel-bridge` is designed to provide zero-overhead OpenTelemetry observability across modern AI CLI agent harnesses and custom developer agent loops.
 
+> 💡 **Architectural Guide**: For an in-depth comparison of `agent-otel-bridge` vs. native harness telemetry (including multi-agent unification, tokenomics, and W3C distributed tracing), see [Why agent-otel-bridge vs. Native Harness Telemetry](WHY_AGENT_OTEL_BRIDGE.md).
+
 ---
 
 ## 1. Supported Client Overview & Scope Architecture
@@ -389,9 +391,176 @@ function emitHook(event: string, payload: Record<string, any>): void {
 
 ---
 
-## 5. Adding Support for New Agent Harnesses
+## 5. Platform Architecture & Extensibility
 
-Want to add native CLI hook support for a new AI coding harness (e.g. Cursor, Aider, Continue)?
+`agent-otel-bridge` uses a decoupled, contract-oriented architecture (**Platform Provider & Descriptor Pattern**) designed for zero-overhead performance, modular extensibility, and total isolation between harnesses.
 
-We maintain a modular, declarative `ClientAdapter` registry. See the step-by-step developer guide in [CONTRIBUTING.md](../CONTRIBUTING.md#4-how-to-add-support-for-a-new-agent-client-harness).
+```mermaid
+graph TB
+    subgraph Core["crates/agent-otel-core (Zero Overhead)"]
+        PD["PlatformDescriptor Trait<br/>(id, aliases, wire_client_id, pre_tool_response)"]
+        SV["PlatformStaticValidator<br/>(ID format, Wire ID bounds 1..=15, Collisions)"]
+        DV["PlatformDynamicValidator<br/>(Tag roundtrip, Hook JSON, Quota invariants)"]
+    end
+
+    subgraph Client["crates/agent-otel-client (< 150 KB)"]
+        CM["CLIENT_MAPPINGS (Compile-time table)<br/>Zero-alloc wire tag dispatch & PreToolUse response"]
+    end
+
+    subgraph Daemon["crates/agent-otel-daemon (Dynamic)"]
+        PQP["PlatformQuotaProvider Trait<br/>(is_installed, harvest_quota, fallback_baseline, burn_rate)"]
+        QE["QuotaEngine<br/>Tracks ONLY installed/active platforms on host"]
+    end
+
+    subgraph CLI["crates/agent-otel-cli (Lifecycle)"]
+        PHA["ClientAdapter & HookScope<br/>(workspace_markers, config paths, install/uninstall)"]
+        SCAN["Project Scanner (scan-all)<br/>Dynamically queries all adapter workspace markers"]
+    end
+
+    PD --> CM
+    PD --> PQP
+    PD --> PHA
+    SV --> PD
+    DV --> PD
+```
+
+### 5.1 Machine-Adaptive Quota Monitoring
+Unlike traditional monitoring agents that emit static, phantom metrics for tools you do not use, `QuotaEngine` operates **dynamically**:
+1. At startup, the daemon scans your local environment (`dirs_fallback()`) across all registered `PlatformQuotaProvider` implementations.
+2. Only harnesses that return `is_installed(&home) == true` (e.g. config directory exists, session logs present, or CLI binary in PATH) are loaded into the quota monitoring set.
+3. If Claude Code is the only AI harness installed on your workstation, the OTLP exporter emits **strictly Claude metrics** — completely avoiding phantom gauges for Gemini, Codex, or Grok.
+4. Quotas are keyed by `bucket`, ensuring custom override files in `~/.agent-otel/quotas/<name>.json` cleanly update live state without ID duplication.
+
+### 5.2 The Platform Contract Suite
+
+To integrate any AI coding agent harness, three decoupled contracts are implemented:
+
+| Layer | Contract | Responsibility |
+|---|---|---|
+| **Core** (`agent-otel-core`) | `PlatformDescriptor` | Primary ID, aliases, wire client ID (`1..=15`), and hook response contract (`AllowJson` vs `EmptyJson`). |
+| **Daemon** (`agent-otel-daemon`) | `PlatformQuotaProvider` | Host installation probe (`is_installed`), dynamic state harvesting (`harvest_quota`), baseline headroom, and token burn rate. |
+| **CLI / Hooks** (`agent-otel-cli`) | `ClientAdapter` | Hook scope, workspace directory markers (`workspace_markers`), global and project config resolvers, idempotent install/uninstall. |
+
+---
+
+## 6. Adding a New AI Agent Harness (Step-by-Step Blueprint: "Hermes")
+
+To illustrate how seamless adding a new agent harness is, here is the complete blueprint for adding **Hermes AI Agent**:
+
+### Step 1: Define the Core Descriptor
+In `crates/agent-otel-core/src/platform.rs`:
+```rust
+pub struct HermesDescriptor;
+
+impl PlatformDescriptor for HermesDescriptor {
+    fn id(&self) -> &'static str { "hermes" }
+    fn display_name(&self) -> &'static str { "Hermes AI Agent" }
+    fn aliases(&self) -> &'static [&'static str] { &["hermes-cli", "nous-hermes"] }
+    fn wire_client_id(&self) -> u8 { 6 } // Next available ID in 1..=15
+    fn pre_tool_response(&self) -> HookResponse { HookResponse::AllowJson }
+}
+```
+Add `&HermesDescriptor` to `BUILTIN_PLATFORMS`.
+
+### Step 2: Implement the Quota Provider
+In `crates/agent-otel-daemon/src/platforms/hermes.rs`:
+```rust
+use std::path::Path;
+use agent_otel_core::platform::PlatformDescriptor;
+use agent_otel_core::quota::QuotaSnapshot;
+use crate::platform::PlatformQuotaProvider;
+
+pub struct HermesQuotaProvider;
+
+impl PlatformDescriptor for HermesQuotaProvider {
+    fn id(&self) -> &'static str { "hermes" }
+    fn display_name(&self) -> &'static str { "Hermes AI Agent" }
+    fn aliases(&self) -> &'static [&'static str] { &["hermes-cli", "nous-hermes"] }
+    fn wire_client_id(&self) -> u8 { 6 }
+}
+
+impl PlatformQuotaProvider for HermesQuotaProvider {
+    fn is_installed(&self, home: &Path) -> bool {
+        home.join(".hermes").exists() || which::which("hermes").is_ok()
+    }
+
+    fn harvest_quota(&self, home: &Path) -> Option<QuotaSnapshot> {
+        let p = home.join(".hermes").join("quota.json");
+        if p.exists() {
+            crate::quota::read_quota_file(&p)
+        } else {
+            None
+        }
+    }
+
+    fn fallback_baseline(&self) -> QuotaSnapshot {
+        QuotaSnapshot {
+            remaining_fraction: 1.0,
+            seconds_to_reset: 3600.0,
+            observed_at_unix_nano: crate::quota::current_unix_nano(),
+            bucket: "hermes".to_string(),
+            group: "nous".to_string(),
+        }
+    }
+
+    fn burn_per_token(&self) -> f64 {
+        1.0 / 10_000_000.0 // Custom context headroom
+    }
+}
+```
+Register in `crates/agent-otel-daemon/src/platforms/mod.rs` inside `BUILTIN_PROVIDERS`.
+
+### Step 3: Register in the Client Mapping Table
+In `crates/agent-otel-client/src/main.rs`:
+```rust
+ClientMapping {
+    aliases: &["hermes", "hermes-cli", "nous-hermes"],
+    wire_id: 6,
+    allow_pre_tool: true,
+},
+```
+
+### Step 4: Register in CLI Adapters & Workspace Scanner
+In `crates/agent-otel-cli/src/hooks.rs`:
+```rust
+ClientAdapter {
+    id: "hermes",
+    display_name: "Hermes AI Agent",
+    aliases: &["hermes-cli", "nous-hermes"],
+    client_tag: Some("hermes"),
+    scope: HookScope::GlobalOnly,
+    workspace_markers: &[".hermes", "hermes.json"],
+    global_config_fn: || get_hermes_config_path(false),
+    project_config_fn: get_hermes_project_path,
+    install_fn: install_standard_hooks,
+    uninstall_fn: uninstall_standard_hooks,
+    is_registered_fn: is_hermes_registered,
+},
+```
+*Note: Because `workspace_markers` is specified, `agent-otel-bridge hooks scan-all` immediately and automatically detects `.hermes` repositories without editing the scanner engine!*
+
+---
+
+## 7. Static and Dynamic Conformance Validation
+
+To ensure every contributed harness conforms to production SLAs before merging, `agent-otel-bridge` includes an automated **Conformance Harness**:
+
+```powershell
+# Run the platform conformance suite
+cargo test -p agent-otel-core --test platform_conformance
+
+# Run the complete automated guardrails verification
+cargo guardrails
+```
+
+### What the Conformance Validator Verifies:
+1. **Static Conformance (`PlatformStaticValidator`)**:
+   - **ID Hygiene**: ID is non-empty, lowercase ASCII alphanumeric with hyphens/underscores.
+   - **Wire Bounds**: `wire_client_id` is strictly within `1..=15` (occupies upper 4 bits of the 1-byte wire tag; ID 0 is reserved for `Unspecified`).
+   - **Zero Collision**: Primary IDs, wire IDs, and aliases never collide across harnesses.
+2. **Dynamic Invariants (`PlatformDynamicValidator`)**:
+   - **Wire Framing Roundtrip**: Tag packing with `(wire_client_id << 4) | event_id` unpacks identically across all `HookEvent` variants.
+   - **Valid PreToolUse Response**: `pre_tool_response()` evaluates to valid JSON (`{"decision":"allow"}` or `{}`).
+   - **Quota Bounds**: `remaining_fraction` is finite and in $[0.0, 1.0]$, `seconds_to_reset` $\ge 0.0$.
+   - **Non-blocking Probe SLA**: Probes execute in $< 150\ \mu\text{s}$ and never spawn subprocesses on the telemetry path.
 

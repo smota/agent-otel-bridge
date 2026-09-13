@@ -84,8 +84,9 @@ We provide an automated, cross-platform verification command built directly into
 - [x] Code formatting (`cargo fmt --check`)
 - [x] Linter purity with zero warnings (`cargo clippy --workspace --all-targets -- -D warnings`)
 - [x] Full workspace test suite (`cargo test --workspace`)
-- [x] Client binary size threshold (< 350 KB SLA)
+- [x] Platform contract conformance (static & dynamic) (`cargo test -p agent-otel-core --test platform_conformance`)
 - [x] Documentation generation (`cargo doc --workspace --no-deps`)
+- [x] Client binary size threshold (< 350 KB SLA, observed ~145 KB)
 - [x] Git branch naming policy (`feat/*`, `fix/*`, `docs/*`, `perf/*`, `release/*`, `main`)
 
 Run it before pushing:
@@ -100,89 +101,140 @@ agent-otel-bridge check-guardrails
 
 ---
 
-## 4. How to Add Support for a New Agent Client Harness
+## 4. How to Add Support for a New Agent Client Harness (e.g. "Hermes")
 
-Adding telemetry support for a new AI coding agent harness (e.g., Cursor CLI, Aider, OpenCodeInterpreter, Continue) is designed to be declarative, modular, and fast.
+Adding telemetry support for a new AI coding agent harness (e.g., Hermes, Cursor CLI, Aider, OpenCode) is designed to be declarative, modular, and contract-driven via the **Platform Provider & Descriptor Pattern**.
 
-The entire harness integration lifecycle is managed through the `ClientAdapter` registry. Once registered, your new harness automatically inherits:
-- `agent-otel-bridge hooks install --client <name>`
-- `agent-otel-bridge hooks uninstall --client <name>`
+Once implemented, your new harness automatically inherits:
+- Machine-adaptive quota monitoring (tracks your agent *only* when installed on the workstation)
+- `agent-otel-bridge hooks install --client <name>` and `hooks uninstall`
 - `agent-otel-bridge hooks status`
-- `agent-otel-bridge hooks sync` (project-level hook alignment)
-- `agent-otel-bridge hooks scan-all` (workstation-wide discovery & sync)
-- `agent-otel-bridge doctor` (pipeline health checks)
+- `agent-otel-bridge hooks sync` (workspace hook alignment)
+- `agent-otel-bridge hooks scan-all` (automatic workspace discovery via `workspace_markers`)
+- Automated Static & Dynamic Conformance Testing
 
-### Step 1: Determine the Harness Configuration Scope
-In `crates/agent-otel-cli/src/hooks.rs`, check how your harness resolves configuration:
-- **`HookScope::GlobalOnly`**: The harness only reads from a global user config file (e.g. `~/.myagent/hooks.json`). Projects never shadow global telemetry.
-- **`HookScope::NamespaceMerged`**: The harness natively merges namespaces between global and workspace configs (e.g. Google Antigravity).
-- **`HookScope::ProjectShadowsGlobal`**: A project-level configuration file (e.g. `.myagent/settings.json`) completely replaces the global hooks list unless the bridge hook is present (e.g. Claude Code).
+---
 
-### Step 2: Implement Config Paths & Serialization
-In [`crates/agent-otel-cli/src/hooks.rs`](crates/agent-otel-cli/src/hooks.rs):
-1. Add configuration path resolvers:
-   ```rust
-   pub fn get_myagent_config_path(project: bool) -> Option<PathBuf> {
-       if project {
-           get_myagent_project_path(None)
-       } else {
-           std::env::var("USERPROFILE")
-               .or_else(|_| std::env::var("HOME"))
-               .ok()
-               .map(|home| PathBuf::from(home).join(".myagent").join("hooks.json"))
-       }
-   }
+### Step 1: Core Descriptor (`crates/agent-otel-core/src/platform.rs`)
+Implement `PlatformDescriptor` and register it in `BUILTIN_PLATFORMS`:
 
-   pub fn get_myagent_project_path(base: Option<&Path>) -> Option<PathBuf> {
-       let root = base.unwrap_or_else(|| Path::new("."));
-       Some(root.join(".myagent").join("hooks.json"))
-   }
-   ```
-2. Implement install & uninstall functions (or reuse existing JSON helpers if your harness uses standard `{ "hooks": [...] }` or namespace formats):
-   - **Crucial Invariant**: You MUST preserve all existing third-party hooks and formatting (non-destructive guarantee).
-
-### Step 3: Register in the `CLIENT_ADAPTERS` Table
-Add your adapter entry to `CLIENT_ADAPTERS` in [`crates/agent-otel-cli/src/hooks.rs`](crates/agent-otel-cli/src/hooks.rs):
 ```rust
-ClientAdapter {
-    id: "myagent",
-    display_name: "MyAgent (myagent.ai)",
-    aliases: &["myagent-cli", "my-agent"],
-    client_tag: Some("myagent"),
-    scope: HookScope::GlobalOnly, // or ProjectShadowsGlobal
-    global_config_fn: || get_myagent_config_path(false),
-    project_config_fn: get_myagent_project_path,
-    install_fn: install_myagent_hooks,
-    uninstall_fn: uninstall_myagent_hooks,
-    is_registered_fn: is_myagent_hook_registered,
+pub struct HermesDescriptor;
+
+impl PlatformDescriptor for HermesDescriptor {
+    fn id(&self) -> &'static str { "hermes" }
+    fn display_name(&self) -> &'static str { "Hermes AI Agent" }
+    fn aliases(&self) -> &'static [&'static str] { &["hermes-cli", "nous-hermes"] }
+    fn wire_client_id(&self) -> u8 { 6 } // Must be unique in 1..=15
+    fn pre_tool_response(&self) -> HookResponse { HookResponse::AllowJson }
+}
+```
+
+*Invariants Enforced by `PlatformStaticValidator`:*
+- `id` must be non-empty, lowercase ASCII alphanumeric (`[a-z0-9_-]`).
+- `wire_client_id` must be strictly between `1` and `15` (occupies upper 4 bits of binary wire tag; `0` is reserved for Unspecified).
+- Primary IDs, wire IDs, and aliases must have zero collisions across platforms.
+
+---
+
+### Step 2: Quota Provider (`crates/agent-otel-daemon/src/platforms/`)
+Create `crates/agent-otel-daemon/src/platforms/hermes.rs` and register it in `BUILTIN_PROVIDERS`:
+
+```rust
+use std::path::Path;
+use agent_otel_core::platform::PlatformDescriptor;
+use agent_otel_core::quota::QuotaSnapshot;
+use crate::platform::PlatformQuotaProvider;
+
+pub struct HermesQuotaProvider;
+
+impl PlatformDescriptor for HermesQuotaProvider {
+    fn id(&self) -> &'static str { "hermes" }
+    fn display_name(&self) -> &'static str { "Hermes AI Agent" }
+    fn aliases(&self) -> &'static [&'static str] { &["hermes-cli", "nous-hermes"] }
+    fn wire_client_id(&self) -> u8 { 6 }
+}
+
+impl PlatformQuotaProvider for HermesQuotaProvider {
+    fn is_installed(&self, home: &Path) -> bool {
+        home.join(".hermes").exists() || which::which("hermes").is_ok()
+    }
+
+    fn harvest_quota(&self, home: &Path) -> Option<QuotaSnapshot> {
+        let p = home.join(".hermes").join("quota.json");
+        if p.exists() {
+            crate::quota::read_quota_file(&p)
+        } else {
+            None
+        }
+    }
+
+    fn fallback_baseline(&self) -> QuotaSnapshot {
+        QuotaSnapshot {
+            remaining_fraction: 1.0,
+            seconds_to_reset: 3600.0,
+            observed_at_unix_nano: crate::quota::current_unix_nano(),
+            bucket: "hermes".to_string(),
+            group: "nous".to_string(),
+        }
+    }
+
+    fn burn_per_token(&self) -> f64 {
+        1.0 / 10_000_000.0
+    }
+}
+```
+
+*Invariants Enforced by `PlatformDynamicValidator`:*
+- `remaining_fraction` must be a finite float in `[0.0, 1.0]`.
+- `seconds_to_reset` must be $\ge 0.0$.
+- Probes must execute in $< 150\ \mu\text{s}$ without spawning external child processes.
+
+---
+
+### Step 3: Compile-Time Client Dispatch (`crates/agent-otel-client/src/main.rs`)
+Add your platform to `CLIENT_MAPPINGS` in `agent-hook`:
+
+```rust
+ClientMapping {
+    aliases: &["hermes", "hermes-cli", "nous-hermes"],
+    wire_id: 6,
+    allow_pre_tool: true,
 },
 ```
-Also add your client identifier to `ClientTarget` enum in `hooks.rs` for CLI argument parsing.
 
-### Step 4: Map the Fast-Path in `agent-hook`
-In [`crates/agent-otel-client/src/main.rs`](crates/agent-otel-client/src/main.rs), map the `--client` CLI argument to a numeric client ID:
+---
+
+### Step 4: CLI Adapter & Scanner Registration (`crates/agent-otel-cli/src/hooks.rs`)
+Add your adapter to `CLIENT_ADAPTERS`:
+
 ```rust
-"myagent" | "myagent-cli" => 6,
+ClientAdapter {
+    id: "hermes",
+    display_name: "Hermes AI Agent",
+    aliases: &["hermes-cli", "nous-hermes"],
+    client_tag: Some("hermes"),
+    scope: HookScope::GlobalOnly,
+    workspace_markers: &[".hermes", "hermes.json"],
+    global_config_fn: || get_hermes_config_path(false),
+    project_config_fn: get_hermes_project_path,
+    install_fn: install_standard_hooks,
+    uninstall_fn: uninstall_standard_hooks,
+    is_registered_fn: is_hermes_registered,
+},
 ```
 
-### Step 5: Map OpenTelemetry Semantic Conventions
-1. In [`crates/agent-otel-core/src/semconv.rs`](crates/agent-otel-core/src/semconv.rs):
-   - Add provider constant (e.g. `pub const GEN_AI_PROVIDER_MYAGENT: &str = "myagent";`).
-   - Update `infer_provider()` and `infer_agent_name()`.
-2. In [`crates/agent-otel-core/src/model.rs`](crates/agent-otel-core/src/model.rs):
-   - Add enum variant to `ClientKind::MyAgent`.
-   - Update `ClientKind::from_str_name()`.
+---
 
-### Step 6: Add Tests & Verify Guardrails
-1. Add unit tests in `hooks.rs` asserting:
-   - Installation idempotency (running install twice does not duplicate hooks).
-   - Third-party preservation (pre-existing hooks remain intact).
-   - Clean uninstallation.
-2. Run the automated guardrails checker:
-   ```powershell
-   cargo guardrails
-   ```
-   Ensure 100% pass: zero clippy warnings, code formatted, and binary size `< 350 KB`.
+### Step 5: Verify Conformance & Guardrails
+Run the automated conformance test suite:
+```powershell
+# Validates all static and dynamic platform invariants
+cargo test -p agent-otel-core --test platform_conformance
+
+# Runs the complete automated guardrail verification
+cargo guardrails
+```
 
 ---
 

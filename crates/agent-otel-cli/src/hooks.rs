@@ -7,26 +7,29 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientTarget {
     Antigravity,
     ClaudeCode,
     Codex,
     Grok,
     Pi,
+    Named(String),
     All,
 }
 
 impl ClientTarget {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
-        match s.to_ascii_lowercase().as_str() {
+        let lower = s.trim().to_ascii_lowercase();
+        match lower.as_str() {
+            "all" | "*" | "" => ClientTarget::All,
             "antigravity" | "agy" | "gemini" => ClientTarget::Antigravity,
             "claude" | "claude-code" | "claudecode" => ClientTarget::ClaudeCode,
             "codex" | "openai" | "codex-cli" => ClientTarget::Codex,
             "grok" | "xai" | "grok-cli" => ClientTarget::Grok,
             "pi" | "pi-cli" => ClientTarget::Pi,
-            _ => ClientTarget::All,
+            other => ClientTarget::Named(other.to_string()),
         }
     }
 }
@@ -152,6 +155,7 @@ pub struct ClientAdapter {
     pub aliases: &'static [&'static str],
     pub client_tag: Option<&'static str>,
     pub scope: HookScope,
+    pub workspace_markers: &'static [&'static str],
     pub global_config_fn: fn() -> Option<PathBuf>,
     pub project_config_fn: fn(Option<&Path>) -> Option<PathBuf>,
     pub install_fn: InstallHookFn,
@@ -175,6 +179,7 @@ impl ClientTarget {
             ClientTarget::Codex => adapter.matches_name("codex"),
             ClientTarget::Grok => adapter.matches_name("grok"),
             ClientTarget::Pi => adapter.matches_name("pi"),
+            ClientTarget::Named(name) => adapter.matches_name(name),
         }
     }
 }
@@ -186,6 +191,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         aliases: &["agy", "gemini"],
         client_tag: None,
         scope: HookScope::NamespaceMerged,
+        workspace_markers: &[".gemini", ".agents"],
         global_config_fn: || get_antigravity_config_path(false),
         project_config_fn: get_antigravity_project_path,
         install_fn: install_antigravity_hooks,
@@ -203,6 +209,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         aliases: &["claude-code", "claudecode"],
         client_tag: None,
         scope: HookScope::ProjectShadowsGlobal,
+        workspace_markers: &[".claude"],
         global_config_fn: || get_claude_config_path(false),
         project_config_fn: get_claude_project_path,
         install_fn: |path, binary, _tag| install_claude_hooks(path, binary),
@@ -220,6 +227,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         aliases: &["openai", "codex-cli"],
         client_tag: Some("codex"),
         scope: HookScope::GlobalOnly,
+        workspace_markers: &[".codex"],
         global_config_fn: || get_codex_config_path(false),
         project_config_fn: get_codex_project_path,
         install_fn: install_standard_hooks,
@@ -237,6 +245,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         aliases: &["xai", "grok-cli"],
         client_tag: Some("grok"),
         scope: HookScope::GlobalOnly,
+        workspace_markers: &[".grok"],
         global_config_fn: || get_grok_config_path(false),
         project_config_fn: get_grok_project_path,
         install_fn: install_standard_hooks,
@@ -254,6 +263,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         aliases: &["pi-cli"],
         client_tag: Some("pi"),
         scope: HookScope::GlobalOnly,
+        workspace_markers: &[".pi"],
         global_config_fn: || get_pi_config_path(false),
         project_config_fn: get_pi_project_path,
         install_fn: install_antigravity_hooks,
@@ -1023,7 +1033,11 @@ mod tests {
         assert_eq!(ClientTarget::from_str("grok"), ClientTarget::Grok);
         assert_eq!(ClientTarget::from_str("pi"), ClientTarget::Pi);
         assert_eq!(ClientTarget::from_str("all"), ClientTarget::All);
-        assert_eq!(ClientTarget::from_str("anything_else"), ClientTarget::All);
+        assert_eq!(ClientTarget::from_str("*"), ClientTarget::All);
+        assert_eq!(
+            ClientTarget::from_str("hermes"),
+            ClientTarget::Named("hermes".to_string())
+        );
     }
 
     #[test]

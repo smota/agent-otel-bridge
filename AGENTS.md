@@ -91,6 +91,12 @@ Ao alterar cliente, daemon, IPC, hooks, adaptadores CLI/desktop, instalação, a
 * **Non-Destructive Hooks**: Preserve third-party hooks (`herdr`, `rtk`) and update bridge hooks in-place.
 * **Atomic Deployment**: Stage, verify SHA-256 hashes, and activate using `agent-otel-bridge local install`.
 
+### 3.6 Platform Provider Architecture & Conformance Validation
+* **Decoupled Platform Contracts**: AI harnesses must implement `PlatformDescriptor` (`agent-otel-core`), `PlatformQuotaProvider` (`agent-otel-daemon`), and `ClientAdapter` (`agent-otel-cli`).
+* **Machine-Adaptive Quotas**: Never emit phantom metrics for absent harnesses. Quota discovery must check `is_installed(&home)` before registering local headroom.
+* **Automated Conformance Testing**: All platforms are validated by `PlatformStaticValidator` (ID hygiene, wire tag in `1..=15`, zero collision) and `PlatformDynamicValidator` (wire roundtrip, JSON response, finite quota invariants).
+* **Workspace Discovery via Markers**: Platforms declare `workspace_markers` directly; workspace scanner detects them dynamically without hardcoding paths.
+
 ---
 
 ## 4. Quality & Verification Guardrails

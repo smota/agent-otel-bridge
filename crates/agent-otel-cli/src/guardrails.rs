@@ -88,7 +88,26 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // 4. Documentation Generation
+    // 4. Platform Conformance (Static & Dynamic Invariant Harness)
+    print!("[GUARDRAIL] Checking platform contract conformance (static & dynamic)... ");
+    let conformance_status = Command::new("cargo")
+        .args([
+            "test",
+            "-p",
+            "agent-otel-core",
+            "--test",
+            "platform_conformance",
+        ])
+        .status();
+    match conformance_status {
+        Ok(s) if s.success() => println!("PASSED"),
+        _ => {
+            println!("FAILED (Platform conformance validation failed)");
+            failures += 1;
+        }
+    }
+
+    // 5. Documentation Generation
     print!("[GUARDRAIL] Validating documentation generation (cargo doc --no-deps)... ");
     let doc_status = Command::new("cargo")
         .args(["doc", "--workspace", "--no-deps"])

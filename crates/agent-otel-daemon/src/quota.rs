@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+use crate::platform::PlatformQuotaProvider;
 use agent_otel_core::quota::QuotaSnapshot;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -39,47 +40,22 @@ impl QuotaEngine {
         let now = current_unix_nano();
         let mut map = HashMap::new();
 
-        // Calibrated baseline multi-provider snapshots representing active AI fleet harnesses
-        map.insert(
-            "gemini".to_string(),
-            QuotaSnapshot {
-                remaining_fraction: 0.35,
-                seconds_to_reset: 1800.0,
-                observed_at_unix_nano: now,
-                bucket: "gemini".to_string(),
-                group: "google".to_string(),
-            },
-        );
-        map.insert(
-            "codex".to_string(),
-            QuotaSnapshot {
-                remaining_fraction: 0.40,
-                seconds_to_reset: 2400.0,
-                observed_at_unix_nano: now,
-                bucket: "codex".to_string(),
-                group: "openai".to_string(),
-            },
-        );
-        map.insert(
-            "grok".to_string(),
-            QuotaSnapshot {
-                remaining_fraction: 0.45,
-                seconds_to_reset: 3600.0,
-                observed_at_unix_nano: now,
-                bucket: "grok".to_string(),
-                group: "xai".to_string(),
-            },
-        );
-        map.insert(
-            "claude".to_string(),
-            QuotaSnapshot {
-                remaining_fraction: 0.75,
-                seconds_to_reset: 3600.0,
-                observed_at_unix_nano: now,
-                bucket: "claude".to_string(),
-                group: "anthropic".to_string(),
-            },
-        );
+        // Dynamically initialize only the platforms installed on this machine
+        if let Some(ref home) = dirs_fallback() {
+            for provider in crate::platforms::detect_installed_providers(home) {
+                let snap = provider
+                    .harvest_quota(home)
+                    .unwrap_or_else(|| provider.fallback_baseline());
+                map.insert(snap.bucket.clone(), snap);
+            }
+        }
+
+        // If no provider is detected on machine, populate default fallback baseline to guarantee non-empty headroom
+        if map.is_empty() {
+            let default_provider = &crate::platforms::GeminiQuotaProvider;
+            let snap = default_provider.fallback_baseline();
+            map.insert(snap.bucket.clone(), snap);
+        }
 
         Self {
             state_file,
@@ -90,30 +66,31 @@ impl QuotaEngine {
 
     /// Records agent activity to dynamically adjust quota headroom and reset counters.
     pub fn record_activity(&self, agent_name: &str, tokens_used: Option<u64>) {
-        let key = match agent_name.to_ascii_lowercase().as_str() {
-            "codex" | "openai" | "codex-cli" => "codex",
-            "grok" | "xai" | "grok-cli" => "grok",
-            "antigravity" | "gemini" | "agy" => "gemini",
-            "claude" | "claude-code" | "claudecode" => "claude",
-            "pi" | "pi-cli" => "pi",
-            _ => "ai-agent",
+        let provider = crate::platforms::find_provider_by_name(agent_name);
+        let (bucket, burn_per_token, group) = if let Some(p) = provider {
+            let base = p.fallback_baseline();
+            (base.bucket, p.burn_per_token(), base.group)
+        } else {
+            (
+                agent_name.to_ascii_lowercase(),
+                1.0 / 500_000.0,
+                "ai-agent".to_string(),
+            )
         };
 
         let now = current_unix_nano();
         if let Ok(mut lock) = self.quotas.write() {
-            let entry = lock
-                .entry(key.to_string())
-                .or_insert_with(|| QuotaSnapshot {
-                    remaining_fraction: 0.95,
-                    seconds_to_reset: 3600.0,
-                    observed_at_unix_nano: now,
-                    bucket: key.to_string(),
-                    group: key.to_string(),
-                });
+            let entry = lock.entry(bucket.clone()).or_insert_with(|| QuotaSnapshot {
+                remaining_fraction: 0.95,
+                seconds_to_reset: 3600.0,
+                observed_at_unix_nano: now,
+                bucket: bucket.clone(),
+                group,
+            });
 
             // Adjust remaining fraction based on consumed tokens or turn activity
             let burn = if let Some(t) = tokens_used {
-                (t as f64) / 500_000.0
+                (t as f64) * burn_per_token
             } else {
                 0.005
             };
@@ -144,7 +121,7 @@ impl QuotaEngine {
         }
     }
 
-    /// Returns multi-provider quota snapshots across all active AI coding harnesses.
+    /// Returns multi-provider quota snapshots across all active AI coding harnesses on this machine.
     pub fn snapshots(&self) -> Vec<QuotaSnapshot> {
         let now = current_unix_nano();
         let elapsed_sec = if now > self.boot_time_ns {
@@ -153,25 +130,16 @@ impl QuotaEngine {
             0.0
         };
 
-        // Scan potential on-disk quota files per provider
+        // Dynamically harvest fresh quotas from installed providers
         if let Some(home) = dirs_fallback() {
-            let provider_paths = [
-                ("codex", home.join(".codex").join("quota.json")),
-                ("gemini", home.join(".gemini").join("quota.json")),
-                ("grok", home.join(".grok").join("quota.json")),
-                ("claude", home.join(".claude").join("quota.json")),
-            ];
-
             if let Ok(mut lock) = self.quotas.write() {
-                for (provider, path) in provider_paths {
-                    if path.exists() {
-                        if let Some(file_snap) = read_quota_file(&path) {
-                            lock.insert(provider.to_string(), file_snap);
-                        }
+                for provider in crate::platforms::detect_installed_providers(&home) {
+                    if let Some(fresh_snap) = provider.harvest_quota(&home) {
+                        lock.insert(fresh_snap.bucket.clone(), fresh_snap);
                     }
                 }
 
-                // Check directory ~/.agent-otel/quotas/*.json
+                // Check directory ~/.agent-otel/quotas/*.json for custom drop-ins
                 let quotas_dir = home.join(".agent-otel").join("quotas");
                 if quotas_dir.is_dir() {
                     if let Ok(entries) = std::fs::read_dir(quotas_dir) {
@@ -184,13 +152,6 @@ impl QuotaEngine {
                             }
                         }
                     }
-                }
-            }
-
-            // Real dynamic session discovery takes precedence over static files
-            if let Some(claude_snap) = detect_claude_quota(&home) {
-                if let Ok(mut lock) = self.quotas.write() {
-                    lock.insert("claude".to_string(), claude_snap);
                 }
             }
         }
@@ -217,7 +178,7 @@ impl QuotaEngine {
     }
 }
 
-fn read_quota_file(path: &Path) -> Option<QuotaSnapshot> {
+pub fn read_quota_file(path: &Path) -> Option<QuotaSnapshot> {
     let bytes = std::fs::read(path).ok()?;
     let parsed: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
 
@@ -280,127 +241,16 @@ fn read_quota_file(path: &Path) -> Option<QuotaSnapshot> {
     })
 }
 
-fn dirs_fallback() -> Option<PathBuf> {
+pub fn dirs_fallback() -> Option<PathBuf> {
     std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .ok()
         .map(PathBuf::from)
 }
 
-fn current_unix_nano() -> u64 {
+pub fn current_unix_nano() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64
-}
-
-fn detect_claude_quota(home: &Path) -> Option<QuotaSnapshot> {
-    let projects_dir = home.join(".claude").join("projects");
-    if !projects_dir.is_dir() {
-        return None;
-    }
-
-    let mut latest_file: Option<(PathBuf, std::time::SystemTime)> = None;
-    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
-        for proj in entries.flatten() {
-            let p_path = proj.path();
-            if p_path.is_dir() {
-                if let Ok(files) = std::fs::read_dir(&p_path) {
-                    for f in files.flatten() {
-                        let path = f.path();
-                        if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
-                            if let Ok(meta) = path.metadata() {
-                                if let Ok(modified) = meta.modified() {
-                                    if latest_file
-                                        .as_ref()
-                                        .map(|(_, t)| modified > *t)
-                                        .unwrap_or(true)
-                                    {
-                                        latest_file = Some((path, modified));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let (file_path, _) = latest_file?;
-    let file = std::fs::File::open(&file_path).ok()?;
-    use std::io::{BufRead, BufReader};
-    let reader = BufReader::new(file);
-    let mut last_quota_limit: Option<(String, f64)> = None;
-    let mut last_tokens_left: Option<u64> = None;
-    let mut has_recent_messages = false;
-
-    let now_sec = (current_unix_nano() / 1_000_000_000) as f64;
-
-    for line in reader.lines().map_while(Result::ok) {
-        if line.contains("total_tokens_reminder") || line.contains("tokens left") {
-            if let Some(pos) = line.find("<total_tokens>") {
-                let after = &line[pos + 14..];
-                if let Some(end_pos) = after.find(" tokens left") {
-                    if let Ok(num) = after[..end_pos].trim().parse::<u64>() {
-                        last_tokens_left = Some(num);
-                    }
-                }
-            }
-        }
-
-        if line.contains("quotaLimits") {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
-                if let Some(ql) = val.get("quotaLimits") {
-                    let status = ql
-                        .get("status")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let resets_at = ql.get("resetsAt").and_then(|r| r.as_f64()).unwrap_or(0.0);
-                    last_quota_limit = Some((status, resets_at));
-                }
-            }
-        }
-
-        if line.contains("\"role\":\"assistant\"") || line.contains("\"type\":\"assistant\"") {
-            has_recent_messages = true;
-        }
-    }
-
-    let mut remaining_fraction = 0.75;
-    let mut seconds_to_reset = 3600.0;
-
-    if let Some((status, resets_at)) = last_quota_limit {
-        let diff = resets_at - now_sec;
-        if diff > 0.0 && status == "rejected" {
-            // Actively within an unexpired rate limit window
-            remaining_fraction = 0.0;
-            seconds_to_reset = diff;
-            return Some(QuotaSnapshot {
-                remaining_fraction,
-                seconds_to_reset,
-                observed_at_unix_nano: current_unix_nano(),
-                bucket: "claude".to_string(),
-                group: "anthropic".to_string(),
-            });
-        }
-    }
-
-    if let Some(tokens) = last_tokens_left {
-        // Claude typically operates with a ~20M token standard pool
-        remaining_fraction = ((tokens as f64) / 20_000_000.0).clamp(0.05, 1.0);
-        seconds_to_reset = 3600.0;
-    } else if has_recent_messages {
-        remaining_fraction = 0.75;
-        seconds_to_reset = 3600.0;
-    }
-
-    Some(QuotaSnapshot {
-        remaining_fraction,
-        seconds_to_reset,
-        observed_at_unix_nano: current_unix_nano(),
-        bucket: "claude".to_string(),
-        group: "anthropic".to_string(),
-    })
 }

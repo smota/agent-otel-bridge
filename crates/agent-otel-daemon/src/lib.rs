@@ -8,6 +8,8 @@ pub mod config;
 pub mod daemon;
 pub mod exporter;
 pub mod git;
+pub mod platform;
+pub mod platforms;
 pub mod quota;
 
 pub use config::DaemonConfig;
