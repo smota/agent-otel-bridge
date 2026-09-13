@@ -100,7 +100,93 @@ agent-otel-bridge check-guardrails
 
 ---
 
-## 4. Enabling Local Git Hooks
+## 4. How to Add Support for a New Agent Client Harness
+
+Adding telemetry support for a new AI coding agent harness (e.g., Cursor CLI, Aider, OpenCodeInterpreter, Continue) is designed to be declarative, modular, and fast.
+
+The entire harness integration lifecycle is managed through the `ClientAdapter` registry. Once registered, your new harness automatically inherits:
+- `agent-otel-bridge hooks install --client <name>`
+- `agent-otel-bridge hooks uninstall --client <name>`
+- `agent-otel-bridge hooks status`
+- `agent-otel-bridge hooks sync` (project-level hook alignment)
+- `agent-otel-bridge hooks scan-all` (workstation-wide discovery & sync)
+- `agent-otel-bridge doctor` (pipeline health checks)
+
+### Step 1: Determine the Harness Configuration Scope
+In `crates/agent-otel-cli/src/hooks.rs`, check how your harness resolves configuration:
+- **`HookScope::GlobalOnly`**: The harness only reads from a global user config file (e.g. `~/.myagent/hooks.json`). Projects never shadow global telemetry.
+- **`HookScope::NamespaceMerged`**: The harness natively merges namespaces between global and workspace configs (e.g. Google Antigravity).
+- **`HookScope::ProjectShadowsGlobal`**: A project-level configuration file (e.g. `.myagent/settings.json`) completely replaces the global hooks list unless the bridge hook is present (e.g. Claude Code).
+
+### Step 2: Implement Config Paths & Serialization
+In [`crates/agent-otel-cli/src/hooks.rs`](crates/agent-otel-cli/src/hooks.rs):
+1. Add configuration path resolvers:
+   ```rust
+   pub fn get_myagent_config_path(project: bool) -> Option<PathBuf> {
+       if project {
+           get_myagent_project_path(None)
+       } else {
+           std::env::var("USERPROFILE")
+               .or_else(|_| std::env::var("HOME"))
+               .ok()
+               .map(|home| PathBuf::from(home).join(".myagent").join("hooks.json"))
+       }
+   }
+
+   pub fn get_myagent_project_path(base: Option<&Path>) -> Option<PathBuf> {
+       let root = base.unwrap_or_else(|| Path::new("."));
+       Some(root.join(".myagent").join("hooks.json"))
+   }
+   ```
+2. Implement install & uninstall functions (or reuse existing JSON helpers if your harness uses standard `{ "hooks": [...] }` or namespace formats):
+   - **Crucial Invariant**: You MUST preserve all existing third-party hooks and formatting (non-destructive guarantee).
+
+### Step 3: Register in the `CLIENT_ADAPTERS` Table
+Add your adapter entry to `CLIENT_ADAPTERS` in [`crates/agent-otel-cli/src/hooks.rs`](crates/agent-otel-cli/src/hooks.rs):
+```rust
+ClientAdapter {
+    id: "myagent",
+    display_name: "MyAgent (myagent.ai)",
+    aliases: &["myagent-cli", "my-agent"],
+    client_tag: Some("myagent"),
+    scope: HookScope::GlobalOnly, // or ProjectShadowsGlobal
+    global_config_fn: || get_myagent_config_path(false),
+    project_config_fn: get_myagent_project_path,
+    install_fn: install_myagent_hooks,
+    uninstall_fn: uninstall_myagent_hooks,
+    is_registered_fn: is_myagent_hook_registered,
+},
+```
+Also add your client identifier to `ClientTarget` enum in `hooks.rs` for CLI argument parsing.
+
+### Step 4: Map the Fast-Path in `agent-hook`
+In [`crates/agent-otel-client/src/main.rs`](crates/agent-otel-client/src/main.rs), map the `--client` CLI argument to a numeric client ID:
+```rust
+"myagent" | "myagent-cli" => 6,
+```
+
+### Step 5: Map OpenTelemetry Semantic Conventions
+1. In [`crates/agent-otel-core/src/semconv.rs`](crates/agent-otel-core/src/semconv.rs):
+   - Add provider constant (e.g. `pub const GEN_AI_PROVIDER_MYAGENT: &str = "myagent";`).
+   - Update `infer_provider()` and `infer_agent_name()`.
+2. In [`crates/agent-otel-core/src/model.rs`](crates/agent-otel-core/src/model.rs):
+   - Add enum variant to `ClientKind::MyAgent`.
+   - Update `ClientKind::from_str_name()`.
+
+### Step 6: Add Tests & Verify Guardrails
+1. Add unit tests in `hooks.rs` asserting:
+   - Installation idempotency (running install twice does not duplicate hooks).
+   - Third-party preservation (pre-existing hooks remain intact).
+   - Clean uninstallation.
+2. Run the automated guardrails checker:
+   ```powershell
+   cargo guardrails
+   ```
+   Ensure 100% pass: zero clippy warnings, code formatted, and binary size `< 350 KB`.
+
+---
+
+## 5. Enabling Local Git Hooks
 
 To automatically prevent broken commits and branch policy violations, enable our repository Git hooks:
 
@@ -112,7 +198,7 @@ Once enabled, `.githooks/pre-commit` and `.githooks/pre-push` will automatically
 
 ---
 
-## 5. Community Hardware Benchmarks
+## 6. Community Hardware Benchmarks
 
 We actively track microsecond performance across diverse developer hardware. If you are testing on a new CPU/OS environment:
 
@@ -125,6 +211,6 @@ See [docs/COMMUNITY_BENCHMARKS.md](docs/COMMUNITY_BENCHMARKS.md) for current lea
 
 ---
 
-## 6. Sponsoring & Incubation
+## 7. Sponsoring & Incubation
 
 `agent-otel-bridge` is proudly sponsored and incubated by [Move the Needle](https://www.movetheneedle.info).

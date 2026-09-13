@@ -95,7 +95,7 @@ impl QuotaEngine {
             "grok" | "xai" | "grok-cli" => "grok",
             "antigravity" | "gemini" | "agy" => "gemini",
             "claude" | "claude-code" | "claudecode" => "claude",
-            "pi" | "inflection" => "pi",
+            "pi" | "pi-cli" => "pi",
             _ => "ai-agent",
         };
 

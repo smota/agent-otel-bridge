@@ -11,6 +11,7 @@ mod emit_quota;
 mod guardrails;
 mod hooks;
 mod local;
+mod scanner;
 mod stop;
 
 #[derive(Parser, Debug)]
@@ -155,6 +156,37 @@ enum HookAction {
     },
     /// Checks hook installation status across supported clients
     Status,
+    /// Synchronizes project-level hooks in the specified or current workspace
+    Sync {
+        /// Optional path to project workspace directory (default: current directory)
+        #[arg(long)]
+        path: Option<std::path::PathBuf>,
+        /// If set, scans workstation directories and synchronizes all projects found
+        #[arg(long)]
+        scan: bool,
+        /// Custom binary name or path for hook command (default: agent-hook)
+        #[arg(long)]
+        binary: Option<String>,
+    },
+    /// Scans workstation directories for projects and synchronizes hooks across all of them
+    #[command(alias = "scan")]
+    ScanAll {
+        /// Optional root directories to scan (defaults to standard developer folders in user profile)
+        #[arg(long, num_args = 0..)]
+        roots: Vec<std::path::PathBuf>,
+        /// If set, scans root of available local drives (with strict system folder exclusions)
+        #[arg(long)]
+        all_drives: bool,
+        /// Maximum directory traversal depth (default: 5)
+        #[arg(long, default_value_t = 5)]
+        max_depth: usize,
+        /// Preview actions without writing changes to files
+        #[arg(long)]
+        dry_run: bool,
+        /// Custom binary name or path for hook command (default: agent-hook)
+        #[arg(long)]
+        binary: Option<String>,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -241,6 +273,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 binary,
             } => hooks::run_uninstall(&client, project, binary.as_deref()),
             HookAction::Status => hooks::run_status(),
+            HookAction::Sync { path, scan, binary } => {
+                if scan {
+                    scanner::run_scan_all(scanner::ScanOptions {
+                        roots: path.into_iter().collect(),
+                        all_drives: false,
+                        max_depth: 5,
+                        dry_run: false,
+                        binary,
+                    })
+                } else {
+                    hooks::run_sync(path.as_deref(), binary.as_deref())
+                }
+            }
+            HookAction::ScanAll {
+                roots,
+                all_drives,
+                max_depth,
+                dry_run,
+                binary,
+            } => scanner::run_scan_all(scanner::ScanOptions {
+                roots,
+                all_drives,
+                max_depth,
+                dry_run,
+                binary,
+            }),
         },
         Commands::InstallHooks {
             client,

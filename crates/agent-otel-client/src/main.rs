@@ -47,7 +47,7 @@ fn resolve_tag() -> u8 {
                 "claude" | "claude-code" => 2,
                 "codex" | "openai" => 3,
                 "grok" | "xai" => 4,
-                "pi" | "inflection" => 5,
+                "pi" | "pi-cli" => 5,
                 _ => 0,
             };
             i += 2;

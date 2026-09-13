@@ -25,7 +25,7 @@ impl ClientTarget {
             "claude" | "claude-code" | "claudecode" => ClientTarget::ClaudeCode,
             "codex" | "openai" | "codex-cli" => ClientTarget::Codex,
             "grok" | "xai" | "grok-cli" => ClientTarget::Grok,
-            "pi" | "inflection" | "pi-cli" => ClientTarget::Pi,
+            "pi" | "pi-cli" => ClientTarget::Pi,
             _ => ClientTarget::All,
         }
     }
@@ -39,9 +39,14 @@ impl std::str::FromStr for ClientTarget {
     }
 }
 
+pub fn get_antigravity_project_path(base: Option<&Path>) -> Option<PathBuf> {
+    let root = base.unwrap_or_else(|| Path::new("."));
+    Some(root.join(".gemini").join("hooks.json"))
+}
+
 pub fn get_antigravity_config_path(project: bool) -> Option<PathBuf> {
     if project {
-        Some(PathBuf::from(".gemini").join("hooks.json"))
+        get_antigravity_project_path(None)
     } else {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -55,9 +60,14 @@ pub fn get_antigravity_config_path(project: bool) -> Option<PathBuf> {
     }
 }
 
+pub fn get_claude_project_path(base: Option<&Path>) -> Option<PathBuf> {
+    let root = base.unwrap_or_else(|| Path::new("."));
+    Some(root.join(".claude").join("settings.json"))
+}
+
 pub fn get_claude_config_path(project: bool) -> Option<PathBuf> {
     if project {
-        Some(PathBuf::from(".claude").join("settings.json"))
+        get_claude_project_path(None)
     } else {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -66,9 +76,14 @@ pub fn get_claude_config_path(project: bool) -> Option<PathBuf> {
     }
 }
 
+pub fn get_codex_project_path(base: Option<&Path>) -> Option<PathBuf> {
+    let root = base.unwrap_or_else(|| Path::new("."));
+    Some(root.join(".codex").join("hooks.json"))
+}
+
 pub fn get_codex_config_path(project: bool) -> Option<PathBuf> {
     if project {
-        Some(PathBuf::from(".codex").join("hooks.json"))
+        get_codex_project_path(None)
     } else {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -77,9 +92,14 @@ pub fn get_codex_config_path(project: bool) -> Option<PathBuf> {
     }
 }
 
+pub fn get_grok_project_path(base: Option<&Path>) -> Option<PathBuf> {
+    let root = base.unwrap_or_else(|| Path::new("."));
+    Some(root.join(".grok").join("hooks").join("agent-otel.json"))
+}
+
 pub fn get_grok_config_path(project: bool) -> Option<PathBuf> {
     if project {
-        Some(PathBuf::from(".grok").join("hooks").join("agent-otel.json"))
+        get_grok_project_path(None)
     } else {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -93,9 +113,14 @@ pub fn get_grok_config_path(project: bool) -> Option<PathBuf> {
     }
 }
 
+pub fn get_pi_project_path(base: Option<&Path>) -> Option<PathBuf> {
+    let root = base.unwrap_or_else(|| Path::new("."));
+    Some(root.join(".pi").join("hooks.json"))
+}
+
 pub fn get_pi_config_path(project: bool) -> Option<PathBuf> {
     if project {
-        Some(PathBuf::from(".pi").join("hooks.json"))
+        get_pi_project_path(None)
     } else {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -103,6 +128,144 @@ pub fn get_pi_config_path(project: bool) -> Option<PathBuf> {
             .map(|home| PathBuf::from(home).join(".pi").join("hooks.json"))
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookScope {
+    /// Purely global configuration (e.g. Grok, Codex CLI, Pi).
+    /// Projects never override or shadow global telemetry.
+    GlobalOnly,
+    /// Namespace-merged configuration (e.g. Google Antigravity).
+    /// Projects can define local hooks in their own namespaces without shadowing the bridge.
+    NamespaceMerged,
+    /// Array-overridden configuration (e.g. Claude Code).
+    /// A project's local config file completely shadows the global hooks array unless the bridge is also present in the project.
+    ProjectShadowsGlobal,
+}
+
+pub type InstallHookFn = fn(&Path, &str, Option<&str>) -> Result<bool, Box<dyn std::error::Error>>;
+pub type UninstallHookFn = fn(&Path, &str) -> Result<bool, Box<dyn std::error::Error>>;
+
+#[derive(Clone, Copy)]
+pub struct ClientAdapter {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub client_tag: Option<&'static str>,
+    pub scope: HookScope,
+    pub global_config_fn: fn() -> Option<PathBuf>,
+    pub project_config_fn: fn(Option<&Path>) -> Option<PathBuf>,
+    pub install_fn: InstallHookFn,
+    pub uninstall_fn: UninstallHookFn,
+    pub is_registered_fn: fn(&Path) -> bool,
+}
+
+impl ClientAdapter {
+    pub fn matches_name(&self, s: &str) -> bool {
+        let lower = s.to_ascii_lowercase();
+        self.id == lower || self.aliases.iter().any(|&a| a == lower)
+    }
+}
+
+impl ClientTarget {
+    pub fn matches_adapter(&self, adapter: &ClientAdapter) -> bool {
+        match self {
+            ClientTarget::All => true,
+            ClientTarget::Antigravity => adapter.matches_name("antigravity"),
+            ClientTarget::ClaudeCode => adapter.matches_name("claude"),
+            ClientTarget::Codex => adapter.matches_name("codex"),
+            ClientTarget::Grok => adapter.matches_name("grok"),
+            ClientTarget::Pi => adapter.matches_name("pi"),
+        }
+    }
+}
+
+pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
+    ClientAdapter {
+        id: "antigravity",
+        display_name: "Google Antigravity",
+        aliases: &["agy", "gemini"],
+        client_tag: None,
+        scope: HookScope::NamespaceMerged,
+        global_config_fn: || get_antigravity_config_path(false),
+        project_config_fn: get_antigravity_project_path,
+        install_fn: install_antigravity_hooks,
+        uninstall_fn: |path, _bin| uninstall_antigravity_hooks(path),
+        is_registered_fn: |path| {
+            path.exists()
+                && fs::read_to_string(path)
+                    .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
+                    .unwrap_or(false)
+        },
+    },
+    ClientAdapter {
+        id: "claude",
+        display_name: "Claude Code",
+        aliases: &["claude-code", "claudecode"],
+        client_tag: None,
+        scope: HookScope::ProjectShadowsGlobal,
+        global_config_fn: || get_claude_config_path(false),
+        project_config_fn: get_claude_project_path,
+        install_fn: |path, binary, _tag| install_claude_hooks(path, binary),
+        uninstall_fn: uninstall_claude_hooks,
+        is_registered_fn: |path| {
+            path.exists()
+                && fs::read_to_string(path)
+                    .map(|s| s.contains("agent-hook"))
+                    .unwrap_or(false)
+        },
+    },
+    ClientAdapter {
+        id: "codex",
+        display_name: "OpenAI Codex",
+        aliases: &["openai", "codex-cli"],
+        client_tag: Some("codex"),
+        scope: HookScope::GlobalOnly,
+        global_config_fn: || get_codex_config_path(false),
+        project_config_fn: get_codex_project_path,
+        install_fn: install_standard_hooks,
+        uninstall_fn: uninstall_standard_hooks,
+        is_registered_fn: |path| {
+            path.exists()
+                && fs::read_to_string(path)
+                    .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
+                    .unwrap_or(false)
+        },
+    },
+    ClientAdapter {
+        id: "grok",
+        display_name: "xAI Grok",
+        aliases: &["xai", "grok-cli"],
+        client_tag: Some("grok"),
+        scope: HookScope::GlobalOnly,
+        global_config_fn: || get_grok_config_path(false),
+        project_config_fn: get_grok_project_path,
+        install_fn: install_standard_hooks,
+        uninstall_fn: uninstall_standard_hooks,
+        is_registered_fn: |path| {
+            path.exists()
+                && fs::read_to_string(path)
+                    .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
+                    .unwrap_or(false)
+        },
+    },
+    ClientAdapter {
+        id: "pi",
+        display_name: "Pi (pi.dev)",
+        aliases: &["pi-cli"],
+        client_tag: Some("pi"),
+        scope: HookScope::GlobalOnly,
+        global_config_fn: || get_pi_config_path(false),
+        project_config_fn: get_pi_project_path,
+        install_fn: install_antigravity_hooks,
+        uninstall_fn: |path, _bin| uninstall_antigravity_hooks(path),
+        is_registered_fn: |path| {
+            path.exists()
+                && fs::read_to_string(path)
+                    .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
+                    .unwrap_or(false)
+        },
+    },
+];
 
 pub fn is_bridge_command(cmd: &str) -> bool {
     let lower = cmd.to_ascii_lowercase();
@@ -413,106 +576,56 @@ pub fn run_install(
 
     let mut installed_any = false;
 
-    if target == ClientTarget::Antigravity || target == ClientTarget::All {
-        if let Some(path) = get_antigravity_config_path(project) {
-            let should_install = target == ClientTarget::Antigravity
-                || project
-                || path.parent().map(|p| p.exists()).unwrap_or(false);
-            if should_install {
-                match install_antigravity_hooks(&path, binary, None) {
-                    Ok(_) => {
-                        println!("  [ok] Antigravity hooks registered at: {}", path.display());
-                        installed_any = true;
-                    }
-                    Err(e) => println!("  [fail] Failed to install Antigravity hooks: {}", e),
-                }
-            }
+    for adapter in CLIENT_ADAPTERS {
+        if !target.matches_adapter(adapter) {
+            continue;
         }
-    }
 
-    if target == ClientTarget::ClaudeCode || target == ClientTarget::All {
-        if let Some(path) = get_claude_config_path(project) {
-            let should_install = target == ClientTarget::ClaudeCode
-                || project
-                || path.parent().map(|p| p.exists()).unwrap_or(false);
-            if should_install {
-                match install_claude_hooks(&path, binary) {
-                    Ok(_) => {
-                        println!("  [ok] Claude Code hooks registered at: {}", path.display());
-                        installed_any = true;
-                    }
-                    Err(e) => println!("  [fail] Failed to install Claude Code hooks: {}", e),
-                }
-            }
-        }
-    }
+        let config_path = if project {
+            (adapter.project_config_fn)(None)
+        } else {
+            (adapter.global_config_fn)()
+        };
 
-    if target == ClientTarget::Codex || target == ClientTarget::All {
-        if let Some(path) = get_codex_config_path(project) {
-            let should_install = target == ClientTarget::Codex
-                || (project && target == ClientTarget::Codex)
-                || path.parent().map(|p| p.exists()).unwrap_or(false);
-            if should_install {
-                match install_standard_hooks(&path, binary, Some("codex")) {
-                    Ok(_) => {
-                        println!(
-                            "  [ok] OpenAI Codex hooks registered at: {}",
-                            path.display()
-                        );
-                        installed_any = true;
-                    }
-                    Err(e) => println!("  [fail] Failed to install Codex hooks: {}", e),
-                }
-            }
-        }
-    }
+        let Some(path) = config_path else {
+            continue;
+        };
 
-    if target == ClientTarget::Grok || target == ClientTarget::All {
-        if let Some(path) = get_grok_config_path(project) {
-            let should_install = target == ClientTarget::Grok
-                || (project && target == ClientTarget::Grok)
-                || path.parent().map(|p| p.exists()).unwrap_or(false);
-            if should_install {
-                match install_standard_hooks(&path, binary, Some("grok")) {
-                    Ok(_) => {
-                        println!("  [ok] xAI Grok hooks registered at: {}", path.display());
-                        installed_any = true;
+        let is_explicit = target != ClientTarget::All;
+        let should_install =
+            is_explicit || project || path.parent().map(|p| p.exists()).unwrap_or(false);
 
-                        // Clean up duplicate legacy ~/.grok/hooks.json if present
-                        if !project {
-                            if let Ok(home) =
-                                std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"))
-                            {
-                                let legacy_grok_hooks =
-                                    PathBuf::from(home).join(".grok").join("hooks.json");
-                                if legacy_grok_hooks.is_file() {
-                                    let _ = uninstall_antigravity_hooks(&legacy_grok_hooks);
-                                    println!(
-                                        "  [cleanup] Removed duplicate legacy hooks in: {}",
-                                        legacy_grok_hooks.display()
-                                    );
-                                }
+        if should_install {
+            match (adapter.install_fn)(&path, binary, adapter.client_tag) {
+                Ok(_) => {
+                    println!(
+                        "  [ok] {} hooks registered at: {}",
+                        adapter.display_name,
+                        path.display()
+                    );
+                    installed_any = true;
+
+                    if adapter.id == "grok" && !project {
+                        if let Ok(home) =
+                            std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"))
+                        {
+                            let legacy_grok_hooks =
+                                PathBuf::from(home).join(".grok").join("hooks.json");
+                            if legacy_grok_hooks.is_file() {
+                                let _ = uninstall_antigravity_hooks(&legacy_grok_hooks);
+                                println!(
+                                    "  [cleanup] Removed duplicate legacy hooks in: {}",
+                                    legacy_grok_hooks.display()
+                                );
                             }
                         }
                     }
-                    Err(e) => println!("  [fail] Failed to install Grok hooks: {}", e),
                 }
-            }
-        }
-    }
-
-    if target == ClientTarget::Pi || target == ClientTarget::All {
-        if let Some(path) = get_pi_config_path(project) {
-            let should_install = target == ClientTarget::Pi
-                || (project && target == ClientTarget::Pi)
-                || path.parent().map(|p| p.exists()).unwrap_or(false);
-            if should_install {
-                match install_antigravity_hooks(&path, binary, Some("pi")) {
-                    Ok(_) => {
-                        println!("  [ok] Pi (pi.dev) hooks registered at: {}", path.display());
-                        installed_any = true;
-                    }
-                    Err(e) => println!("  [fail] Failed to install Pi hooks: {}", e),
+                Err(e) => {
+                    println!(
+                        "  [fail] Failed to install {} hooks: {}",
+                        adapter.display_name, e
+                    )
                 }
             }
         }
@@ -539,57 +652,39 @@ pub fn run_uninstall(
 
     println!("\n=== Uninstalling agent-otel-bridge hooks ===");
 
-    if target == ClientTarget::Antigravity || target == ClientTarget::All {
-        if let Some(path) = get_antigravity_config_path(project) {
-            match uninstall_antigravity_hooks(&path) {
-                Ok(true) => println!("  [ok] Antigravity hooks removed from: {}", path.display()),
-                Ok(false) => println!(
-                    "  [info] Antigravity hooks were not configured in: {}",
-                    path.display()
-                ),
-                Err(e) => println!("  [fail] Error uninstalling Antigravity hooks: {}", e),
-            }
+    for adapter in CLIENT_ADAPTERS {
+        if !target.matches_adapter(adapter) {
+            continue;
         }
-    }
 
-    if target == ClientTarget::ClaudeCode || target == ClientTarget::All {
-        if let Some(path) = get_claude_config_path(project) {
-            match uninstall_claude_hooks(&path, binary) {
-                Ok(true) => println!("  [ok] Claude Code hooks removed from: {}", path.display()),
-                Ok(false) => println!(
-                    "  [info] Claude Code hooks were not configured in: {}",
-                    path.display()
-                ),
-                Err(e) => println!("  [fail] Error uninstalling Claude Code hooks: {}", e),
-            }
-        }
-    }
+        let config_path = if project {
+            (adapter.project_config_fn)(None)
+        } else {
+            (adapter.global_config_fn)()
+        };
 
-    if target == ClientTarget::Codex || target == ClientTarget::All {
-        if let Some(path) = get_codex_config_path(project) {
-            match uninstall_standard_hooks(&path, binary) {
-                Ok(true) => println!("  [ok] OpenAI Codex hooks removed from: {}", path.display()),
-                Ok(false) => println!(
-                    "  [info] OpenAI Codex hooks were not configured in: {}",
-                    path.display()
-                ),
-                Err(e) => println!("  [fail] Error uninstalling Codex hooks: {}", e),
-            }
-        }
-    }
+        let Some(path) = config_path else {
+            continue;
+        };
 
-    if target == ClientTarget::Grok || target == ClientTarget::All {
-        if let Some(path) = get_grok_config_path(project) {
-            match uninstall_standard_hooks(&path, binary) {
-                Ok(true) => println!("  [ok] xAI Grok hooks removed from: {}", path.display()),
-                Ok(false) => println!(
-                    "  [info] xAI Grok hooks were not configured in: {}",
-                    path.display()
-                ),
-                Err(e) => println!("  [fail] Error uninstalling Grok hooks: {}", e),
-            }
+        match (adapter.uninstall_fn)(&path, binary) {
+            Ok(true) => println!(
+                "  [ok] {} hooks removed from: {}",
+                adapter.display_name,
+                path.display()
+            ),
+            Ok(false) => println!(
+                "  [info] {} hooks were not configured in: {}",
+                adapter.display_name,
+                path.display()
+            ),
+            Err(e) => println!(
+                "  [fail] Error uninstalling {} hooks: {}",
+                adapter.display_name, e
+            ),
         }
-        if !project {
+
+        if adapter.id == "grok" && !project {
             if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
                 let legacy_grok_hooks = PathBuf::from(home).join(".grok").join("hooks.json");
                 let _ = uninstall_antigravity_hooks(&legacy_grok_hooks);
@@ -597,20 +692,99 @@ pub fn run_uninstall(
         }
     }
 
-    if target == ClientTarget::Pi || target == ClientTarget::All {
-        if let Some(path) = get_pi_config_path(project) {
-            match uninstall_antigravity_hooks(&path) {
-                Ok(true) => println!("  [ok] Pi hooks removed from: {}", path.display()),
-                Ok(false) => println!(
-                    "  [info] Pi hooks were not configured in: {}",
-                    path.display()
-                ),
-                Err(e) => println!("  [fail] Error uninstalling Pi hooks: {}", e),
+    println!("\nHooks uninstallation complete.\n");
+    Ok(())
+}
+
+pub fn run_sync(
+    workspace_opt: Option<&Path>,
+    binary_opt: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base = workspace_opt.unwrap_or_else(|| Path::new("."));
+    let canonical_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf());
+    let resolved_binary = resolve_canonical_hook_binary(binary_opt)?;
+    let binary = &resolved_binary;
+
+    println!("\n=== agent-otel-bridge hooks sync ===");
+    println!("Workspace: {}", canonical_base.display());
+    println!("Target binary: {}\n", binary);
+
+    let mut actions_taken = 0;
+
+    for adapter in CLIENT_ADAPTERS {
+        let proj_cfg = (adapter.project_config_fn)(Some(&canonical_base));
+        let Some(path) = proj_cfg else {
+            continue;
+        };
+
+        match adapter.scope {
+            HookScope::GlobalOnly => {
+                println!(
+                    "  {:<20} [info] Purely global (no workspace shadowing)",
+                    adapter.display_name
+                );
+            }
+            HookScope::NamespaceMerged => {
+                if path.exists() {
+                    if (adapter.is_registered_fn)(&path) {
+                        println!(
+                            "  {:<20} [ok] Up-to-date in workspace ({})",
+                            adapter.display_name,
+                            path.display()
+                        );
+                    } else {
+                        (adapter.install_fn)(&path, binary, adapter.client_tag)?;
+                        println!(
+                            "  {:<20} [synced] Injected into workspace ({})",
+                            adapter.display_name,
+                            path.display()
+                        );
+                        actions_taken += 1;
+                    }
+                } else {
+                    println!(
+                        "  {:<20} [clean] No local override (global hooks active)",
+                        adapter.display_name
+                    );
+                }
+            }
+            HookScope::ProjectShadowsGlobal => {
+                if path.exists() {
+                    if (adapter.is_registered_fn)(&path) {
+                        println!(
+                            "  {:<20} [ok] Up-to-date in workspace ({})",
+                            adapter.display_name,
+                            path.display()
+                        );
+                    } else {
+                        println!(
+                            "  {:<20} [shadow] Local config without bridge detected! Syncing hook...",
+                            adapter.display_name
+                        );
+                        (adapter.install_fn)(&path, binary, adapter.client_tag)?;
+                        println!(
+                            "  {:<20} [synced] Successfully updated workspace ({})",
+                            adapter.display_name,
+                            path.display()
+                        );
+                        actions_taken += 1;
+                    }
+                } else {
+                    println!(
+                        "  {:<20} [clean] No local override (global hooks active)",
+                        adapter.display_name
+                    );
+                }
             }
         }
     }
 
-    println!("\nHooks uninstallation complete.\n");
+    if actions_taken > 0 {
+        println!("\nSync completed: {actions_taken} workspace configuration(s) updated.\n");
+    } else {
+        println!("\nSync completed: all clients are already aligned.\n");
+    }
+
     Ok(())
 }
 
@@ -650,85 +824,49 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
         }
     );
 
-    println!("\nClient Hook Registrations:");
-    // Antigravity global
-    if let Some(p) = get_antigravity_config_path(false) {
-        let configured = p.exists()
-            && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
-                .unwrap_or(false);
-        println!(
-            "  Google Antigravity: {}",
-            if configured {
-                format!("[ok] configured ({})", p.display())
-            } else {
-                format!("[unset] not registered ({})", p.display())
-            }
-        );
+    println!("\nClient Hook Registrations (Global):");
+    for adapter in CLIENT_ADAPTERS {
+        if let Some(p) = (adapter.global_config_fn)() {
+            let configured = (adapter.is_registered_fn)(&p);
+            println!(
+                "  {:<20} {}",
+                format!("{}:", adapter.display_name),
+                if configured {
+                    format!("[ok] configured ({})", p.display())
+                } else {
+                    format!("[unset] not registered ({})", p.display())
+                }
+            );
+        }
     }
 
-    // Claude Code global
-    if let Some(p) = get_claude_config_path(false) {
-        let configured = p.exists()
-            && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-hook"))
-                .unwrap_or(false);
-        println!(
-            "  Claude Code:        {}",
-            if configured {
-                format!("[ok] configured ({})", p.display())
-            } else {
-                format!("[unset] not registered ({})", p.display())
+    if let Ok(current_dir) = std::env::current_dir() {
+        let mut has_project_cfgs = false;
+        for adapter in CLIENT_ADAPTERS {
+            if let Some(p) = (adapter.project_config_fn)(Some(&current_dir)) {
+                if p.exists() {
+                    if !has_project_cfgs {
+                        println!("\nCurrent Workspace Overrides ({}):", current_dir.display());
+                        has_project_cfgs = true;
+                    }
+                    let registered = (adapter.is_registered_fn)(&p);
+                    let status_str = match adapter.scope {
+                        HookScope::ProjectShadowsGlobal if !registered => {
+                            format!("[shadow] active WITHOUT bridge hook ({})", p.display())
+                        }
+                        HookScope::ProjectShadowsGlobal => {
+                            format!("[ok] active with bridge hook ({})", p.display())
+                        }
+                        _ => format!("[ok] present ({})", p.display()),
+                    };
+                    println!(
+                        "  {:<20} {}",
+                        format!("{}:", adapter.display_name),
+                        status_str
+                    );
+                }
             }
-        );
-    }
-
-    // OpenAI Codex global
-    if let Some(p) = get_codex_config_path(false) {
-        let configured = p.exists()
-            && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
-                .unwrap_or(false);
-        println!(
-            "  OpenAI Codex:       {}",
-            if configured {
-                format!("[ok] configured ({})", p.display())
-            } else {
-                format!("[unset] not registered ({})", p.display())
-            }
-        );
-    }
-
-    // xAI Grok global
-    if let Some(p) = get_grok_config_path(false) {
-        let configured = p.exists()
-            && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
-                .unwrap_or(false);
-        println!(
-            "  xAI Grok:           {}",
-            if configured {
-                format!("[ok] configured ({})", p.display())
-            } else {
-                format!("[unset] not registered ({})", p.display())
-            }
-        );
-    }
-
-    // Pi (pi.dev) global
-    if let Some(p) = get_pi_config_path(false) {
-        let configured = p.exists()
-            && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
-                .unwrap_or(false);
-        println!(
-            "  Pi (pi.dev):        {}",
-            if configured {
-                format!("[ok] configured ({})", p.display())
-            } else {
-                format!("[unset] not registered ({})", p.display())
-            }
-        );
+        }
     }
 
     println!();
@@ -909,6 +1047,60 @@ mod tests {
             let after = fs::read_to_string(path).unwrap();
             assert!(!after.contains("agent-otel-bridge"));
         }
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_client_adapters_registry_and_sync() {
+        assert_eq!(CLIENT_ADAPTERS.len(), 5);
+        let claude = CLIENT_ADAPTERS.iter().find(|a| a.id == "claude").unwrap();
+        assert_eq!(claude.scope, HookScope::ProjectShadowsGlobal);
+
+        let agy = CLIENT_ADAPTERS
+            .iter()
+            .find(|a| a.id == "antigravity")
+            .unwrap();
+        assert_eq!(agy.scope, HookScope::NamespaceMerged);
+
+        let codex = CLIENT_ADAPTERS.iter().find(|a| a.id == "codex").unwrap();
+        assert_eq!(codex.scope, HookScope::GlobalOnly);
+
+        let temp_dir = std::env::temp_dir().join(format!("sync_test_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Seed project claude settings without bridge hook
+        let claude_dir = temp_dir.join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        let settings_path = claude_dir.join("settings.json");
+        fs::write(
+            &settings_path,
+            json!({
+                "hooks": {
+                    "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "command": "my-check.sh" }] }]
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        // Sync should detect shadowing and inject bridge hook
+        let sync_res = run_sync(Some(&temp_dir), Some("C:\\Tools\\agent-hook.exe"));
+        assert!(sync_res.is_ok());
+
+        let synced_content = fs::read_to_string(&settings_path).unwrap();
+        let parsed: Value = serde_json::from_str(&synced_content).unwrap();
+        let pre_tool = parsed["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre_tool.len(), 2);
+        assert_eq!(pre_tool[0]["hooks"][0]["command"], "my-check.sh");
+        assert_eq!(
+            pre_tool[1]["hooks"][0]["command"],
+            "C:\\Tools\\agent-hook.exe PreToolUse"
+        );
+
+        // Running sync a second time is idempotent
+        let sync_res2 = run_sync(Some(&temp_dir), Some("C:\\Tools\\agent-hook.exe"));
+        assert!(sync_res2.is_ok());
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

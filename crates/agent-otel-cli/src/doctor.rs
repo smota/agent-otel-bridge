@@ -126,79 +126,38 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     );
 
-    if let Some(p) = crate::hooks::get_antigravity_config_path(false) {
-        let configured = p.exists()
-            && std::fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge"))
-                .unwrap_or(false);
-        println!(
-            "  Google Antigravity: {}",
-            if configured {
-                format!("[ok] registered ({})", p.display())
-            } else {
-                format!("[info] not registered ({})", p.display())
-            }
-        );
+    for adapter in crate::hooks::CLIENT_ADAPTERS {
+        if let Some(p) = (adapter.global_config_fn)() {
+            let configured = (adapter.is_registered_fn)(&p);
+            println!(
+                "  {:<20} {}",
+                format!("{}:", adapter.display_name),
+                if configured {
+                    format!("[ok] registered ({})", p.display())
+                } else {
+                    format!("[info] not registered ({})", p.display())
+                }
+            );
+        }
     }
 
-    if let Some(p) = crate::hooks::get_claude_config_path(false) {
-        let configured = p.exists()
-            && std::fs::read_to_string(&p)
-                .map(|s| s.contains("agent-hook"))
-                .unwrap_or(false);
-        println!(
-            "  Claude Code:        {}",
-            if configured {
-                format!("[ok] registered ({})", p.display())
-            } else {
-                format!("[info] not registered ({})", p.display())
+    // Workspace shadowing diagnostic for current directory
+    if let Ok(current_dir) = std::env::current_dir() {
+        for adapter in crate::hooks::CLIENT_ADAPTERS {
+            if adapter.scope == crate::hooks::HookScope::ProjectShadowsGlobal {
+                if let Some(p) = (adapter.project_config_fn)(Some(&current_dir)) {
+                    if p.exists() && !(adapter.is_registered_fn)(&p) {
+                        println!(
+                            "\n  [warn] Workspace has local {} without bridge hook (shadows global telemetry!)",
+                            p.display()
+                        );
+                        println!(
+                            "         Run 'agent-otel-bridge hooks sync' to activate telemetry in this workspace."
+                        );
+                    }
+                }
             }
-        );
-    }
-
-    if let Some(p) = crate::hooks::get_codex_config_path(false) {
-        let configured = p.exists()
-            && std::fs::read_to_string(&p)
-                .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
-                .unwrap_or(false);
-        println!(
-            "  OpenAI Codex:       {}",
-            if configured {
-                format!("[ok] registered ({})", p.display())
-            } else {
-                format!("[info] not registered ({})", p.display())
-            }
-        );
-    }
-
-    if let Some(p) = crate::hooks::get_grok_config_path(false) {
-        let configured = p.exists()
-            && std::fs::read_to_string(&p)
-                .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
-                .unwrap_or(false);
-        println!(
-            "  xAI Grok:           {}",
-            if configured {
-                format!("[ok] registered ({})", p.display())
-            } else {
-                format!("[info] not registered ({})", p.display())
-            }
-        );
-    }
-
-    if let Some(p) = crate::hooks::get_pi_config_path(false) {
-        let configured = p.exists()
-            && std::fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge"))
-                .unwrap_or(false);
-        println!(
-            "  Pi (pi.dev):        {}",
-            if configured {
-                format!("[ok] registered ({})", p.display())
-            } else {
-                format!("[info] not registered ({})", p.display())
-            }
-        );
+        }
     }
 
     println!("\nDoctor check completed.\n");

@@ -15,7 +15,8 @@ pub const GEN_AI_PROVIDER_ANTHROPIC: &str = "anthropic";
 pub const GEN_AI_PROVIDER_OPENAI: &str = "openai";
 pub const GEN_AI_PROVIDER_XAI: &str = "xai";
 pub const GEN_AI_PROVIDER_PI: &str = "pi";
-pub const GEN_AI_PROVIDER_INFLECTION: &str = "pi";
+#[deprecated(note = "Use GEN_AI_PROVIDER_PI instead")]
+pub const GEN_AI_PROVIDER_INFLECTION: &str = GEN_AI_PROVIDER_PI;
 
 pub const GEN_AI_SYSTEM: &str = "gen_ai.system";
 pub const GEN_AI_SYSTEM_DEFAULT: &str = "antigravity";
@@ -133,7 +134,7 @@ pub fn infer_provider(model: &str) -> &'static str {
         GEN_AI_PROVIDER_GOOGLE
     } else if lower.contains("grok") {
         GEN_AI_PROVIDER_XAI
-    } else if lower.contains("pi") || lower.contains("inflection") {
+    } else if lower.contains("pi") {
         GEN_AI_PROVIDER_PI
     } else if lower.contains("gpt")
         || lower.contains("o1")
@@ -163,7 +164,7 @@ pub fn infer_agent_name(model: Option<&str>, client_hint: Option<&str>) -> &'sta
         if h == "codex" || h == "codex-cli" || h == "openai" {
             return "codex";
         }
-        if h == "pi" || h == "pi-cli" || h == "inflection" {
+        if h == "pi" || h == "pi-cli" {
             return "pi";
         }
     }
@@ -186,7 +187,7 @@ pub fn infer_agent_name(model: Option<&str>, client_hint: Option<&str>) -> &'sta
         {
             return "codex";
         }
-        if lower.contains("pi") || lower.contains("inflection") {
+        if lower.contains("pi") {
             return "pi";
         }
     }

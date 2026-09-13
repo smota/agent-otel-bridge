@@ -129,7 +129,7 @@ impl ClientKind {
             "claude" | "claude-code" | "claudecode" => ClientKind::ClaudeCode,
             "codex" | "codex-cli" | "openai" => ClientKind::Codex,
             "grok" | "grok-cli" | "xai" => ClientKind::Grok,
-            "pi" | "pi-cli" | "inflection" => ClientKind::Pi,
+            "pi" | "pi-cli" => ClientKind::Pi,
             _ => ClientKind::Unspecified,
         }
     }

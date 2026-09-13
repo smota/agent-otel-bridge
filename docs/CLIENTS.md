@@ -4,25 +4,28 @@
 
 ---
 
-## 1. Supported Client Overview
+## 1. Supported Client Overview & Scope Architecture
 
-| Harness | Configuration Location (Global) | Configuration Location (Project) | Hook Format |
-|---|---|---|---|
-| **Google Antigravity (`agy`)** | `~/.gemini/config/hooks.json` | `.gemini/hooks.json` | JSON Array of Event Handlers |
-| **Claude Code** | `~/.claude/settings.json` | `.claude/settings.json` | JSON `hooks` Dictionary with Command Arrays |
-| **OpenAI Codex CLI** | `~/.codex/hooks.json` | `.codex/hooks.json` | JSON Array of Event Handlers |
-| **xAI Grok CLI** | `~/.grok/hooks.json` | `.grok/hooks.json` | JSON Array of Event Handlers |
-| **Pi CLI (`pi`)** | `~/.pi/hooks.json` | `.pi/hooks.json` | JSON Array of Event Handlers |
-| **Custom Agent Harness** | Environment / Custom Config | Custom Config | Direct Process Execution (`agent-hook.exe`) |
+Every AI harness has a distinct configuration resolution model when resolving user global settings versus project workspace settings:
+
+| Harness | Scope Architecture | Configuration Location (Global) | Configuration Location (Project) | Resolution Behavior |
+|---|---|---|---|---|
+| **Google Antigravity (`agy`)** | `NamespaceMerged` | `~/.gemini/config/hooks.json` | `.gemini/hooks.json` | **Namespace Merged**: Projects preserve sibling keys. Global bridge remains active unless explicitly overwritten by `"agent-otel-bridge"`. |
+| **Claude Code / Desktop** | `ProjectShadowsGlobal` | `~/.claude/settings.json` | `.claude/settings.json` | **Array Override**: If a project defines `"hooks"`, it **completely shadows** user global hooks. Requires project synchronization. |
+| **OpenAI Codex CLI** | `GlobalOnly` | `~/.codex/hooks.json` | N/A (Global-first) | **Purely Global**: Always evaluates global hooks. Projects do not shadow telemetry. |
+| **xAI Grok CLI** | `GlobalOnly` | `~/.grok/hooks/agent-otel.json` | N/A (Dedicated) | **Isolated File**: Dedicated to the bridge. Completely global. |
+| **Pi CLI (`pi.dev`)** | `GlobalOnly` | `~/.pi/hooks.json` | N/A (Dedicated) | **Isolated File**: Dedicated to the bridge. Completely global. |
+| **Custom Agent Harness** | Custom | Environment / Custom Config | Custom Config | Direct Process Execution (`agent-hook.exe`). |
 
 ---
 
-## 2. Automated Hook Registration
+## 2. Automated Hook Registration & Workspace Synchronization
 
+### 2.1 Global Machine Configuration
 The fastest way to configure all installed AI agents on your machine:
 
 ```powershell
-# Automatically detect installed agents and register hooks
+# Automatically detect installed agents and register global hooks
 agent-otel-bridge install-hooks
 
 # Or target a specific client
@@ -34,12 +37,54 @@ agent-otel-bridge install-hooks --client pi
 
 # Force configure all 5 clients
 agent-otel-bridge install-hooks --client all
-
-# Register hooks locally at the current project level
-agent-otel-bridge install-hooks --client claude --project
 ```
 
-To verify registration status across all clients:
+### 2.2 Workspace Synchronization (`hooks sync`)
+When working in repositories that define project-level configurations (such as repositories with custom `.claude/settings.json` validation scripts), global hooks are shadowed by design in Claude Code.
+
+To align your current workspace without manually editing JSON files:
+
+```powershell
+# Inspect and synchronize the current workspace directory
+agent-otel-bridge hooks sync
+
+# Or target an explicit repository workspace path
+agent-otel-bridge hooks sync --path "C:\Users\username\code\my-repo"
+```
+
+The `hooks sync` command:
+1. Iterates over all registered client adapters.
+2. Identifies any harness whose project configuration shadows global telemetry (`ProjectShadowsGlobal`).
+3. If a project configuration file exists without the bridge hook, safely and idempotently injects `agent-hook.exe` while **strictly preserving all existing third-party and project scripts intact**.
+4. Skips harnesses that are purely global (`GlobalOnly`) or already up-to-date.
+
+### 2.3 Workstation Multi-Project Scanner (`hooks scan-all`)
+To discover all projects and repositories on your machine and align or synchronize hooks across all of them in a single command:
+
+```powershell
+# Scan common developer folders (~/code, ~/projects, ~/dev, C:\code) and sync
+agent-otel-bridge hooks scan-all
+
+# Alias via sync command
+agent-otel-bridge hooks sync --scan
+
+# Preview discovered projects and changes without modifying files
+agent-otel-bridge hooks scan-all --dry-run
+
+# Scan specific directory roots
+agent-otel-bridge hooks scan-all --roots "C:\Users\samue\code" "D:\projects"
+
+# Scan entire local drives (with strict safety exclusions)
+agent-otel-bridge hooks scan-all --all-drives
+```
+
+**Non-Silent Transparency & Safety Guarantees:**
+- **Explicit Execution**: Never runs secretly or without user invocation.
+- **High-Performance Pruning**: Automatically prunes heavy directories (`.git`, `node_modules`, `target`, `vendor`, `.cargo`, `AppData`, `Windows`, `Program Files`) to finish in seconds without freezing.
+- **Real-Time Progress**: Emits live progress for each detected repository and client status (`[ok]`, `[synced]`, `[clean]`), concluding with a clear summary.
+- **Non-Destructive**: Leaves clean repositories untouched (they inherit global hooks automatically) and non-destructively upgrades repositories whose local configs shadow global telemetry.
+
+To verify registration status across global settings and current workspace overrides:
 ```powershell
 agent-otel-bridge hooks status
 ```
@@ -341,3 +386,12 @@ function emitHook(event: string, payload: Record<string, any>): void {
   }
 }
 ```
+
+---
+
+## 5. Adding Support for New Agent Harnesses
+
+Want to add native CLI hook support for a new AI coding harness (e.g. Cursor, Aider, Continue)?
+
+We maintain a modular, declarative `ClientAdapter` registry. See the step-by-step developer guide in [CONTRIBUTING.md](../CONTRIBUTING.md#4-how-to-add-support-for-a-new-agent-client-harness).
+
