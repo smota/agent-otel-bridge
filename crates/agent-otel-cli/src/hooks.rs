@@ -104,7 +104,31 @@ pub fn get_pi_config_path(project: bool) -> Option<PathBuf> {
     }
 }
 
+pub fn is_bridge_command(cmd: &str) -> bool {
+    let lower = cmd.to_ascii_lowercase();
+    lower.contains("agent-hook") || lower.contains("agent-otel-bridge hook")
+}
+
+pub fn format_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
+    let client_arg = match client_tag {
+        Some(tag) => format!(" --client {tag}"),
+        None => String::new(),
+    };
+
+    let bin_str = if binary.contains(' ') && !binary.starts_with('"') && !binary.ends_with('"') {
+        format!("\"{binary}\"")
+    } else {
+        binary.to_string()
+    };
+
+    format!("{bin_str} {event}{client_arg}")
+}
+
 pub fn check_binary_in_path(binary: &str) -> bool {
+    find_binary_in_path(binary).is_some()
+}
+
+pub fn find_binary_in_path(binary: &str) -> Option<PathBuf> {
     if let Ok(path_var) = std::env::var("PATH") {
         let bin_name = if cfg!(windows) && !binary.ends_with(".exe") {
             format!("{binary}.exe")
@@ -113,12 +137,55 @@ pub fn check_binary_in_path(binary: &str) -> bool {
         };
 
         for dir in std::env::split_paths(&path_var) {
-            if dir.join(&bin_name).is_file() {
-                return true;
+            let candidate = dir.join(&bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
             }
         }
     }
-    false
+    None
+}
+
+pub fn resolve_canonical_hook_binary(
+    user_provided: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if let Some(bin) = user_provided {
+        let p = Path::new(bin);
+        if p.is_file() || check_binary_in_path(bin) {
+            return Ok(bin.to_string());
+        }
+        return Ok(bin.to_string());
+    }
+
+    // 1. Check local runtime canonical bin
+    let canonical = crate::local::get_canonical_hook_path();
+    if canonical.is_file() {
+        return Ok(canonical.to_string_lossy().to_string());
+    }
+
+    // 2. Check sibling of current running executable
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let neighbor = dir.join(if cfg!(windows) {
+                "agent-hook.exe"
+            } else {
+                "agent-hook"
+            });
+            if neighbor.is_file() {
+                return Ok(neighbor.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    // 3. Check PATH
+    if let Some(found) = find_binary_in_path("agent-hook") {
+        return Ok(found.to_string_lossy().to_string());
+    }
+
+    Err(
+        "Could not find an installed 'agent-hook' binary.\nRun 'agent-otel-bridge local install' to build and activate the local runtime, or specify --binary <path>."
+            .into(),
+    )
 }
 
 pub fn install_antigravity_hooks(
@@ -141,29 +208,31 @@ pub fn install_antigravity_hooks(
         root = json!({});
     }
 
-    let client_arg = match client_tag {
-        Some(tag) => format!(" --client {tag}"),
-        None => String::new(),
-    };
+    let pre_tool = format_hook_command(binary, "PreToolUse", client_tag);
+    let post_tool = format_hook_command(binary, "PostToolUse", client_tag);
+    let pre_inv = format_hook_command(binary, "PreInvocation", client_tag);
+    let post_inv = format_hook_command(binary, "PostInvocation", client_tag);
+    let stop = format_hook_command(binary, "Stop", client_tag);
 
     let hook_spec = json!({
         "PreToolUse": [
             {
                 "matcher": ".*",
-                "hooks": [{ "command": format!("{binary} PreToolUse{client_arg}"), "timeout": 5, "type": "command" }]
+                "hooks": [{ "command": pre_tool, "timeout": 5, "type": "command" }]
             }
         ],
         "PostToolUse": [
             {
                 "matcher": ".*",
-                "hooks": [{ "command": format!("{binary} PostToolUse{client_arg}"), "timeout": 5, "type": "command" }]
+                "hooks": [{ "command": post_tool, "timeout": 5, "type": "command" }]
             }
         ],
-        "PreInvocation": [{ "command": format!("{binary} PreInvocation{client_arg}"), "timeout": 5, "type": "command" }],
-        "PostInvocation": [{ "command": format!("{binary} PostInvocation{client_arg}"), "timeout": 5, "type": "command" }],
-        "Stop": [{ "command": format!("{binary} Stop{client_arg}"), "timeout": 5, "type": "command" }]
+        "PreInvocation": [{ "command": pre_inv, "timeout": 5, "type": "command" }],
+        "PostInvocation": [{ "command": post_inv, "timeout": 5, "type": "command" }],
+        "Stop": [{ "command": stop, "timeout": 5, "type": "command" }]
     });
 
+    // Update only the agent-otel-bridge section, preserving third-party keys intact
     root["agent-otel-bridge"] = hook_spec;
 
     let serialized = serde_json::to_string_pretty(&root)?;
@@ -212,7 +281,7 @@ pub fn install_standard_hooks(
         root = json!({});
     }
 
-    // Clean up legacy "agent-otel-bridge" key if present
+    // Clean up legacy "agent-otel-bridge" root key if present
     if let Some(obj) = root.as_object_mut() {
         obj.remove("agent-otel-bridge");
     }
@@ -225,11 +294,7 @@ pub fn install_standard_hooks(
 
     let events = ["PreToolUse", "PostToolUse", "Stop"];
     for event in events {
-        let target_cmd = if let Some(c) = client_tag {
-            format!("{binary} {event} --client {c}")
-        } else {
-            format!("{binary} {event}")
-        };
+        let target_cmd = format_hook_command(binary, event, client_tag);
 
         let entry = json!({
             "matcher": ".*",
@@ -243,22 +308,24 @@ pub fn install_standard_hooks(
         });
 
         if let Some(arr) = hooks_obj.get_mut(event).and_then(|v| v.as_array_mut()) {
-            // Check if hook with this binary already exists
-            let already_present = arr.iter().any(|item| {
-                item.get("hooks")
-                    .and_then(|h| h.as_array())
-                    .map(|harr| {
-                        harr.iter().any(|h| {
-                            h.get("command")
-                                .and_then(|c| c.as_str())
-                                .map(|c| c.contains(binary) && c.contains(event))
-                                .unwrap_or(false)
-                        })
-                    })
-                    .unwrap_or(false)
-            });
+            let mut updated = false;
+            for item in arr.iter_mut() {
+                if let Some(harr) = item.get_mut("hooks").and_then(|h| h.as_array_mut()) {
+                    for h in harr.iter_mut() {
+                        let is_bridge = h
+                            .get("command")
+                            .and_then(|c| c.as_str())
+                            .map(is_bridge_command)
+                            .unwrap_or(false);
+                        if is_bridge {
+                            h["command"] = json!(&target_cmd);
+                            updated = true;
+                        }
+                    }
+                }
+            }
 
-            if !already_present {
+            if !updated {
                 arr.push(entry);
             }
         } else {
@@ -271,13 +338,9 @@ pub fn install_standard_hooks(
     Ok(true)
 }
 
-pub fn install_claude_hooks(path: &Path, binary: &str) -> Result<bool, Box<dyn std::error::Error>> {
-    install_standard_hooks(path, binary, None)
-}
-
-pub fn uninstall_claude_hooks(
+pub fn uninstall_standard_hooks(
     path: &Path,
-    binary: &str,
+    _binary: &str,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(false);
@@ -295,19 +358,19 @@ pub fn uninstall_claude_hooks(
             if let Some(arr) = hooks_obj.get_mut(event).and_then(|v| v.as_array_mut()) {
                 let initial_len = arr.len();
                 arr.retain(|item| {
-                    let matches = item
+                    let matches_bridge = item
                         .get("hooks")
                         .and_then(|h| h.as_array())
                         .map(|harr| {
                             harr.iter().any(|h| {
                                 h.get("command")
                                     .and_then(|c| c.as_str())
-                                    .map(|c| c.contains(binary))
+                                    .map(is_bridge_command)
                                     .unwrap_or(false)
                             })
                         })
                         .unwrap_or(false);
-                    !matches
+                    !matches_bridge
                 });
                 if arr.len() != initial_len {
                     changed = true;
@@ -325,25 +388,28 @@ pub fn uninstall_claude_hooks(
     }
 }
 
+pub fn install_claude_hooks(path: &Path, binary: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    install_standard_hooks(path, binary, None)
+}
+
+pub fn uninstall_claude_hooks(
+    path: &Path,
+    binary: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    uninstall_standard_hooks(path, binary)
+}
+
 pub fn run_install(
     client_str: &str,
     project: bool,
     binary_opt: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let target = ClientTarget::from_str(client_str);
-    let binary = binary_opt.unwrap_or("agent-hook");
+    let resolved_binary = resolve_canonical_hook_binary(binary_opt)?;
+    let binary = &resolved_binary;
 
     println!("\n=== Installing agent-otel-bridge hooks ===");
     println!("Target binary: {}", binary);
-
-    if !check_binary_in_path(binary) {
-        println!("  [warn] '{}' was not found in your system PATH.", binary);
-        println!(
-            "         Ensure cargo bin directory is in PATH (e.g., %USERPROFILE%\\.cargo\\bin)."
-        );
-    } else {
-        println!("  [ok] '{}' detected in PATH.", binary);
-    }
 
     let mut installed_any = false;
 
@@ -411,6 +477,23 @@ pub fn run_install(
                     Ok(_) => {
                         println!("  [ok] xAI Grok hooks registered at: {}", path.display());
                         installed_any = true;
+
+                        // Clean up duplicate legacy ~/.grok/hooks.json if present
+                        if !project {
+                            if let Ok(home) =
+                                std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"))
+                            {
+                                let legacy_grok_hooks =
+                                    PathBuf::from(home).join(".grok").join("hooks.json");
+                                if legacy_grok_hooks.is_file() {
+                                    let _ = uninstall_antigravity_hooks(&legacy_grok_hooks);
+                                    println!(
+                                        "  [cleanup] Removed duplicate legacy hooks in: {}",
+                                        legacy_grok_hooks.display()
+                                    );
+                                }
+                            }
+                        }
                     }
                     Err(e) => println!("  [fail] Failed to install Grok hooks: {}", e),
                 }
@@ -438,7 +521,9 @@ pub fn run_install(
     if installed_any {
         println!("\nHooks installation complete!");
     } else {
-        println!("\nNo configuration files were updated. Use --client <antigravity|claude|codex|grok|pi> to force creation.");
+        println!(
+            "\nNo configuration files were updated. Use --client <antigravity|claude|codex|grok|pi> to force creation."
+        );
     }
 
     Ok(())
@@ -482,7 +567,7 @@ pub fn run_uninstall(
 
     if target == ClientTarget::Codex || target == ClientTarget::All {
         if let Some(path) = get_codex_config_path(project) {
-            match uninstall_claude_hooks(&path, binary) {
+            match uninstall_standard_hooks(&path, binary) {
                 Ok(true) => println!("  [ok] OpenAI Codex hooks removed from: {}", path.display()),
                 Ok(false) => println!(
                     "  [info] OpenAI Codex hooks were not configured in: {}",
@@ -495,13 +580,19 @@ pub fn run_uninstall(
 
     if target == ClientTarget::Grok || target == ClientTarget::All {
         if let Some(path) = get_grok_config_path(project) {
-            match uninstall_claude_hooks(&path, binary) {
+            match uninstall_standard_hooks(&path, binary) {
                 Ok(true) => println!("  [ok] xAI Grok hooks removed from: {}", path.display()),
                 Ok(false) => println!(
                     "  [info] xAI Grok hooks were not configured in: {}",
                     path.display()
                 ),
                 Err(e) => println!("  [fail] Error uninstalling Grok hooks: {}", e),
+            }
+        }
+        if !project {
+            if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
+                let legacy_grok_hooks = PathBuf::from(home).join(".grok").join("hooks.json");
+                let _ = uninstall_antigravity_hooks(&legacy_grok_hooks);
             }
         }
     }
@@ -526,6 +617,18 @@ pub fn run_uninstall(
 pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== agent-otel-bridge hooks status ===");
 
+    let canonical_hook = crate::local::get_canonical_hook_path();
+    let local_installed = canonical_hook.is_file();
+    println!(
+        "Canonical local agent-hook: {}",
+        if local_installed {
+            format!("[ok] present ({})", canonical_hook.display())
+        } else {
+            "[info] not staged in local runtime bin/ (run 'agent-otel-bridge local install')"
+                .to_string()
+        }
+    );
+
     let hook_in_path = check_binary_in_path("agent-hook");
     let bridge_in_path = check_binary_in_path("agent-otel-bridge");
 
@@ -535,7 +638,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
         if hook_in_path {
             "[ok] found"
         } else {
-            "[warn] not found"
+            "[info] not in PATH (not required when absolute path is configured)"
         }
     );
     println!(
@@ -543,7 +646,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
         if bridge_in_path {
             "[ok] found"
         } else {
-            "[warn] not found"
+            "[info] not in PATH"
         }
     );
 
@@ -552,7 +655,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(p) = get_antigravity_config_path(false) {
         let configured = p.exists()
             && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge"))
+                .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
                 .unwrap_or(false);
         println!(
             "  Google Antigravity: {}",
@@ -584,7 +687,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(p) = get_codex_config_path(false) {
         let configured = p.exists()
             && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge"))
+                .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
                 .unwrap_or(false);
         println!(
             "  OpenAI Codex:       {}",
@@ -600,7 +703,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(p) = get_grok_config_path(false) {
         let configured = p.exists()
             && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge"))
+                .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
                 .unwrap_or(false);
         println!(
             "  xAI Grok:           {}",
@@ -616,7 +719,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(p) = get_pi_config_path(false) {
         let configured = p.exists()
             && fs::read_to_string(&p)
-                .map(|s| s.contains("agent-otel-bridge"))
+                .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
                 .unwrap_or(false);
         println!(
             "  Pi (pi.dev):        {}",
@@ -637,24 +740,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_antigravity_hooks_install_and_uninstall() {
+    fn test_format_hook_command_with_and_without_spaces() {
+        let cmd1 = format_hook_command("C:\\Tools\\agent-hook.exe", "PreToolUse", None);
+        assert_eq!(cmd1, "C:\\Tools\\agent-hook.exe PreToolUse");
+
+        let cmd2 = format_hook_command(
+            "C:\\Program Files\\Bridge\\agent-hook.exe",
+            "PreToolUse",
+            Some("claude"),
+        );
+        assert_eq!(
+            cmd2,
+            "\"C:\\Program Files\\Bridge\\agent-hook.exe\" PreToolUse --client claude"
+        );
+    }
+
+    #[test]
+    fn test_antigravity_hooks_install_and_uninstall_preserves_third_party() {
         let temp_dir = std::env::temp_dir().join(format!("agy_test_{}", std::process::id()));
         let hooks_path = temp_dir.join("hooks.json");
 
+        // Seed with third-party hook
+        fs::create_dir_all(&temp_dir).unwrap();
+        let initial_json = json!({
+            "herdr": {
+                "PreInvocation": [{ "command": "powershell herdr.ps1", "timeout": 10 }]
+            }
+        });
+        fs::write(&hooks_path, serde_json::to_string(&initial_json).unwrap()).unwrap();
+
         // Install
-        let res = install_antigravity_hooks(&hooks_path, "agent-hook", None);
+        let res = install_antigravity_hooks(&hooks_path, "C:\\Bridge\\agent-hook.exe", None);
         assert!(res.is_ok());
         assert!(hooks_path.exists());
 
         let content = fs::read_to_string(&hooks_path).unwrap();
-        assert!(content.contains("agent-otel-bridge"));
-        assert!(content.contains("agent-hook PostToolUse"));
-
         let parsed: Value = serde_json::from_str(&content).unwrap();
+
+        // Check third-party hook is preserved
+        assert!(parsed.get("herdr").is_some());
+        assert_eq!(
+            parsed["herdr"]["PreInvocation"][0]["command"],
+            "powershell herdr.ps1"
+        );
+
+        // Check bridge hooks
         let bridge = &parsed["agent-otel-bridge"];
-        assert!(bridge["PreToolUse"][0]["matcher"].is_string());
-        assert!(bridge["PostToolUse"][0]["matcher"].is_string());
-        assert!(bridge["Stop"][0]["command"].is_string());
+        assert_eq!(
+            bridge["PreToolUse"][0]["hooks"][0]["command"],
+            "C:\\Bridge\\agent-hook.exe PreToolUse"
+        );
 
         // Uninstall
         let uninst = uninstall_antigravity_hooks(&hooks_path);
@@ -662,42 +797,74 @@ mod tests {
         assert!(uninst.unwrap());
 
         let after_content = fs::read_to_string(&hooks_path).unwrap();
-        assert!(!after_content.contains("agent-otel-bridge"));
+        let after_parsed: Value = serde_json::from_str(&after_content).unwrap();
+        assert!(after_parsed.get("agent-otel-bridge").is_none());
+        assert!(after_parsed.get("herdr").is_some());
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
-    fn test_claude_hooks_install_and_uninstall() {
+    fn test_claude_hooks_preserves_third_party_and_idempotent() {
         let temp_dir = std::env::temp_dir().join(format!("claude_test_{}", std::process::id()));
         let settings_path = temp_dir.join("settings.json");
 
+        // Seed with third-party hook
+        fs::create_dir_all(&temp_dir).unwrap();
+        let initial_json = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash",
+                        "hooks": [{ "command": "rtk hook claude", "type": "command" }]
+                    }
+                ]
+            }
+        });
+        fs::write(
+            &settings_path,
+            serde_json::to_string(&initial_json).unwrap(),
+        )
+        .unwrap();
+
         // Install
-        let res = install_claude_hooks(&settings_path, "agent-hook");
+        let res = install_claude_hooks(&settings_path, "C:\\Bridge\\agent-hook.exe");
         assert!(res.is_ok());
-        assert!(settings_path.exists());
 
         let content = fs::read_to_string(&settings_path).unwrap();
-        assert!(content.contains("hooks"));
-        assert!(content.contains("agent-hook PreToolUse"));
-        assert!(content.contains("agent-hook PostToolUse"));
-        assert!(content.contains("agent-hook Stop"));
+        let parsed: Value = serde_json::from_str(&content).unwrap();
+        let pre_tool = parsed["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre_tool.len(), 2);
+        assert_eq!(pre_tool[0]["hooks"][0]["command"], "rtk hook claude");
+        assert_eq!(
+            pre_tool[1]["hooks"][0]["command"],
+            "C:\\Bridge\\agent-hook.exe PreToolUse"
+        );
 
-        // Idempotent check: installing again shouldn't duplicate
-        let res2 = install_claude_hooks(&settings_path, "agent-hook");
+        // Re-install (idempotent update check)
+        let res2 = install_claude_hooks(&settings_path, "C:\\NewPath\\agent-hook.exe");
         assert!(res2.is_ok());
+
         let content2 = fs::read_to_string(&settings_path).unwrap();
-        let parsed: Value = serde_json::from_str(&content2).unwrap();
-        let post_tool = &parsed["hooks"]["PostToolUse"].as_array().unwrap();
-        assert_eq!(post_tool.len(), 1);
+        let parsed2: Value = serde_json::from_str(&content2).unwrap();
+        let pre_tool2 = parsed2["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre_tool2.len(), 2);
+        assert_eq!(pre_tool2[0]["hooks"][0]["command"], "rtk hook claude");
+        assert_eq!(
+            pre_tool2[1]["hooks"][0]["command"],
+            "C:\\NewPath\\agent-hook.exe PreToolUse"
+        );
 
         // Uninstall
-        let uninst = uninstall_claude_hooks(&settings_path, "agent-hook");
+        let uninst = uninstall_claude_hooks(&settings_path, "C:\\NewPath\\agent-hook.exe");
         assert!(uninst.is_ok());
         assert!(uninst.unwrap());
 
         let after_content = fs::read_to_string(&settings_path).unwrap();
-        assert!(!after_content.contains("agent-hook"));
+        let after_parsed: Value = serde_json::from_str(&after_content).unwrap();
+        let pre_tool_after = after_parsed["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre_tool_after.len(), 1);
+        assert_eq!(pre_tool_after[0]["hooks"][0]["command"], "rtk hook claude");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

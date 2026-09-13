@@ -10,6 +10,7 @@ mod doctor;
 mod emit_quota;
 mod guardrails;
 mod hooks;
+mod local;
 mod stop;
 
 #[derive(Parser, Debug)]
@@ -44,6 +45,11 @@ enum Commands {
     Start,
     /// Gracefully stops the running background daemon
     Stop,
+    /// Manage the isolated local runtime installation and development lifecycle
+    Local {
+        #[command(subcommand)]
+        action: LocalAction,
+    },
     /// Manage agent lifecycle hooks for supported clients (Google Antigravity, Claude Code, OpenAI Codex, xAI Grok, Pi [pi.dev])
     Hooks {
         #[command(subcommand)]
@@ -88,6 +94,42 @@ enum Commands {
         /// If set, automatically fixes formatting violations
         #[arg(long)]
         fix: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum LocalAction {
+    /// Builds and installs candidate build into isolated local runtime
+    Install {
+        /// If set, activates this build as the current running version in bin/
+        #[arg(long, default_value_t = true)]
+        activate: bool,
+
+        /// If set, updates agent lifecycle hooks to point to canonical bin/
+        #[arg(long, default_value_t = true)]
+        update_hooks: bool,
+
+        /// Optional path to pre-built target directory containing release binaries
+        #[arg(long)]
+        from_build: Option<std::path::PathBuf>,
+    },
+    /// Inspects the active local installation, binaries integrity, and hook registrations
+    Status,
+    /// Rolls back immediately to the previous installed version
+    Rollback {
+        /// If set, updates agent lifecycle hooks after rollback
+        #[arg(long, default_value_t = true)]
+        update_hooks: bool,
+    },
+    /// Uninstalls local runtime and optionally removes hooks
+    Uninstall {
+        /// If set, removes entire versions history and data directory
+        #[arg(long)]
+        purge: bool,
+
+        /// If set, removes hooks from supported agents
+        #[arg(long, default_value_t = true)]
+        remove_hooks: bool,
     },
 }
 
@@ -171,6 +213,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Start => run_start(),
         Commands::Stop => stop::run(),
+        Commands::Local { action } => match action {
+            LocalAction::Install {
+                activate,
+                update_hooks,
+                from_build,
+            } => {
+                local::install_candidate(activate, update_hooks, from_build.as_deref())?;
+                Ok(())
+            }
+            LocalAction::Status => local::run_status(),
+            LocalAction::Rollback { update_hooks } => local::rollback_candidate(update_hooks),
+            LocalAction::Uninstall {
+                purge,
+                remove_hooks,
+            } => local::uninstall_local(purge, remove_hooks),
+        },
         Commands::Hooks { action } => match action {
             HookAction::Install {
                 client,

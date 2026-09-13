@@ -14,7 +14,7 @@ use agent_otel_ipc::client::send_fire_and_forget;
 use agent_otel_ipc::frame::MsgType;
 
 const MAX_STDIN_BYTES: usize = 256 * 1024;
-const WATCHDOG_MS: u64 = 25;
+const DEFAULT_WATCHDOG_MS: u64 = 3;
 
 fn main() {
     let tag = resolve_tag();
@@ -84,8 +84,13 @@ fn read_stdin_capped(max: usize) -> Vec<u8> {
 }
 
 fn spawn_watchdog(done: Arc<AtomicBool>, tag: u8) {
+    let watchdog_ms = std::env::var("AGENT_OTEL_WATCHDOG_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_WATCHDOG_MS);
+
     thread::spawn(move || {
-        thread::sleep(Duration::from_millis(WATCHDOG_MS));
+        thread::sleep(Duration::from_millis(watchdog_ms));
         if !done.load(Ordering::Acquire) {
             finish_ok(tag);
         }

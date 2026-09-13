@@ -263,6 +263,15 @@ pub fn try_send(_msg_type: MsgType, _payload: &[u8]) -> Result<(), ()> {
 pub fn spawn_daemon_detached() {}
 
 pub fn find_bridge_binary() -> Option<std::path::PathBuf> {
+    // 1. Explicit override via AGENT_OTEL_BRIDGE_BIN
+    if let Ok(explicit) = std::env::var("AGENT_OTEL_BRIDGE_BIN") {
+        let p = std::path::PathBuf::from(explicit);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+
+    // 2. Sibling in the same directory as current running executable
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let neighbor = dir.join(if cfg!(windows) {
@@ -276,12 +285,68 @@ pub fn find_bridge_binary() -> Option<std::path::PathBuf> {
         }
     }
 
+    // 3. Isolated canonical local runtime installation directory
+    let bin_name = if cfg!(windows) {
+        "agent-otel-bridge.exe"
+    } else {
+        "agent-otel-bridge"
+    };
+
+    if let Ok(home) = std::env::var("AGENT_OTEL_HOME") {
+        let candidate = std::path::PathBuf::from(home).join("bin").join(bin_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let candidate = std::path::PathBuf::from(local_app_data)
+                .join("agent-otel-bridge")
+                .join("bin")
+                .join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        } else if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            let candidate = std::path::PathBuf::from(user_profile)
+                .join("AppData")
+                .join("Local")
+                .join("agent-otel-bridge")
+                .join("bin")
+                .join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
+            let candidate = std::path::PathBuf::from(xdg_data)
+                .join("agent-otel-bridge")
+                .join("bin")
+                .join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        } else if let Ok(home) = std::env::var("HOME") {
+            let candidate = std::path::PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("agent-otel-bridge")
+                .join("bin")
+                .join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 4. System PATH search
     if let Ok(path_var) = std::env::var("PATH") {
-        let bin_name = if cfg!(windows) {
-            "agent-otel-bridge.exe"
-        } else {
-            "agent-otel-bridge"
-        };
         for dir in std::env::split_paths(&path_var) {
             let candidate = dir.join(bin_name);
             if candidate.is_file() {
@@ -290,13 +355,25 @@ pub fn find_bridge_binary() -> Option<std::path::PathBuf> {
         }
     }
 
-    for rel in &[
-        "target/release/agent-otel-bridge.exe",
-        "target/debug/agent-otel-bridge.exe",
-    ] {
-        let p = std::path::PathBuf::from(rel);
-        if p.is_file() {
-            return Some(p);
+    // 5. Explicit developer mode ONLY (never in production)
+    let dev_mode = std::env::var("AGENT_OTEL_DEV_MODE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if dev_mode {
+        if let Ok(dev_dir) = std::env::var("AGENT_OTEL_DEV_DIR") {
+            for rel in &["target/release", "target/debug"] {
+                let candidate = std::path::PathBuf::from(&dev_dir).join(rel).join(bin_name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+        for rel in &["target/release", "target/debug"] {
+            let candidate = std::path::PathBuf::from(rel).join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
 
