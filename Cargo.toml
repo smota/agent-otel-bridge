@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Samuel Mota <samuel@movetheneedle.info>"]
 license = "Apache-2.0"
@@ -21,11 +21,11 @@ readme = "README.md"
 description = "High-Performance OpenTelemetry Bridge for AI CLI Agent Harnesses"
 
 [workspace.dependencies]
-agent-otel-core = { version = "0.4.0", path = "crates/agent-otel-core" }
-agent-otel-ipc = { version = "0.4.0", path = "crates/agent-otel-ipc", default-features = false }
-agent-otel-client = { version = "0.4.0", path = "crates/agent-otel-client" }
-agent-otel-daemon = { version = "0.4.0", path = "crates/agent-otel-daemon" }
-agent-otel-bridge = { version = "0.4.0", path = "crates/agent-otel-cli" }
+agent-otel-core = { version = "0.5.0", path = "crates/agent-otel-core" }
+agent-otel-ipc = { version = "0.5.0", path = "crates/agent-otel-ipc", default-features = false }
+agent-otel-client = { version = "0.5.0", path = "crates/agent-otel-client" }
+agent-otel-daemon = { version = "0.5.0", path = "crates/agent-otel-daemon" }
+agent-otel-bridge = { version = "0.5.0", path = "crates/agent-otel-cli" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 prost = "0.14"

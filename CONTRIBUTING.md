@@ -31,6 +31,13 @@ gitGraph
     checkout main
     merge feat/v0.4-cross-platform id: "PR #14 Merge"
     commit id: "v0.4.0" tag: "v0.4.0"
+    branch feat/v0.5-platform-architecture
+    checkout feat/v0.5-platform-architecture
+    commit id: "platform contracts"
+    commit id: "3-byte wire protocol"
+    checkout main
+    merge feat/v0.5-platform-architecture id: "PR #15 Merge"
+    commit id: "v0.5.0" tag: "v0.5.0"
 ```
 
 ### Branch Roles
