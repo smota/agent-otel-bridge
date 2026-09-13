@@ -40,6 +40,46 @@ impl ExecutionMode {
     }
 }
 
+/// 3-byte binary wire framing prefix:
+/// - Byte 0: `event_id` (`u8`)
+/// - Bytes 1..2: `client_id` (`u16`, Little-Endian)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WireHeader {
+    pub client_id: u16,
+    pub event_id: u8,
+}
+
+impl WireHeader {
+    pub const LEN: usize = 3;
+
+    #[inline]
+    pub fn new(client_id: u16, event_id: u8) -> Self {
+        Self {
+            client_id,
+            event_id,
+        }
+    }
+
+    #[inline]
+    pub fn encode(&self) -> [u8; Self::LEN] {
+        let id_bytes = self.client_id.to_le_bytes();
+        [self.event_id, id_bytes[0], id_bytes[1]]
+    }
+
+    #[inline]
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < Self::LEN {
+            return None;
+        }
+        let event_id = bytes[0];
+        let client_id = u16::from_le_bytes([bytes[1], bytes[2]]);
+        Some(Self {
+            client_id,
+            event_id,
+        })
+    }
+}
+
 impl HookEvent {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -52,8 +92,8 @@ impl HookEvent {
         }
     }
 
-    pub fn from_tag(tag: u8) -> Self {
-        match tag & 0x0F {
+    pub fn from_wire(event_id: u8) -> Self {
+        match event_id {
             1 => HookEvent::PreInvocation,
             2 => HookEvent::PostInvocation,
             3 => HookEvent::PreToolUse,
@@ -63,8 +103,18 @@ impl HookEvent {
         }
     }
 
-    pub fn to_tag(&self) -> u8 {
+    pub fn to_wire(&self) -> u8 {
         *self as u8
+    }
+
+    #[deprecated(note = "Use from_wire instead")]
+    pub fn from_tag(tag: u8) -> Self {
+        Self::from_wire(tag)
+    }
+
+    #[deprecated(note = "Use to_wire instead")]
+    pub fn to_tag(&self) -> u8 {
+        self.to_wire()
     }
 
     pub fn from_str_name(s: &str) -> Self {
@@ -90,8 +140,8 @@ pub enum ClientKind {
 }
 
 impl ClientKind {
-    pub fn from_tag(tag: u8) -> Self {
-        match tag >> 4 {
+    pub fn from_wire(client_id: u16) -> Self {
+        match client_id {
             1 => ClientKind::Antigravity,
             2 => ClientKind::ClaudeCode,
             3 => ClientKind::Codex,
@@ -101,7 +151,7 @@ impl ClientKind {
         }
     }
 
-    pub fn to_tag(&self) -> u8 {
+    pub fn to_wire(&self) -> u16 {
         match self {
             ClientKind::Unspecified => 0,
             ClientKind::Antigravity => 1,
@@ -110,6 +160,16 @@ impl ClientKind {
             ClientKind::Grok => 4,
             ClientKind::Pi => 5,
         }
+    }
+
+    #[deprecated(note = "Use from_wire instead")]
+    pub fn from_tag(tag: u8) -> Self {
+        Self::from_wire(tag as u16)
+    }
+
+    #[deprecated(note = "Use to_wire instead")]
+    pub fn to_tag(&self) -> u8 {
+        self.to_wire() as u8
     }
 
     pub fn as_str(&self) -> Option<&'static str> {

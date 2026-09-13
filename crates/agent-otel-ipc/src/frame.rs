@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+pub use agent_otel_core::model::WireHeader;
+
 pub const MAGIC: [u8; 2] = [0x41, 0x47]; // "AG"
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const HEADER_LEN: usize = 8;

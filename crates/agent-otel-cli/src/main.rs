@@ -402,9 +402,10 @@ fn run_start() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_fast_hook(event_str: &str) {
+    use agent_otel_ipc::frame::WireHeader;
     use std::io::{self, Read, Write};
 
-    let tag = match event_str {
+    let event_id = match event_str {
         "PreInvocation" | "pre_invocation" => 1,
         "PostInvocation" | "post_invocation" => 2,
         "PreToolUse" | "pre_tool_use" => 3,
@@ -413,12 +414,14 @@ fn run_fast_hook(event_str: &str) {
         s => s.parse::<u8>().unwrap_or(255),
     };
 
+    let header = WireHeader::new(1, event_id);
+
     let mut buf = Vec::with_capacity(4096);
     let mut stdin = io::stdin().take(256 * 1024);
     let _ = stdin.read_to_end(&mut buf);
 
-    let mut payload = Vec::with_capacity(1 + buf.len());
-    payload.push(tag);
+    let mut payload = Vec::with_capacity(WireHeader::LEN + buf.len());
+    payload.extend_from_slice(&header.encode());
     payload.extend_from_slice(&buf);
 
     agent_otel_ipc::client::send_fire_and_forget(
@@ -427,7 +430,7 @@ fn run_fast_hook(event_str: &str) {
     );
 
     let mut stdout = io::stdout();
-    if tag == 3 {
+    if event_id == 3 {
         let _ = stdout.write_all(b"{\"decision\":\"allow\"}");
     } else {
         let _ = stdout.write_all(b"{}");

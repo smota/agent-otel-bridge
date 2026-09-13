@@ -11,31 +11,31 @@ use std::thread;
 use std::time::Duration;
 
 use agent_otel_ipc::client::send_fire_and_forget;
-use agent_otel_ipc::frame::MsgType;
+use agent_otel_ipc::frame::{MsgType, WireHeader};
 
 const MAX_STDIN_BYTES: usize = 256 * 1024;
 const DEFAULT_WATCHDOG_MS: u64 = 3;
 
 fn main() {
-    let tag = resolve_tag();
+    let header = resolve_header();
     let done = Arc::new(AtomicBool::new(false));
-    spawn_watchdog(Arc::clone(&done), tag);
+    spawn_watchdog(Arc::clone(&done), header);
 
     let stdin_bytes = read_stdin_capped(MAX_STDIN_BYTES);
 
-    let mut payload = Vec::with_capacity(1 + stdin_bytes.len());
-    payload.push(tag);
+    let mut payload = Vec::with_capacity(WireHeader::LEN + stdin_bytes.len());
+    payload.extend_from_slice(&header.encode());
     payload.extend_from_slice(&stdin_bytes);
 
     send_fire_and_forget(MsgType::HookPayload, &payload);
 
     done.store(true, Ordering::Release);
-    finish_ok(tag);
+    finish_ok(header);
 }
 
 struct ClientMapping {
     aliases: &'static [&'static str],
-    wire_id: u8,
+    wire_id: u16,
     allow_pre_tool: bool,
 }
 
@@ -67,7 +67,7 @@ const CLIENT_MAPPINGS: &[ClientMapping] = &[
     },
 ];
 
-fn resolve_client_id(arg: &str) -> u8 {
+fn resolve_client_id(arg: &str) -> u16 {
     let lower = arg.to_ascii_lowercase();
     for m in CLIENT_MAPPINGS {
         if m.aliases.contains(&lower.as_str()) {
@@ -77,9 +77,9 @@ fn resolve_client_id(arg: &str) -> u8 {
     0
 }
 
-fn resolve_tag() -> u8 {
+fn resolve_header() -> WireHeader {
     let mut event_id = 0u8;
-    let mut client_id = 0u8;
+    let mut client_id = 0u16;
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -110,7 +110,7 @@ fn resolve_tag() -> u8 {
         event_id = 255;
     }
 
-    (client_id << 4) | (event_id & 0x0F)
+    WireHeader::new(client_id, event_id)
 }
 
 fn read_stdin_capped(max: usize) -> Vec<u8> {
@@ -120,7 +120,7 @@ fn read_stdin_capped(max: usize) -> Vec<u8> {
     buf
 }
 
-fn spawn_watchdog(done: Arc<AtomicBool>, tag: u8) {
+fn spawn_watchdog(done: Arc<AtomicBool>, header: WireHeader) {
     let watchdog_ms = std::env::var("AGENT_OTEL_WATCHDOG_MS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
@@ -129,22 +129,20 @@ fn spawn_watchdog(done: Arc<AtomicBool>, tag: u8) {
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(watchdog_ms));
         if !done.load(Ordering::Acquire) {
-            finish_ok(tag);
+            finish_ok(header);
         }
     });
 }
 
-fn finish_ok(tag: u8) -> ! {
+fn finish_ok(header: WireHeader) -> ! {
     let mut stdout = io::stdout();
-    let client_id = tag >> 4;
-    let event_id = tag & 0x0F;
     let allow_pre_tool = CLIENT_MAPPINGS
         .iter()
-        .find(|m| m.wire_id == client_id)
+        .find(|m| m.wire_id == header.client_id)
         .map(|m| m.allow_pre_tool)
         .unwrap_or(true);
 
-    if event_id == 3 && allow_pre_tool {
+    if header.event_id == 3 && allow_pre_tool {
         let _ = stdout.write_all(b"{\"decision\":\"allow\"}");
     } else {
         let _ = stdout.write_all(b"{}");

@@ -75,13 +75,14 @@ fn test_lookup_platform_by_name_and_alias() {
 
 #[test]
 fn test_lookup_platform_by_wire_id() {
-    for expected_id in 1..=5 {
+    for expected_id in 1..=5u16 {
         let p = find_platform_by_wire_id(expected_id);
         assert!(p.is_some());
         assert_eq!(p.unwrap().wire_client_id(), expected_id);
     }
     assert!(find_platform_by_wire_id(0).is_none());
-    assert!(find_platform_by_wire_id(15).is_none());
+    assert!(find_platform_by_wire_id(1000).is_none());
+    assert!(find_platform_by_wire_id(65535).is_none());
 }
 
 #[test]
@@ -97,7 +98,7 @@ fn test_static_validator_detects_malformed_and_colliding_descriptors() {
         fn aliases(&self) -> &'static [&'static str] {
             &[]
         }
-        fn wire_client_id(&self) -> u8 {
+        fn wire_client_id(&self) -> u16 {
             10
         }
     }
@@ -105,17 +106,17 @@ fn test_static_validator_detects_malformed_and_colliding_descriptors() {
     struct BadWireIdPlatform;
     impl PlatformDescriptor for BadWireIdPlatform {
         fn id(&self) -> &'static str {
-            "hermes-overflow"
+            "hermes-unassigned"
         }
         fn display_name(&self) -> &'static str {
-            "Hermes Overflow"
+            "Hermes Unassigned"
         }
         fn aliases(&self) -> &'static [&'static str] {
             &[]
         }
-        fn wire_client_id(&self) -> u8 {
-            16
-        } // Exceeds 4-bit limit!
+        fn wire_client_id(&self) -> u16 {
+            0
+        } // 0 is reserved for Unspecified!
     }
 
     struct WireCollisionPlatform;
@@ -129,7 +130,7 @@ fn test_static_validator_detects_malformed_and_colliding_descriptors() {
         fn aliases(&self) -> &'static [&'static str] {
             &[]
         }
-        fn wire_client_id(&self) -> u8 {
+        fn wire_client_id(&self) -> u16 {
             1
         } // Collides with Antigravity
     }
@@ -144,9 +145,7 @@ fn test_static_validator_detects_malformed_and_colliding_descriptors() {
     let result = PlatformStaticValidator::validate_descriptors(test_set);
     assert!(result.is_err());
     let errs = result.err().unwrap();
-    assert!(errs
-        .iter()
-        .any(|e| e.contains("outside valid 1..=15 range")));
+    assert!(errs.iter().any(|e| e.contains("reserved for Unspecified")));
     assert!(errs.iter().any(|e| e.contains("Wire client ID collision")));
 }
 
@@ -200,8 +199,8 @@ fn test_mock_hermes_platform_conformance() {
         fn aliases(&self) -> &'static [&'static str] {
             &["nous-hermes", "hermes-cli"]
         }
-        fn wire_client_id(&self) -> u8 {
-            6
+        fn wire_client_id(&self) -> u16 {
+            1000 // Tests arbitrary high 16-bit wire ID
         }
         fn pre_tool_response(&self) -> HookResponse {
             HookResponse::AllowJson

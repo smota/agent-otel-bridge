@@ -21,7 +21,7 @@ impl PlatformDescriptor for GrokQuotaProvider {
     fn aliases(&self) -> &'static [&'static str] {
         GrokDescriptor.aliases()
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         GrokDescriptor.wire_client_id()
     }
     fn pre_tool_response(&self) -> agent_otel_core::platform::HookResponse {

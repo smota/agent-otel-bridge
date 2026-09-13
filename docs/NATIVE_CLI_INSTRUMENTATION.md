@@ -40,8 +40,8 @@ sequenceDiagram
     Harness->>Hook: Invokes lifecycle hook via stdin (ProtoJSON payload)
     activate Hook
     Hook->>Watchdog: Spawns fail-open timer thread (3ms deadline)
-    Hook->>Hook: Resolves 1-byte bitwise tag: (client_id << 4) | (event_id & 0x0F)
-    Hook->>Pipe: Dispatches [tag | raw_stdin] via Overlapped Non-Blocking I/O
+    Hook->>Hook: Resolves 3-byte wire header: [event_id: u8 | client_id: u16]
+    Hook->>Pipe: Dispatches [header (3B) | raw_stdin] via Overlapped Non-Blocking I/O
     Hook->>Watchdog: Sets atomic done flag
     Hook->>Harness: Flushes stdout {"decision":"allow"} and exits code 0
     deactivate Hook
@@ -58,22 +58,14 @@ sequenceDiagram
 
 ## 3. Seven Architectural Pillars
 
-### 3.1 ⚡ 1-Byte Bitwise Tag Protocol
-To eliminate serialization and JSON deserialization on the client hot path, `agent-hook` encodes both the agent harness identity and the lifecycle hook event into **a single byte**:
+### 3.1 ⚡ 3-Byte Wire Framing Protocol (`WireHeader`)
+To eliminate serialization and JSON deserialization overhead on the client hot path while offering vast expansion headroom, `agent-hook` encodes the agent harness identity and the lifecycle hook event into a compact **3-byte binary header**:
 
-$$\text{Tag Byte} = (\text{client\_id} \ll 4) \mid (\text{event\_id} \ \& \ 0\text{x}0\text{F})$$
+```
+[ Byte 0: event_id (u8) ] [ Byte 1: client_id_lo (u8) ] [ Byte 2: client_id_hi (u8) ]
+```
 
-#### Client Identity Nibble (High 4 bits: `tag >> 4`)
-| Client ID | Agent Harness | Configuration Location |
-|:---:|:---|:---|
-| `0` | Unknown / Generic Agent | Custom stdin / CLI flag |
-| `1` | **Google Antigravity (`agy`)** | `~/.gemini/config/hooks.json` |
-| `2` | **Anthropic Claude Code** | `~/.claude/settings.json` |
-| `3` | **OpenAI Codex CLI** | `~/.codex/hooks.json` |
-| `4` | **xAI Grok CLI** | `~/.grok/hooks/agent-otel.json` |
-| `5` | **Pi (`pi.dev`)** | `~/.pi/hooks.json` |
-
-#### Event Type Nibble (Low 4 bits: `tag & 0x0F`)
+#### Event Type Byte (`header[0]`: `event_id`)
 | Event ID | Lifecycle Hook Event | Description |
 |:---:|:---|:---|
 | `1` | `PreInvocation` | Turn starts before prompt execution |
@@ -81,8 +73,20 @@ $$\text{Tag Byte} = (\text{client\_id} \ll 4) \mid (\text{event\_id} \ \& \ 0\te
 | `3` | `PreToolUse` | Approval gate before executing a tool |
 | `4` | `PostToolUse` | Tool execution completed with output |
 | `5` | `Stop` | Session completion or quiescence |
+| `255` | `Unknown` | Generic or unrecognized event |
 
-The client simply allocates a vector with `1 + stdin.len()`, writes the tag byte at position 0, appends the raw stdin bytes, and writes to the IPC channel. **Zero JSON parsing is performed on the synchronous path.**
+#### Client Identity (`header[1..3]`: `client_id` as `u16` Little-Endian, `1..=65535`)
+| Client ID | Agent Harness | Configuration Location |
+|:---:|:---|:---|
+| `0` | Unspecified / Generic Agent | Custom stdin / CLI flag |
+| `1` | **Google Antigravity (`agy`)** | `~/.gemini/config/hooks.json` |
+| `2` | **Anthropic Claude Code** | `~/.claude/settings.json` |
+| `3` | **OpenAI Codex CLI** | `~/.codex/hooks.json` |
+| `4` | **xAI Grok CLI** | `~/.grok/hooks/agent-otel.json` |
+| `5` | **Pi (`pi.dev`)** | `~/.pi/hooks.json` |
+| `6..=65535` | Available Platform Headroom | Community & Enterprise Additions (e.g. Hermes) |
+
+The client simply allocates a vector with `WireHeader::LEN + stdin.len()`, writes the 3-byte header at position 0..3, appends the raw stdin bytes, and writes to the IPC channel. **Zero JSON parsing is performed on the synchronous path.**
 
 ---
 
@@ -91,16 +95,16 @@ The client must **never block, freeze, or break** an AI developer pairing sessio
 
 At process start, `agent-hook` spawns a dedicated OS thread with a strict deadline:
 ```rust
-fn spawn_watchdog(done: Arc<AtomicBool>, tag: u8) {
+fn spawn_watchdog(done: Arc<AtomicBool>, header: WireHeader) {
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(WATCHDOG_MS));
         if !done.load(Ordering::Acquire) {
-            finish_ok(tag);
+            finish_ok(header);
         }
     });
 }
 ```
-If the pipe I/O or stdin read does not complete within the deadline, the watchdog thread triggers `finish_ok(tag)`, immediately emitting the required approval JSON to stdout and exiting with `code 0`.
+If the pipe I/O or stdin read does not complete within the deadline, the watchdog thread triggers `finish_ok(header)`, immediately emitting the required approval JSON to stdout and exiting with `code 0`.
 
 ---
 
@@ -114,7 +118,7 @@ Different agent harnesses expect distinct handshake responses from hook commands
   ```json
   {}
   ```
-Because `finish_ok` inspects the event byte (`tag & 0x0F`), the proper handshake response is guaranteed even if the watchdog terminates early.
+Because `finish_ok` inspects `header.event_id`, the proper handshake response is guaranteed even if the watchdog terminates early.
 
 ---
 

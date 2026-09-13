@@ -2,7 +2,9 @@
 
 `agent-otel-bridge` is designed to provide zero-overhead OpenTelemetry observability across modern AI CLI agent harnesses and custom developer agent loops.
 
-> 💡 **Architectural Guide**: For an in-depth comparison of `agent-otel-bridge` vs. native harness telemetry (including multi-agent unification, tokenomics, and W3C distributed tracing), see [Why agent-otel-bridge vs. Native Harness Telemetry](WHY_AGENT_OTEL_BRIDGE.md).
+> 💡 **Architectural Guides**:
+> - For an in-depth comparison of `agent-otel-bridge` vs. native harness telemetry (including multi-agent unification, tokenomics, and W3C distributed tracing), see [Why agent-otel-bridge vs. Native Harness Telemetry](WHY_AGENT_OTEL_BRIDGE.md).
+> - For architectural constraints, fail-open trade-offs, and project shadowing solutions, see the [System Limitations & Mitigations Guide](LIMITATIONS.md).
 
 ---
 
@@ -399,12 +401,12 @@ function emitHook(event: string, payload: Record<string, any>): void {
 graph TB
     subgraph Core["crates/agent-otel-core (Zero Overhead)"]
         PD["PlatformDescriptor Trait<br/>(id, aliases, wire_client_id, pre_tool_response)"]
-        SV["PlatformStaticValidator<br/>(ID format, Wire ID bounds 1..=15, Collisions)"]
-        DV["PlatformDynamicValidator<br/>(Tag roundtrip, Hook JSON, Quota invariants)"]
+        SV["PlatformStaticValidator<br/>(ID format, Wire ID bounds 1..=65535, Collisions)"]
+        DV["PlatformDynamicValidator<br/>(WireHeader roundtrip, Hook JSON, Quota invariants)"]
     end
 
     subgraph Client["crates/agent-otel-client (< 150 KB)"]
-        CM["CLIENT_MAPPINGS (Compile-time table)<br/>Zero-alloc wire tag dispatch & PreToolUse response"]
+        CM["CLIENT_MAPPINGS (Compile-time table)<br/>Zero-alloc 3-byte header dispatch & PreToolUse response"]
     end
 
     subgraph Daemon["crates/agent-otel-daemon (Dynamic)"]
@@ -437,7 +439,7 @@ To integrate any AI coding agent harness, three decoupled contracts are implemen
 
 | Layer | Contract | Responsibility |
 |---|---|---|
-| **Core** (`agent-otel-core`) | `PlatformDescriptor` | Primary ID, aliases, wire client ID (`1..=15`), and hook response contract (`AllowJson` vs `EmptyJson`). |
+| **Core** (`agent-otel-core`) | `PlatformDescriptor` | Primary ID, aliases, wire client ID (`1..=65535`), and hook response contract (`AllowJson` vs `EmptyJson`). |
 | **Daemon** (`agent-otel-daemon`) | `PlatformQuotaProvider` | Host installation probe (`is_installed`), dynamic state harvesting (`harvest_quota`), baseline headroom, and token burn rate. |
 | **CLI / Hooks** (`agent-otel-cli`) | `ClientAdapter` | Hook scope, workspace directory markers (`workspace_markers`), global and project config resolvers, idempotent install/uninstall. |
 
@@ -456,7 +458,7 @@ impl PlatformDescriptor for HermesDescriptor {
     fn id(&self) -> &'static str { "hermes" }
     fn display_name(&self) -> &'static str { "Hermes AI Agent" }
     fn aliases(&self) -> &'static [&'static str] { &["hermes-cli", "nous-hermes"] }
-    fn wire_client_id(&self) -> u8 { 6 } // Next available ID in 1..=15
+    fn wire_client_id(&self) -> u16 { 6 } // Next available ID in 1..=65535
     fn pre_tool_response(&self) -> HookResponse { HookResponse::AllowJson }
 }
 ```
@@ -476,7 +478,7 @@ impl PlatformDescriptor for HermesQuotaProvider {
     fn id(&self) -> &'static str { "hermes" }
     fn display_name(&self) -> &'static str { "Hermes AI Agent" }
     fn aliases(&self) -> &'static [&'static str] { &["hermes-cli", "nous-hermes"] }
-    fn wire_client_id(&self) -> u8 { 6 }
+    fn wire_client_id(&self) -> u16 { 6 }
 }
 
 impl PlatformQuotaProvider for HermesQuotaProvider {
@@ -556,10 +558,10 @@ cargo guardrails
 ### What the Conformance Validator Verifies:
 1. **Static Conformance (`PlatformStaticValidator`)**:
    - **ID Hygiene**: ID is non-empty, lowercase ASCII alphanumeric with hyphens/underscores.
-   - **Wire Bounds**: `wire_client_id` is strictly within `1..=15` (occupies upper 4 bits of the 1-byte wire tag; ID 0 is reserved for `Unspecified`).
+   - **Wire Bounds**: `wire_client_id` is strictly within `1..=65535` (occupies 16 bits of the 3-byte wire header; ID 0 is reserved for `Unspecified`).
    - **Zero Collision**: Primary IDs, wire IDs, and aliases never collide across harnesses.
 2. **Dynamic Invariants (`PlatformDynamicValidator`)**:
-   - **Wire Framing Roundtrip**: Tag packing with `(wire_client_id << 4) | event_id` unpacks identically across all `HookEvent` variants.
+   - **Wire Framing Roundtrip**: 3-byte `WireHeader` (`[u8 event_id, u16 client_id (LE)]`) packs and unpacks identically across all `HookEvent` variants.
    - **Valid PreToolUse Response**: `pre_tool_response()` evaluates to valid JSON (`{"decision":"allow"}` or `{}`).
    - **Quota Bounds**: `remaining_fraction` is finite and in $[0.0, 1.0]$, `seconds_to_reset` $\ge 0.0$.
    - **Non-blocking Probe SLA**: Probes execute in $< 150\ \mu\text{s}$ and never spawn subprocesses on the telemetry path.

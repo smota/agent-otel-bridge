@@ -40,8 +40,8 @@ pub trait PlatformDescriptor: Send + Sync + 'static {
     /// Alternate aliases recognized for this platform (e.g. `["gemini", "agy"]`).
     fn aliases(&self) -> &'static [&'static str];
 
-    /// Wire client identifier used in binary IPC framing (strictly 1..=15, 4-bit header).
-    fn wire_client_id(&self) -> u8;
+    /// Wire client identifier used in binary IPC framing (1..=65535, 16-bit header).
+    fn wire_client_id(&self) -> u16;
 
     /// PreToolUse hook response policy expected by this agent CLI.
     fn pre_tool_response(&self) -> HookResponse {
@@ -68,7 +68,7 @@ impl PlatformDescriptor for AntigravityDescriptor {
     fn aliases(&self) -> &'static [&'static str] {
         &["agy", "gemini"]
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         1
     }
     fn pre_tool_response(&self) -> HookResponse {
@@ -87,7 +87,7 @@ impl PlatformDescriptor for ClaudeCodeDescriptor {
     fn aliases(&self) -> &'static [&'static str] {
         &["claude-code", "claudecode"]
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         2
     }
     fn pre_tool_response(&self) -> HookResponse {
@@ -106,7 +106,7 @@ impl PlatformDescriptor for CodexDescriptor {
     fn aliases(&self) -> &'static [&'static str] {
         &["openai", "codex-cli"]
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         3
     }
     fn pre_tool_response(&self) -> HookResponse {
@@ -125,7 +125,7 @@ impl PlatformDescriptor for GrokDescriptor {
     fn aliases(&self) -> &'static [&'static str] {
         &["xai", "grok-cli"]
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         4
     }
     fn pre_tool_response(&self) -> HookResponse {
@@ -144,7 +144,7 @@ impl PlatformDescriptor for PiDescriptor {
     fn aliases(&self) -> &'static [&'static str] {
         &["pi-cli"]
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         5
     }
     fn pre_tool_response(&self) -> HookResponse {
@@ -167,7 +167,7 @@ pub fn find_platform_by_name(name: &str) -> Option<&'static (dyn PlatformDescrip
         .find(|p| p.matches_name(name))
 }
 
-pub fn find_platform_by_wire_id(id: u8) -> Option<&'static (dyn PlatformDescriptor + 'static)> {
+pub fn find_platform_by_wire_id(id: u16) -> Option<&'static (dyn PlatformDescriptor + 'static)> {
     BUILTIN_PLATFORMS
         .iter()
         .copied()

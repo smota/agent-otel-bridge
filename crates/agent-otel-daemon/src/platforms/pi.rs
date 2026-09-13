@@ -21,7 +21,7 @@ impl PlatformDescriptor for PiQuotaProvider {
     fn aliases(&self) -> &'static [&'static str] {
         PiDescriptor.aliases()
     }
-    fn wire_client_id(&self) -> u8 {
+    fn wire_client_id(&self) -> u16 {
         PiDescriptor.wire_client_id()
     }
     fn pre_tool_response(&self) -> agent_otel_core::platform::HookResponse {

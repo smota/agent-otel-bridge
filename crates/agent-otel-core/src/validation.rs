@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::model::HookEvent;
+use crate::model::{HookEvent, WireHeader};
 use crate::platform::PlatformDescriptor;
 use crate::quota::QuotaSnapshot;
 
@@ -15,7 +15,7 @@ impl PlatformStaticValidator {
     /// Statically verifies a collection of platform descriptors against core invariants:
     /// - Non-empty, sanitized primary IDs (lowercase alphanumeric, hyphens, underscores).
     /// - Non-empty display names.
-    /// - Strict wire client ID boundaries (1..=15, 0 is reserved for Unspecified).
+    /// - Strict wire client ID boundaries (1..=65535, 0 is reserved for Unspecified).
     /// - Zero collision of primary IDs.
     /// - Zero collision of wire client IDs.
     /// - Zero collision across platform aliases.
@@ -52,15 +52,15 @@ impl PlatformStaticValidator {
                 errors.push(format!("Platform '{}' has an empty display name", id));
             }
 
-            // 3. Validate wire client ID bounds (1..=15)
-            if !(1..=15).contains(&wire_id) {
+            // 3. Validate wire client ID bounds (1..=65535, 0 reserved)
+            if wire_id == 0 {
                 errors.push(format!(
-                    "Platform '{}' specifies wire_client_id {}, which is outside valid 1..=15 range",
-                    id, wire_id
+                    "Platform '{}' specifies wire_client_id 0, which is reserved for Unspecified",
+                    id
                 ));
             } else if let Some(existing_owner) = seen_wire_ids.insert(wire_id, id) {
                 errors.push(format!(
-                    "Wire client ID collision on {}: both '{}' and '{}' use the same tag ID",
+                    "Wire client ID collision on {}: both '{}' and '{}' use the same wire ID",
                     wire_id, existing_owner, id
                 ));
             }
@@ -102,28 +102,34 @@ impl PlatformStaticValidator {
 pub struct PlatformDynamicValidator;
 
 impl PlatformDynamicValidator {
-    /// Validates binary wire tag packing and unpacking roundtrip.
+    /// Validates binary 3-byte wire header packing and unpacking roundtrip.
     pub fn verify_wire_roundtrip(
         descriptor: &dyn PlatformDescriptor,
         event: HookEvent,
     ) -> Result<(), String> {
         let wire_id = descriptor.wire_client_id();
-        let event_id = event.to_tag();
+        let event_id = event.to_wire();
 
-        let tag = (wire_id << 4) | (event_id & 0x0F);
+        let header = WireHeader::new(wire_id, event_id);
+        let encoded = header.encode();
 
-        let decoded_client = tag >> 4;
-        let decoded_event = HookEvent::from_tag(tag);
+        let decoded = WireHeader::decode(&encoded).ok_or_else(|| {
+            format!(
+                "Wire decode failed for {}: could not decode 3-byte header",
+                descriptor.id()
+            )
+        })?;
 
-        if decoded_client != wire_id {
+        if decoded.client_id != wire_id {
             return Err(format!(
                 "Wire roundtrip failed for {}: expected client ID {}, got {}",
                 descriptor.id(),
                 wire_id,
-                decoded_client
+                decoded.client_id
             ));
         }
 
+        let decoded_event = HookEvent::from_wire(decoded.event_id);
         if decoded_event != event {
             return Err(format!(
                 "Wire roundtrip failed for {}: expected event {:?}, got {:?}",

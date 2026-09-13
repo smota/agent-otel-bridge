@@ -33,7 +33,7 @@ pub fn find_provider_by_name(name: &str) -> Option<&'static (dyn PlatformQuotaPr
         .find(|p| p.matches_name(name))
 }
 
-pub fn find_provider_by_wire_id(id: u8) -> Option<&'static (dyn PlatformQuotaProvider + 'static)> {
+pub fn find_provider_by_wire_id(id: u16) -> Option<&'static (dyn PlatformQuotaProvider + 'static)> {
     BUILTIN_PROVIDERS
         .iter()
         .copied()

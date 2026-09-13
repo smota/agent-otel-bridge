@@ -46,7 +46,9 @@ Modern AI coding agents invoke synchronous lifecycle hooks (`PostToolUse`, `PreI
 1. **`agent-hook.exe`**: An ultra-fast, microscopic static PE32 binary (**242 KB**) that executes in **< 1ms**, drops the event into a local Win32 Named Pipe via Overlapped I/O, and enforces a **3ms watchdog fail-open guarantee** (never blocks or breaks the agent's workflow).
 2. **`agent-otel-bridge daemon`**: A Tokio async background daemon maintaining connection pooling with the OpenTelemetry Collector (`localhost:4318`), performing micro-batching (50 spans / 200ms), and serializing canonical OTLP Protobuf traces and quota metrics without requiring `protoc` build-time dependencies.
 
-> 💡 **Architectural Comparison**: Wondering why you should use `agent-otel-bridge` instead of native harness telemetry or ad-hoc scripts? Read our [Architectural Guide: Why agent-otel-bridge vs. Native Harness Telemetry](docs/WHY_AGENT_OTEL_BRIDGE.md).
+> 💡 **Architectural Guides**:
+> - Wondering why you should use `agent-otel-bridge` instead of native harness telemetry or ad-hoc scripts? Read our [Architectural Guide: Why agent-otel-bridge vs. Native Harness Telemetry](docs/WHY_AGENT_OTEL_BRIDGE.md).
+> - For system constraints, fail-open trade-offs, and operational mitigations, see the [System Limitations & Mitigations Guide](docs/LIMITATIONS.md).
 
 ---
 

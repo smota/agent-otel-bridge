@@ -105,7 +105,7 @@ The transport layer uses a zero-copy binary wire framing protocol:
 | `2` | `VERSION` | `u8` | Protocol version (`0x01`) |
 | `3` | `MSG_TYPE` | `u8` | `0x01`: HookPayload, `0x02`: QuotaPing, `0x03`: HealthPing, `0xFF`: Shutdown |
 | `4..8` | `LEN` | `u32` (LE) | Little-endian payload length |
-| `8..` | `PAYLOAD` | `[u8]` | Event tag (byte 0) + raw JSON payload |
+| `8..` | `PAYLOAD` | `[u8]` | `WireHeader` (3B: byte 0 event_id, bytes 1..2 client_id LE) + raw JSON payload |
 
 ### Fail-Open Guarantees
 

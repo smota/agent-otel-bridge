@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent};
+use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent, WireHeader};
 use agent_otel_core::otlp::build_span_from_hook_opts;
 use agent_otel_core::quota::build_multi_quota_metrics_request_opts;
 use agent_otel_ipc::frame::MsgType;
@@ -78,11 +78,12 @@ impl Daemon {
                     match maybe_msg {
                         Some((MsgType::HookPayload, payload)) => {
                             last_activity = Instant::now();
-                            if !payload.is_empty() {
-                                let tag = payload[0];
-                                let json_bytes = &payload[1..];
-                                let mut event = HookEvent::from_tag(tag);
-                                let client_kind = agent_otel_core::model::ClientKind::from_tag(tag);
+                            if payload.len() >= WireHeader::LEN {
+                                let header = WireHeader::decode(&payload)
+                                    .unwrap_or_else(|| WireHeader::new(0, 255));
+                                let json_bytes = &payload[WireHeader::LEN..];
+                                let mut event = HookEvent::from_wire(header.event_id);
+                                let client_kind = agent_otel_core::model::ClientKind::from_wire(header.client_id);
 
                                 let now_nano = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
