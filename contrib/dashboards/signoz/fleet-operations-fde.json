@@ -1,0 +1,1126 @@
+{
+  "schemaVersion": "v6",
+  "tags": [
+    {
+      "key": "persona",
+      "value": "fde"
+    },
+    {
+      "key": "domain",
+      "value": "ai-agent"
+    },
+    {
+      "key": "technology",
+      "value": "agent-otel-bridge"
+    }
+  ],
+  "spec": {
+    "display": {
+      "name": "Fleet Operations | FDE",
+      "description": "Operational fleet cockpit. Activity is observed, not a liveness guarantee. Filters apply to trace panels; quota panels are fleet-wide, unverified reports. Request-level native tokens are separated from hook reports. No delivery-success or authoritative quota is inferred."
+    },
+    "duration": "1h",
+    "refreshInterval": "30s",
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "name": "service_name",
+          "display": {
+            "name": "Sources",
+            "description": "Trace sources only. Select one or multiple. Quotas remain fleet-wide."
+          },
+          "allowMultiple": true,
+          "allowAllValue": false,
+          "defaultValue": [
+            "agent-otel-bridge",
+            "codex-app-server",
+            "Codex Desktop",
+            "antigravity-cli",
+            "claude-agent-sdk",
+            "codex_cli_rs",
+            "codex_exec",
+            "grok-otel",
+            "openai-otel"
+          ],
+          "sort": "alphabetical-asc",
+          "plugin": {
+            "kind": "signoz/DynamicVariable",
+            "spec": {
+              "name": "service.name",
+              "signal": "traces"
+            }
+          }
+        }
+      },
+      {
+        "kind": "TextVariable",
+        "spec": {
+          "name": "agent_filter",
+          "display": {
+            "name": "Agent regex",
+            "description": ".* matches all. Applies to aggregate trace panels; raw inspector uses Sources only. Quotas stay global."
+          },
+          "value": ".*"
+        }
+      },
+      {
+        "kind": "TextVariable",
+        "spec": {
+          "name": "project_filter",
+          "display": {
+            "name": "Project regex",
+            "description": ".* matches all including unattributed. Applies to aggregate trace panels; raw inspector uses Sources only. Quotas stay global."
+          },
+          "value": ".*"
+        }
+      }
+    ],
+    "links": [],
+    "panels": {
+      "recent-sessions": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Sessions seen · last 5m",
+            "description": "Distinct (host, agent, session) observed within the final five minutes of the selected window. Not a count of running processes."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts, toFloat64(uniqExactIf(tuple(host,agent,session), session!='' AND timestamp >= {{.end_datetime}} - INTERVAL 5 MINUTE)) AS value FROM fleet"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tool-returns": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Tool returns",
+            "description": "PostToolUse hook records plus native mcp.tools.call spans, deduplicated by trace/span ID. Starts excluded. Sources are not deduplicated across independently emitted instrumentation."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,toFloat64(uniqExact(tuple(trace_id,span_id))) AS value FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call'))"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "error-rate": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Error-marked returns %",
+            "description": "Error-marked completed tool records / all observed completed tool records. Includes test failures; this is not task failure or delivery quality. No returns = no value."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "formatting": {
+                "unit": "percent"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,100.0*uniqExactIf(tuple(trace_id,span_id),has_error)/nullIf(uniqExact(tuple(trace_id,span_id)),0) AS value FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call'))"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "native-tokens": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Native request tokens",
+            "description": "Input + output on Codex handle_responses spans. Excludes session/turn rollups and hook reports. Cache is part of input, not added again. Coverage is partial across the fleet; absent records = no value."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts, if(count()=0,NULL,sum(tokens)) AS value FROM (SELECT trace_id,span_id,max(attributes_number['gen_ai.usage.input_tokens']+attributes_number['gen_ai.usage.output_tokens']) AS tokens FROM fleet WHERE (name='handle_responses' AND hook='' AND mapContains(attributes_number,'gen_ai.usage.input_tokens')) GROUP BY trace_id,span_id)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "session-board": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Session board · latest evidence",
+            "description": "One row per source, host, agent and session; state derives from the latest hook and is observational only. A five-minute silence marks unknown, never stopped. No heartbeat/process census. Tokens here are native request reports only. Unattributed projects remain visible."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "formatting": {
+                "columnUnits": {
+                  "Age_seconds": "s"
+                }
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts, service AS Source,host AS Host,agent AS Agent,session AS Session,\nargMax(project,timestamp) AS Project,\nmultiIf(dateDiff('second',max(timestamp),{{.end_datetime}})>300,'Unknown / no recent signal',argMax(hook,timestamp)='PreToolUse','Tool start observed',argMax(hook,timestamp)='PreInvocation','Turn start observed',argMax(hook,timestamp)='Stop','Turn stop observed',argMax(hook,timestamp)='PostToolUse','Tool returned',argMax(hook,timestamp)='PostInvocation','Turn returned','Native activity observed') AS Evidence,\nargMax(if(tool!='',tool,name),timestamp) AS Last_action,\nformatDateTime(max(timestamp),'%Y-%m-%d %H:%i:%S','UTC') AS Last_seen_UTC,\ntoFloat64(greatest(0,dateDiff('second',max(timestamp),{{.end_datetime}}))) AS Age_seconds,\ntoFloat64(countIf((hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call')) AND has_error)) AS Error_returns\nFROM fleet WHERE session!='' GROUP BY service,host,agent,session ORDER BY Age_seconds ASC,Error_returns DESC LIMIT 50"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "attention": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Attention · recent failure / approval evidence",
+            "description": "Prioritized error and approval-request evidence, not a queue of confirmed pending work. A later successful retry or approval may have resolved it. Open the matching trace in the event inspector. User interruptions are labeled by their reported category."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts, service AS Source, agent AS Agent,project AS Project,session AS Session,\nif(attributes_string['agent.decision']='ask','Approval requested',if(attributes_string['agent.error.category']!='',attributes_string['agent.error.category'],'Error marked')) AS Evidence,\nif(tool!='',tool,name) AS Action,\nformatDateTime(timestamp,'%Y-%m-%d %H:%i:%S','UTC') AS Observed_UTC,\ntoFloat64(greatest(0,dateDiff('second',timestamp,{{.end_datetime}}))) AS Age_seconds,\ntrace_id AS Trace\nFROM fleet WHERE (((hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call'))) AND has_error) OR attributes_string['agent.decision']='ask'\nORDER BY timestamp DESC LIMIT 20"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tokens-over-time": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Native request tokens / minute",
+            "description": "One-minute buckets of native Codex handle_responses input and output tokens, deduplicated by span ID. Cache is included in input; turn summaries are excluded. Empty intervals are not filled with zero."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT toStartOfMinute(observed) AS ts,token_type,toFloat64(sum(tokens)) AS value FROM (\nSELECT trace_id,span_id,max(timestamp) AS observed,'input' AS token_type,max(attributes_number['gen_ai.usage.input_tokens']) AS tokens FROM fleet WHERE (name='handle_responses' AND hook='' AND mapContains(attributes_number,'gen_ai.usage.input_tokens')) GROUP BY trace_id,span_id\nUNION ALL SELECT trace_id,span_id,max(timestamp) AS observed,'output' AS token_type,max(attributes_number['gen_ai.usage.output_tokens']) AS tokens FROM fleet WHERE (name='handle_responses' AND hook='' AND mapContains(attributes_number,'gen_ai.usage.input_tokens')) GROUP BY trace_id,span_id)\nGROUP BY ts,token_type ORDER BY ts ASC",
+                    "legend": "{{token_type}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tokens-model": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Native tokens · model / source",
+            "description": "Request-level input, output and cache subset. Never add cached tokens to input again. Source-specific native token coverage; does not estimate subscription quota or monetary cost."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,service AS Source,model AS Model,toFloat64(count()) AS Requests,sum(input) AS Input,sum(output) AS Output,sum(cache) AS Cached_input\nFROM (SELECT service,model,trace_id,span_id,max(attributes_number['gen_ai.usage.input_tokens']) AS input,max(attributes_number['gen_ai.usage.output_tokens']) AS output,max(greatest(attributes_number['gen_ai.usage.cache_read.input_tokens'],attributes_number['gen_ai.usage.cache_read_tokens'])) AS cache FROM fleet WHERE (name='handle_responses' AND hook='' AND mapContains(attributes_number,'gen_ai.usage.input_tokens')) GROUP BY service,model,trace_id,span_id) GROUP BY service,model ORDER BY Input DESC LIMIT 20"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "quota-reported": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "UNVERIFIED · reported quota fraction",
+            "description": "GLOBAL: unaffected by source/agent/project filters. Latest reported gauge per bucket/group; min across exporters, never sum. Current bridge reports may contain fixed baselines and activity heuristics. NOT authoritative account capacity; sample age/account identity not available here. Do not use for scheduling."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "metrics",
+                    "aggregations": [
+                      {
+                        "metricName": "agent.quota.remaining_fraction",
+                        "temporality": "unspecified",
+                        "timeAggregation": "latest",
+                        "spaceAggregation": "min",
+                        "reduceTo": "last"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "bucket",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string",
+                        "signal": "metrics"
+                      },
+                      {
+                        "name": "group",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string",
+                        "signal": "metrics"
+                      }
+                    ],
+                    "legend": "{{group}} / {{bucket}}",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "__result"
+                        },
+                        "direction": "asc"
+                      }
+                    ],
+                    "limit": 100
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "quota-reset": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "UNVERIFIED · reported reset countdown",
+            "description": "GLOBAL: unaffected by source/agent/project filters. Latest reported gauge per bucket/group; min across exporters, never sum. Current bridge reports may contain fixed baselines and activity heuristics. NOT authoritative account capacity; sample age/account identity not available here. Do not use for scheduling."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "metrics",
+                    "aggregations": [
+                      {
+                        "metricName": "agent.quota.seconds_to_reset",
+                        "temporality": "unspecified",
+                        "timeAggregation": "latest",
+                        "spaceAggregation": "min",
+                        "reduceTo": "last"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "bucket",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string",
+                        "signal": "metrics"
+                      },
+                      {
+                        "name": "group",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string",
+                        "signal": "metrics"
+                      }
+                    ],
+                    "legend": "{{group}} / {{bucket}}",
+                    "order": [
+                      {
+                        "key": {
+                          "name": "__result"
+                        },
+                        "direction": "asc"
+                      }
+                    ],
+                    "limit": 100
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tools-top": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Top tools · completed records",
+            "description": "Completed PostToolUse hooks and native MCP calls; start hooks excluded. Per-source counts are intentionally kept separate. Error count includes development/test failures."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,service AS Source,tool AS Tool,toFloat64(uniqExact(tuple(trace_id,span_id))) AS Returns,toFloat64(uniqExactIf(tuple(trace_id,span_id),has_error)) AS Errors,toFloat64(uniqExactIf(session,session!='')) AS Sessions FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call')) AND tool!='' GROUP BY service,tool ORDER BY Returns DESC LIMIT 15"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "mcp-top": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Top MCP operations",
+            "description": "Native mcp.tools.call spans or bridge MCP-classified completed hooks. Namespace comes from capability.namespace or mcp.server.name. No invocation is counted merely because a schema is available."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,service AS Source,namespace AS Server,tool AS Operation,toFloat64(uniqExact(tuple(trace_id,span_id))) AS Calls,toFloat64(uniqExactIf(tuple(trace_id,span_id),has_error)) AS Errors FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call')) AND capability='mcp' GROUP BY service,namespace,tool ORDER BY Calls DESC LIMIT 15"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "capability-mix": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Capability distribution",
+            "description": "Completed records classified as MCP, native or skill; unclassified remains explicit. Loading a skill document is not automatically an observed skill invocation."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "formatting": {
+                "columnUnits": {
+                  "Share_percent": "percent"
+                }
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,capability AS Kind,toFloat64(count()) AS Returns,100.0*count()/sum(count()) OVER () AS Share_percent FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call')) GROUP BY capability ORDER BY Returns DESC LIMIT 10"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "skills-top": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Skills · explicitly observed invocations",
+            "description": "Only completed records with capability.kind = skill. Empty means no explicitly classified invocations in this selection, not proof that agents used no skills."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,namespace AS Bundle,tool AS Skill,toFloat64(count()) AS Returns,toFloat64(countIf(has_error)) AS Errors FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call')) AND capability='skill' GROUP BY namespace,tool ORDER BY Returns DESC LIMIT 10"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "error-categories": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Error categories · affected sessions",
+            "description": "Error-marked completed tool records, grouped by reported category. Missing categories remain unclassified. Test failures and provider failures require different interpretation."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,if(attributes_string['agent.error.category']='','unclassified',attributes_string['agent.error.category']) AS Category,service AS Source,toFloat64(count()) AS Errors,toFloat64(uniqExactIf(session,session!='')) AS Sessions FROM fleet WHERE (hook = 'PostToolUse' OR (hook = '' AND name = 'mcp.tools.call')) AND has_error GROUP BY Category,service ORDER BY Errors DESC LIMIT 15"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "native-mcp-latency": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Native MCP latency p95",
+            "description": "Native completed mcp.tools.call span durations only. Hook event span durations are excluded because they do not establish tool wall-clock latency."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              },
+              "formatting": {
+                "unit": "ms"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT toStartOfMinute(timestamp) AS ts,namespace AS server,toFloat64(quantile(0.95)(duration_nano)/1000000) AS value FROM fleet WHERE hook='' AND name='mcp.tools.call' GROUP BY ts,namespace ORDER BY ts ASC",
+                    "legend": "{{server}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "coverage": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Telemetry coverage · sources actually seen",
+            "description": "Only sources observed in the selected time window; no installed-agent inventory. Age is measured at window end. Token fields are reported records, not total consumption. Missing project/session attribution is visible."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "formatting": {
+                "columnUnits": {
+                  "Age_seconds": "s",
+                  "Session_coverage_percent": "percent",
+                  "Project_coverage_percent": "percent"
+                }
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,service AS Source,host AS Host,\ntoFloat64(count()) AS Spans,\ntoFloat64(greatest(0,dateDiff('second',max(timestamp),{{.end_datetime}}))) AS Age_seconds,\n100.0*countIf(session!='')/count() AS Session_coverage_percent,\n100.0*countIf(project!='unattributed')/count() AS Project_coverage_percent,\ntoFloat64(countIf(mapContains(attributes_number,'gen_ai.usage.input_tokens'))) AS Token_reports,\ntoFloat64(countIf(hook='PostToolUse' AND attributes_string['gen_ai.tool.call.id']!='')) AS Correlatable_tool_returns\nFROM fleet GROUP BY service,host ORDER BY Age_seconds ASC LIMIT 30"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "hook-token-coverage": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Hook token reports · separate from native totals",
+            "description": "PostInvocation hook reports only. NULL input/output means no reported measurement, never zero consumption. These are excluded from native request totals to avoid counting both instrumentation layers."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,service AS Source,agent AS Agent,toFloat64(count()) AS Turn_returns,\ntoFloat64(countIf(mapContains(attributes_number,'gen_ai.usage.input_tokens'))) AS Measured_turns,\nif(countIf(mapContains(attributes_number,'gen_ai.usage.input_tokens'))=0,NULL,sum(attributes_number['gen_ai.usage.input_tokens'])) AS Input,\nif(countIf(mapContains(attributes_number,'gen_ai.usage.output_tokens'))=0,NULL,sum(attributes_number['gen_ai.usage.output_tokens'])) AS Output\nFROM fleet WHERE hook='PostInvocation' GROUP BY service,agent ORDER BY Turn_returns DESC LIMIT 20"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "turn-outcomes": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Turn endings · not delivery success",
+            "description": "Reported stop reasons. A stopped or returned turn is not an independently validated delivery. Business success, task acceptance and tokens per validated delivery need explicit outcome evidence."
+          },
+          "links": [],
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/ClickHouseSQL",
+                  "spec": {
+                    "name": "A",
+                    "query": "WITH source AS (SELECT timestamp, trace_id, span_id, parent_span_id, name, duration_nano, has_error, status_code, attributes_string, attributes_number, attributes_bool,\nresources_string['service.name'] AS service,\nresources_string['host.name'] AS host,\ncoalesce(nullIf(attributes_string['gen_ai.agent.name'],''), resources_string['service.name']) AS agent,\ncoalesce(nullIf(attributes_string['workspace.project_name'],''),nullIf(attributes_string['cwd'],''),'unattributed') AS project,\ncoalesce(nullIf(attributes_string['gen_ai.conversation.id'],''),nullIf(attributes_string['conversation.id'],''),nullIf(attributes_string['thread.id'],''),nullIf(attributes_string['thread_id'],''),nullIf(attributes_string['session.id'],''),'') AS session,\nattributes_string['agent.hook.event'] AS hook,\ncoalesce(nullIf(attributes_string['gen_ai.tool.name'],''),nullIf(attributes_string['tool.name'],''),attributes_string['tool_name']) AS tool,\ncoalesce(nullIf(attributes_string['gen_ai.request.model'],''),attributes_string['model']) AS model,\ncoalesce(nullIf(attributes_string['capability.kind'],''),if(name='mcp.tools.call','mcp','unclassified')) AS capability,\ncoalesce(nullIf(attributes_string['capability.namespace'],''),attributes_string['mcp.server.name']) AS namespace\nFROM signoz_traces.distributed_signoz_index_v3\nWHERE resource_string_service$$name IN $service_name\nAND timestamp BETWEEN {{.start_datetime}} AND {{.end_datetime}}\nAND ts_bucket_start BETWEEN {{.start_timestamp}} - 1800 AND {{.end_timestamp}}), fleet AS (SELECT * FROM source WHERE match(agent, $agent_filter) AND match(project, $project_filter))\nSELECT now() AS ts,agent AS Agent,if(attributes_string['agent.termination_reason']='','unreported',attributes_string['agent.termination_reason']) AS Reason,toFloat64(count()) AS Stops FROM fleet WHERE hook='Stop' GROUP BY agent,Reason ORDER BY Stops DESC LIMIT 15"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "event-inspector": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Event inspector · open a trace",
+            "description": "Raw hook and native MCP events. Click a row to inspect its trace. Shows recorded operations, not full shell arguments. Source filter applies; use the session board for agent/project-filtered evidence."
+          },
+          "plugin": {
+            "kind": "signoz/ListPanel",
+            "spec": {
+              "selectFields": [
+                {
+                  "name": "name",
+                  "signal": "traces",
+                  "fieldContext": "span",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "service.name",
+                  "signal": "traces",
+                  "fieldContext": "resource",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "gen_ai.agent.name",
+                  "signal": "traces",
+                  "fieldContext": "attribute",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "gen_ai.conversation.id",
+                  "signal": "traces",
+                  "fieldContext": "attribute",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "agent.hook.event",
+                  "signal": "traces",
+                  "fieldContext": "attribute",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "gen_ai.tool.name",
+                  "signal": "traces",
+                  "fieldContext": "attribute",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "tool.name",
+                  "signal": "traces",
+                  "fieldContext": "attribute",
+                  "fieldDataType": "string"
+                },
+                {
+                  "name": "has_error",
+                  "description": "Whether the span has an error. Learn more [here](https://signoz.io/docs/traces-management/guides/derived-fields-spans/#has_error)",
+                  "signal": "traces",
+                  "fieldContext": "span",
+                  "fieldDataType": "bool"
+                },
+                {
+                  "name": "trace_id",
+                  "signal": "traces",
+                  "fieldContext": "span",
+                  "fieldDataType": "string"
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "raw",
+              "spec": {
+                "name": "A",
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "service.name IN $service_name AND (agent.hook.event EXISTS OR span.name = 'mcp.tools.call')"
+                    },
+                    "selectFields": [
+                      {
+                        "name": "name",
+                        "signal": "traces",
+                        "fieldContext": "span",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "service.name",
+                        "signal": "traces",
+                        "fieldContext": "resource",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "gen_ai.agent.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "gen_ai.conversation.id",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "agent.hook.event",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "gen_ai.tool.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "tool.name",
+                        "signal": "traces",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "has_error",
+                        "description": "Whether the span has an error. Learn more [here](https://signoz.io/docs/traces-management/guides/derived-fields-spans/#has_error)",
+                        "signal": "traces",
+                        "fieldContext": "span",
+                        "fieldDataType": "bool"
+                      },
+                      {
+                        "name": "trace_id",
+                        "signal": "traces",
+                        "fieldContext": "span",
+                        "fieldDataType": "string"
+                      }
+                    ],
+                    "order": [
+                      {
+                        "key": {
+                          "name": "timestamp"
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "limit": 50
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "NOW · observation, not a process census",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/recent-sessions"
+              }
+            },
+            {
+              "x": 3,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/tool-returns"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/error-rate"
+              }
+            },
+            {
+              "x": 9,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/native-tokens"
+              }
+            },
+            {
+              "x": 0,
+              "y": 3,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/session-board"
+              }
+            },
+            {
+              "x": 0,
+              "y": 11,
+              "width": 12,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/attention"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "CAPACITY · measured tokens; unverified quota reports",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/tokens-over-time"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/tokens-model"
+              }
+            },
+            {
+              "x": 0,
+              "y": 6,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/quota-reported"
+              }
+            },
+            {
+              "x": 6,
+              "y": 6,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/quota-reset"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "CAPABILITIES & RELIABILITY",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 7,
+              "content": {
+                "$ref": "#/spec/panels/tools-top"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 7,
+              "content": {
+                "$ref": "#/spec/panels/mcp-top"
+              }
+            },
+            {
+              "x": 0,
+              "y": 7,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/capability-mix"
+              }
+            },
+            {
+              "x": 6,
+              "y": 7,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/skills-top"
+              }
+            },
+            {
+              "x": 0,
+              "y": 13,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/error-categories"
+              }
+            },
+            {
+              "x": 6,
+              "y": 13,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/native-mcp-latency"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "EVIDENCE & COVERAGE · missing data is not healthy",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 7,
+              "content": {
+                "$ref": "#/spec/panels/coverage"
+              }
+            },
+            {
+              "x": 0,
+              "y": 7,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/hook-token-coverage"
+              }
+            },
+            {
+              "x": 6,
+              "y": 7,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/turn-outcomes"
+              }
+            },
+            {
+              "x": 0,
+              "y": 13,
+              "width": 12,
+              "height": 9,
+              "content": {
+                "$ref": "#/spec/panels/event-inspector"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
