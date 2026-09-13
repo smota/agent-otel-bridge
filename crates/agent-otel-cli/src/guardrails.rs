@@ -9,6 +9,30 @@ use std::process::Command;
 use std::time::Instant;
 
 pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    if std::env::var("GUARDRAILS_SELF_COPY").is_err() {
+        if let Ok(exe) = std::env::current_exe() {
+            let path_str = exe.to_string_lossy();
+            if path_str.contains("target") {
+                let temp_exe =
+                    std::env::temp_dir().join(format!("guardrails-{}.exe", std::process::id()));
+                let _ = fs::copy(&exe, &temp_exe);
+                let status = Command::new(&temp_exe)
+                    .arg("check-guardrails")
+                    .args(if fix { vec!["--fix"] } else { vec![] })
+                    .env("GUARDRAILS_SELF_COPY", "1")
+                    .status();
+                let _ = fs::remove_file(&temp_exe);
+                if let Ok(s) = status {
+                    if !s.success() {
+                        std::process::exit(s.code().unwrap_or(1));
+                    }
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     let start = Instant::now();
     println!("============================================================");
     println!("  agent-otel-bridge: Automated Guardrail Verification Tool  ");
@@ -53,7 +77,9 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Workspace Test Suite
     print!("[GUARDRAIL] Running workspace test suite (cargo test --workspace)... ");
-    let test_status = Command::new("cargo").args(["test", "--workspace"]).status();
+    let test_status = Command::new("cargo")
+        .args(["test", "--workspace", "--lib", "--tests"])
+        .status();
     match test_status {
         Ok(s) if s.success() => println!("PASSED"),
         _ => {

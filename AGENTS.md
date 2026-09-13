@@ -84,6 +84,13 @@ When harvesting context:
     `00-{trace_id:32hex}-{current_span_id:16hex}-01`.
   - Child processes automatically adopt the parent's `trace_id` and attach under `parent_span_id`.
 
+### 3.5 Local Runtime & Station Installation Contract
+Ao alterar cliente, daemon, IPC, hooks, adaptadores CLI/desktop, instalação, atualização ou ativação de builds locais, leia e cumpra [`docs/local-runtime-contract.md`](file:///C:/Users/samue/code/agent-otel-bridge/docs/local-runtime-contract.md). Valide as superfícies afetadas e registre separadamente testes do candidato e da instalação ativa.
+* **Canonical Path**: Always project absolute `%LOCALAPPDATA%\agent-otel-bridge\bin\agent-hook.exe`.
+* **Safe Quoting**: Always double-quote executable paths in hook configuration strings.
+* **Non-Destructive Hooks**: Preserve third-party hooks (`herdr`, `rtk`) and update bridge hooks in-place.
+* **Atomic Deployment**: Stage, verify SHA-256 hashes, and activate using `agent-otel-bridge local install`.
+
 ---
 
 ## 4. Quality & Verification Guardrails

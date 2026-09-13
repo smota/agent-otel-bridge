@@ -99,15 +99,30 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // 5. Client Hook Registrations check
-    println!("\n[5/5] Checking Client Hook Registrations...");
+    // 5. Client Hook Registrations & Local Runtime check
+    println!("\n[5/5] Checking Client Hook Registrations & Local Runtime...");
+    let canonical_hook = crate::local::get_canonical_hook_path();
+    let canonical_bridge = crate::local::get_canonical_bridge_path();
+    let local_ok = canonical_hook.is_file() && canonical_bridge.is_file();
+    println!(
+        "  Local runtime installation: {}",
+        if local_ok {
+            format!(
+                "[ok] present at {}",
+                crate::local::get_canonical_bin_dir().display()
+            )
+        } else {
+            "[info] not installed (run 'agent-otel-bridge local install')".to_string()
+        }
+    );
+
     let hook_in_path = crate::hooks::check_binary_in_path("agent-hook");
     println!(
-        "  agent-hook in PATH: {}",
+        "  agent-hook in PATH:         {}",
         if hook_in_path {
             "[ok] present"
         } else {
-            "[warn] not found (run cargo install or check PATH)"
+            "[info] not in PATH (not required when absolute path is configured)"
         }
     );
 

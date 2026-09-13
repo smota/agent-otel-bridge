@@ -14,6 +14,7 @@
 pub mod doctor;
 pub mod emit_quota;
 pub mod hooks;
+pub mod local;
 pub mod stop;
 
 pub use agent_otel_core as core;
