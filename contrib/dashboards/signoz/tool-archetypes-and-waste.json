@@ -106,7 +106,7 @@
         "spec": {
           "display": {
             "name": "Tool Execution by Behavioral Archetype",
-            "description": "Distribution across filter_compressor, structured_parser, inspector_diff, search_retrieval, build_test_verify, generic_exec."
+            "description": "Distribution across filter_compressor, structured_parser, inspector_diff, search_retrieval, build_test_verify, state_mutation, env_pkg_manager, vcs_lifecycle, network_transfer, generic_exec."
           },
           "links": null,
           "plugin": {

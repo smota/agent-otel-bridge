@@ -490,3 +490,37 @@ fn test_v03_cross_agent_trace_propagation() {
     assert_eq!(child_span.trace_id, parent_span.trace_id);
     assert_eq!(child_span.parent_span_id, parent_span.span_id);
 }
+
+#[test]
+fn test_v051_expanded_archetype_enrichment() {
+    let cases = [
+        ("git -C /code diff HEAD~1", "inspector_diff"),
+        ("git commit -m \"fix: issue\"", "vcs_lifecycle"),
+        ("gh pr create --title \"patch\"", "vcs_lifecycle"),
+        ("npm --prefix app install express", "env_pkg_manager"),
+        ("cargo add serde", "env_pkg_manager"),
+        ("uv add httpx", "env_pkg_manager"),
+        ("python -m pip install pytest", "env_pkg_manager"),
+        ("rm -rf target/debug", "state_mutation"),
+        ("mkdir -p test/fixtures", "state_mutation"),
+        ("curl -sSL https://example.com/api", "network_transfer"),
+    ];
+
+    for (cmd, expected_archetype) in cases {
+        let json = serde_json::json!({
+            "conversationId": "test-v051-archetypes",
+            "toolCall": {
+                "name": "run_command",
+                "arguments": { "command": cmd }
+            }
+        });
+        let mut input =
+            AntigravityHookInput::parse_slice(json.to_string().as_bytes()).expect("parse failed");
+        input.auto_enrich();
+        assert_eq!(
+            input.tool_archetype.as_deref(),
+            Some(expected_archetype),
+            "Command `{cmd}` was not classified as `{expected_archetype}`"
+        );
+    }
+}

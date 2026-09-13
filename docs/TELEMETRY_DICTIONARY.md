@@ -181,7 +181,7 @@ Decouples observability from specific CLI tools (`rtk`, `jq`, `bat`, `delta`) by
 
 | Attribute | Type | Description | Example Values |
 | :--- | :--- | :--- | :--- |
-| `agent.tool.archetype` | `string` | Functional archetype classification | `filter_compressor`, `structured_parser`, `inspector_diff`, `search_retrieval`, `build_test_verify`, `generic_exec` |
+| `agent.tool.archetype` | `string` | Functional archetype classification | `filter_compressor`, `structured_parser`, `inspector_diff`, `search_retrieval`, `build_test_verify`, `state_mutation`, `env_pkg_manager`, `vcs_lifecycle`, `network_transfer`, `generic_exec` |
 | `agent.tool.binary` | `string` | Base executable name | `rtk`, `jq`, `rg`, `bat`, `cargo` |
 | `agent.tool.wrapped_binary` | `string` | Wrapped binary if using an execution proxy | `cargo` (from `rtk cargo test`) |
 | `agent.tool.pipeline_depth` | `int` | Number of piped command segments | `1`, `3` (from `cat f.json \| jq .items \| head -n 5`) |
