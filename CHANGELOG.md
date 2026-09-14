@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+- Always double-quote executable paths in generated hook commands, including paths without spaces; preserve already quoted paths and client arguments. This installer correction is intended for the next release and does not require reactivating the current local build.
 - Carry bounded hook-origin trace context over IPC message 0x04 without rewriting stdin. Resolve valid payload context before origin context and conversation fallback; preserve trace flags and reject malformed IDs safely.
 - Keep legacy messages supported by the new daemon. Upgrade hook and daemon together: new hooks require the new receiver. IPC events no longer inherit the daemon's ambient TRACEPARENT or invent agent depth from a parent span.
 - Align Unix daemon socket selection with the client and improve doctor endpoint diagnostics and credential sanitization.

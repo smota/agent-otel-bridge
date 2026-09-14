@@ -33,3 +33,7 @@ Corrigir e validar a propagação de contexto hook → IPC → daemon → OTLP, 
 ## RES-002 — Fechar lacunas de medição e aceitação dos SLAs
 
 Estado: pendente de diagnóstico. O benchmark existente de criação de processo mede o ciclo externo completo, enquanto o contrato também exige cliente <1 ms. O benchmark combinado de parsing/conversão deve comprovar >50.000 spans/s; sucesso do `cargo guardrails` não implica esses SLAs aprovados. Esclarecer instrumentação e comparar baseline/candidato sem reduzir os requisitos. Separar também perda em carga concorrente por fail-open de erro de associação de contexto. Não usar retry automático do teste para esconder perda de eventos.
+
+## RES-003 — Validar comandos entre aspas no executor Antigravity
+
+Na delegação de 2026-09-14, Antigravity Flash Low relatou falha do interceptor PreToolUse antes de conseguir ler ou editar arquivos: o runner não reconheceu o caminho entre aspas do hook. Uma tentativa com prefixo `call` não apareceu no erro retornado; isso não comprova que o runner recarregou a configuração. A alteração temporária foi desfeita. A correção do gerador de comandos deve cumprir o contrato de aspas, mas seus testes não comprovam integração live com esse executor. Antes da próxima release, verificar configuração efetivamente carregada e passagem de argumentos ao shell, com caminho com/sem espaços, sem remover hooks de terceiros. Não declarar o Antigravity validado apenas porque a configuração JSON está correta.

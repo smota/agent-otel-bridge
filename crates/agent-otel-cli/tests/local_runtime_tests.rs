@@ -128,7 +128,7 @@ fn test_antigravity_hooks_full_lifecycle_preservation() {
     let bridge = &content["agent-otel-bridge"];
     assert_eq!(
         bridge["PreToolUse"][0]["hooks"][0]["command"],
-        format!("{bin_path} PreToolUse")
+        format!("\"{bin_path}\" PreToolUse")
     );
 
     // 3. Reinstall with updated path (e.g. new version)
@@ -191,7 +191,7 @@ fn test_claude_hooks_upgrade_from_relative_to_absolute_without_duplication() {
     assert_eq!(pre_tool[0]["hooks"][0]["command"], "rtk hook claude");
     assert_eq!(
         pre_tool[1]["hooks"][0]["command"],
-        format!("{abs_bin} PreToolUse")
+        format!("\"{abs_bin}\" PreToolUse")
     );
 
     // Uninstall
