@@ -5,32 +5,66 @@
 
 use std::io::{self, Read, Write};
 use std::process;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use agent_otel_ipc::client::{read_traceparent, send_fire_and_forget};
+use agent_otel_ipc::client::{
+    attempt_send_until, read_traceparent, terminate_current_process, SendAttempt,
+};
 use agent_otel_ipc::frame::{encode_context_payload, MsgType, WireHeader};
+
+mod hook_observer;
+
+use hook_observer::HookObserver;
 
 const MAX_STDIN_BYTES: usize = 256 * 1024;
 const DEFAULT_WATCHDOG_MS: u64 = 3;
 
 fn main() {
+    let main_entry = Instant::now();
+    let watchdog_duration = watchdog_duration();
+    let absolute_deadline = main_entry + watchdog_duration;
+    spawn_watchdog(absolute_deadline);
+
+    let observer = HookObserver::from_environment(main_entry);
     let header = resolve_header();
-    let done = Arc::new(AtomicBool::new(false));
-    spawn_watchdog(Arc::clone(&done), header);
+    if !write_response(header) {
+        process::exit(0);
+    }
+    let response_completed = observer.as_ref().map(HookObserver::elapsed);
 
     let stdin_bytes = read_stdin_capped(MAX_STDIN_BYTES);
     // The hook only reads its inherited environment; no thread mutates it.
     let traceparent = unsafe { read_traceparent() };
 
     let payload = encode_context_payload(header, traceparent.as_deref(), &stdin_bytes);
+    let before_transport = observer.as_ref().map(HookObserver::elapsed);
 
-    send_fire_and_forget(MsgType::HookPayloadWithContext, &payload);
+    let attempt = attempt_send_until(
+        None,
+        MsgType::HookPayloadWithContext,
+        &payload,
+        absolute_deadline,
+    );
 
-    done.store(true, Ordering::Release);
-    finish_ok(header);
+    match attempt {
+        SendAttempt::Complete(result) => {
+            if let (Some(observer), Some(response_completed), Some(before_transport)) =
+                (observer, response_completed, before_transport)
+            {
+                let work_completed = observer.elapsed();
+                observer.emit(
+                    response_completed,
+                    before_transport,
+                    work_completed,
+                    result.is_ok(),
+                );
+            }
+            process::exit(0);
+        }
+        #[cfg(windows)]
+        SendAttempt::CleanupRequired { pending, .. } => finish_with_guard(pending),
+    }
 }
 
 struct ClientMapping {
@@ -120,21 +154,28 @@ fn read_stdin_capped(max: usize) -> Vec<u8> {
     buf
 }
 
-fn spawn_watchdog(done: Arc<AtomicBool>, header: WireHeader) {
+fn watchdog_duration() -> Duration {
     let watchdog_ms = std::env::var("AGENT_OTEL_WATCHDOG_MS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(DEFAULT_WATCHDOG_MS);
+    Duration::from_millis(watchdog_ms)
+}
 
+fn spawn_watchdog(absolute_deadline: Instant) {
     thread::spawn(move || {
-        thread::sleep(Duration::from_millis(watchdog_ms));
-        if !done.load(Ordering::Acquire) {
-            finish_ok(header);
+        loop {
+            let remaining = absolute_deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            thread::sleep(remaining);
         }
+        terminate_current_process(0);
     });
 }
 
-fn finish_ok(header: WireHeader) -> ! {
+fn write_response(header: WireHeader) -> bool {
     let mut stdout = io::stdout();
     let allow_pre_tool = CLIENT_MAPPINGS
         .iter()
@@ -142,11 +183,14 @@ fn finish_ok(header: WireHeader) -> ! {
         .map(|m| m.allow_pre_tool)
         .unwrap_or(true);
 
-    if header.event_id == 3 && allow_pre_tool {
-        let _ = stdout.write_all(b"{\"decision\":\"allow\"}");
+    let write_result = if header.event_id == 3 && allow_pre_tool {
+        stdout.write_all(b"{\"decision\":\"allow\"}")
     } else {
-        let _ = stdout.write_all(b"{}");
-    }
-    let _ = stdout.flush();
+        stdout.write_all(b"{}")
+    };
+    write_result.is_ok() && stdout.flush().is_ok()
+}
+
+fn finish_with_guard<T>(_guard: T) -> ! {
     process::exit(0);
 }

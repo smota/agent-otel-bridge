@@ -120,28 +120,29 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // 5. Client Binary Size SLA (< 350 KB)
-    print!("[GUARDRAIL] Checking client binary size SLA (< 350 KB)... ");
+    // 5. Conservative decimal interpretation of the documented < 300 KB SLA.
+    print!("[GUARDRAIL] Checking client binary size SLA (< 300000 bytes)... ");
     let build_rel = Command::new("cargo")
         .args(["build", "--release", "-p", "agent-otel-client"])
         .status();
-    if build_rel.is_ok() {
+    if build_rel.is_ok_and(|status| status.success()) {
         let exe_name = format!("agent-hook{}", std::env::consts::EXE_SUFFIX);
         let bin_path = Path::new("target").join("release").join(&exe_name);
         if bin_path.exists() {
             if let Ok(meta) = fs::metadata(&bin_path) {
-                let size_kb = (meta.len() as f64) / 1024.0;
-                if size_kb > 350.0 {
-                    println!("FAILED ({:.1} KB exceeds 350 KB SLA)", size_kb);
+                if meta.len() >= 300_000 {
+                    println!("FAILED ({} bytes reaches 300000 byte limit)", meta.len());
                     failures += 1;
                 } else {
-                    println!("({:.1} KB) PASSED", size_kb);
+                    println!("({} bytes) PASSED", meta.len());
                 }
             } else {
-                println!("PASSED");
+                println!("FAILED to inspect candidate binary");
+                failures += 1;
             }
         } else {
-            println!("(skipped release check: {} not found)", bin_path.display());
+            println!("FAILED ({} not found)", bin_path.display());
+            failures += 1;
         }
     } else {
         println!("FAILED to build release binary");

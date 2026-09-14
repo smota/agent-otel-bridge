@@ -276,8 +276,6 @@ fn serve_one(mut stream: TcpStream, fault: &HttpFault, counters: &HttpCounters, 
 impl Drop for ScriptedHttpService {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        // Wake a nonblocking accept loop without depending on a platform-specific API.
-        let _ = TcpStream::connect(self.address);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -371,6 +369,22 @@ mod tests {
             ScriptedHttpService::start(vec![HttpFault::Delay(Duration::from_secs(5))]).unwrap();
         let mut stream = TcpStream::connect(service.address()).unwrap();
         stream.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+        let started = std::time::Instant::now();
+        drop(service);
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn http_drop_after_worker_exit_is_bounded() {
+        let service = ScriptedHttpService::start(vec![]).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while !service.worker.as_ref().unwrap().is_finished()
+            && std::time::Instant::now() < deadline
+        {
+            thread::yield_now();
+        }
+        assert!(service.worker.as_ref().unwrap().is_finished());
+
         let started = std::time::Instant::now();
         drop(service);
         assert!(started.elapsed() < Duration::from_secs(1));

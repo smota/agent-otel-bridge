@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smota.dev/agent-otel-bridge/load-report-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "seed", "environment", "source_state", "candidate_hashes", "installed_bridge", "integrity_gates", "campaign_duration_seconds", "profiles", "verdict", "limitations"],
+  "properties": {
+    "schema": {"const": "agent-otel-load/v1"},
+    "run_id": {"type": "string", "format": "uuid"},
+    "seed": {"type": "integer"},
+    "environment": {"type": "object"},
+    "source_state": {"$ref": "#/$defs/beforeAfter"},
+    "candidate_hashes": {"$ref": "#/$defs/beforeAfter"},
+    "installed_bridge": {"$ref": "#/$defs/beforeAfter"},
+    "integrity_gates": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_intact", "candidate_binaries_intact", "installed_bridge_intact"],
+      "properties": {
+        "source_intact": {"type": "boolean"},
+        "candidate_binaries_intact": {"type": "boolean"},
+        "installed_bridge_intact": {"type": "boolean"}
+      }
+    },
+    "campaign_duration_seconds": {"type": "number", "minimum": 0, "maximum": 180},
+    "profiles": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"$ref": "#/$defs/profile"}},
+    "verdict": {"$ref": "#/$defs/verdict"},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  },
+  "$defs": {
+    "verdict": {"enum": ["passed", "failed", "not_measured"]},
+    "beforeAfter": {
+      "type": "object", "additionalProperties": false, "required": ["before", "after"],
+      "properties": {"before": {"type": "object"}, "after": {"type": "object"}}
+    },
+    "numberOrMissing": {"oneOf": [{"type": "number"}, {"const": "not_measured"}]},
+    "integerOrMissing": {"oneOf": [{"type": "integer"}, {"const": "not_measured"}]},
+    "stats": {
+      "type": "object", "additionalProperties": false, "required": ["p50", "p95", "p99", "max"],
+      "properties": {"p50": {"$ref": "#/$defs/numberOrMissing"}, "p95": {"$ref": "#/$defs/numberOrMissing"}, "p99": {"$ref": "#/$defs/numberOrMissing"}, "max": {"$ref": "#/$defs/numberOrMissing"}}
+    },
+    "profile": {
+      "type": "object",
+      "required": ["concurrency", "verdict", "assertions"],
+      "properties": {
+        "concurrency": {"type": "integer", "minimum": 1, "maximum": 16},
+        "target_rate_eps": {"type": "number", "exclusiveMinimum": 0},
+        "scheduled_interval_ms": {"type": "number", "exclusiveMinimum": 0},
+        "duration_seconds": {"type": "number", "minimum": 0, "maximum": 20},
+        "configured_seconds": {"type": "number", "minimum": 1, "maximum": 10},
+        "max_events": {"type": "integer", "minimum": 1, "maximum": 900},
+        "counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["configured", "offered", "admitted", "completed", "delivered", "schedule_missed", "admission_skipped", "worker_errors", "generator_limited"],
+          "properties": {
+            "configured": {"type": "integer", "minimum": 1, "maximum": 900},
+            "offered": {"type": "integer", "minimum": 0, "maximum": 900},
+            "admitted": {"type": "integer", "minimum": 0, "maximum": 900},
+            "completed": {"type": "integer", "minimum": 0, "maximum": 900},
+            "delivered": {"type": "integer", "minimum": 0, "maximum": 900},
+            "schedule_missed": {"type": "integer", "minimum": 0, "maximum": 900},
+            "admission_skipped": {"type": "integer", "minimum": 0, "maximum": 900},
+            "worker_errors": {"type": "integer", "minimum": 0, "maximum": 900},
+            "generator_limited": {"type": "boolean"}
+          }
+        },
+        "rates": {
+          "type": "object", "additionalProperties": false,
+          "required": ["offered_rate_eps", "admitted_rate_eps", "completed_rate_eps", "delivered_rate_eps"],
+          "properties": {"offered_rate_eps": {"$ref": "#/$defs/numberOrMissing"}, "admitted_rate_eps": {"$ref": "#/$defs/numberOrMissing"}, "completed_rate_eps": {"$ref": "#/$defs/numberOrMissing"}, "delivered_rate_eps": {"$ref": "#/$defs/numberOrMissing"}}
+        },
+        "percentiles": {
+          "type": "object", "additionalProperties": false,
+          "required": ["external_hook_durations_ms", "e2e_latencies_ms", "scheduler_lateness_ms"],
+          "properties": {"external_hook_durations_ms": {"$ref": "#/$defs/stats"}, "e2e_latencies_ms": {"$ref": "#/$defs/stats"}, "scheduler_lateness_ms": {"$ref": "#/$defs/stats"}}
+        },
+        "rss_bytes": {
+          "type": "object", "additionalProperties": false, "required": ["baseline", "peak", "delta"],
+          "properties": {"baseline": {"$ref": "#/$defs/integerOrMissing"}, "peak": {"$ref": "#/$defs/integerOrMissing"}, "delta": {"$ref": "#/$defs/integerOrMissing"}}
+        },
+        "daemon_diagnostics": {"type": "object"},
+        "verdict": {"$ref": "#/$defs/verdict"},
+        "assertions": {"type": "array", "items": {"type": "object"}},
+        "trace_evidence": {"type": "object"},
+        "cleanup": {"type": "object"}
+      }
+    }
+  }
+}

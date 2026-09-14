@@ -221,3 +221,22 @@ Replaces ambiguous binary errors with actionable diagnostic categories:
 | `agent.error.category` | `provider_quota_exhausted` | Upstream rate limit or quota exceeded | High; triggers provider failover or wait window. |
 | `agent.error.category` | `schema_validation_error` | Model emitted invalid JSON arguments | Medium; tune tool schema or system instructions. |
 | `agent.error.category` | `user_interrupted` | User cancelled operation (Ctrl+C / Stop) | None; intentional human flow control. |
+
+### 5.6 Bridge Pipeline Diagnostics
+
+Bridge diagnostics are process-scoped operational facts. Counters are monotonic and cumulative until the daemon restarts; gauges are instantaneous snapshots. Labels use the finite values below. They never contain workspace paths, user identities, trace/span IDs, prompts, payloads, or error messages. Alert thresholds remain a backend policy.
+
+Hook-derived spans currently represent the daemon observation instant: start and end are equal when the hook payload supplies no authoritative execution interval. Their zero duration is **not** a measured tool duration and must not be included in tool-latency SLA distributions. The former synthetic 1 ms interval is no longer emitted. Internal hook execution is measured separately by the candidate observer; that interval is not tool execution time. Native spans with authoritative start/end timestamps retain their own duration semantics.
+
+| Metric | OTLP aggregation | Unit | Labels | Meaning |
+| :--- | :--- | :--- | :--- | :--- |
+| `agent.bridge.events.total` | Cumulative monotonic sum | `{event}` | `stage`, `outcome` | Unique frames/events crossing `frame_received`, `admitted`, `transformed`, `export_queued`, and backend outcomes. Export retries do not increment event stages. |
+| `agent.bridge.dropped.total` | Cumulative monotonic sum | `{event}` | `reason` | Events discarded for a finite reason such as invalid input, deadline, bounded-capacity rejection, span size, or shutdown. |
+| `agent.bridge.queue.items` | Gauge | `{item}` | `queue` | Current item occupancy for the export and context-refresh queues. |
+| `agent.bridge.queue.bytes` | Gauge | `By` | `queue`, `watermark` | Current or peak logical byte reservation for ingress, export, and the context cache. This is not process RSS. |
+| `agent.bridge.context.refresh.total` | Cumulative monotonic sum | `{refresh}` | `result` | Context refreshes queued, completed, failed, rejected by queue/circuit capacity, or rejected for snapshot size. |
+| `agent.bridge.export.attempts.total` | Cumulative monotonic sum | `{attempt}` | `result` | OTLP request attempts and batches whose delivery may have duplicated after a lost response. |
+| `agent.bridge.connections` | Gauge | `{connection}` | `watermark` | Current or peak simultaneous ingress connections. |
+| `agent.bridge.context.workers` | Gauge | `{worker}` | `state` | Fixed refresh workers currently active or considered stuck. |
+
+For `agent.bridge.events.total{stage="backend"}`, `accepted`, `rejected`, and `unknown` are mutually exclusive accounting outcomes. A valid OTLP partial-success response contributes its accepted and rejected counts separately. A request sent without a conclusive response contributes to `unknown`; it must not also be counted as a confirmed drop. `agent.bridge.export.attempts.total` counts HTTP attempts, so it must not be summed with unique event counts.

@@ -4,8 +4,63 @@
  */
 
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+pub const DEFAULT_CONTEXT_MAX_ANCESTORS: usize = 15;
+pub const DEFAULT_CONTEXT_MAX_FILE_BYTES: usize = 64 * 1024;
+pub const DEFAULT_CONTEXT_BUDGET: Duration = Duration::from_millis(20);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HarvestLimits {
+    pub max_ancestors: usize,
+    pub max_file_bytes: usize,
+    pub budget: Duration,
+}
+
+impl Default for HarvestLimits {
+    fn default() -> Self {
+        Self {
+            max_ancestors: DEFAULT_CONTEXT_MAX_ANCESTORS,
+            max_file_bytes: DEFAULT_CONTEXT_MAX_FILE_BYTES,
+            budget: DEFAULT_CONTEXT_BUDGET,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContextHarvest {
+    pub context: WorkspaceContext,
+    /// False means the cooperative budget elapsed between filesystem calls.
+    /// An individual blocked syscall cannot be cancelled by this contract.
+    pub completed: bool,
+}
+
+struct HarvestBudget {
+    deadline: Instant,
+    exhausted: Cell<bool>,
+}
+
+impl HarvestBudget {
+    fn new(duration: Duration) -> Self {
+        Self {
+            deadline: Instant::now() + duration,
+            exhausted: Cell::new(false),
+        }
+    }
+
+    fn available(&self) -> bool {
+        if Instant::now() >= self.deadline {
+            self.exhausted.set(true);
+            false
+        } else {
+            true
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceContext {
@@ -25,6 +80,19 @@ impl WorkspaceContext {
     /// Harvests workspace and project context starting from a directory.
     /// Fast and non-blocking: uses direct stat/file reads with zero external subprocess calls.
     pub fn harvest_from_dir(dir: &Path) -> Self {
+        let mut context = Self::harvest_from_dir_with_limits(dir, HarvestLimits::default()).context;
+        context.launch_dir = std::env::var("INIT_CWD").ok().or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|path| path.to_string_lossy().to_string())
+        });
+        context
+    }
+
+    /// Bounded context probe used by daemon refresh workers. The deadline is
+    /// cooperative: it is checked between direct filesystem operations.
+    pub fn harvest_from_dir_with_limits(dir: &Path, limits: HarvestLimits) -> ContextHarvest {
+        let budget = HarvestBudget::new(limits.budget);
         let current_dir = dir
             .canonicalize()
             .unwrap_or_else(|_| dir.to_path_buf())
@@ -33,16 +101,11 @@ impl WorkspaceContext {
 
         let mut ctx = Self {
             current_dir,
-            launch_dir: std::env::var("INIT_CWD").ok().or_else(|| {
-                std::env::current_dir()
-                    .ok()
-                    .map(|p| p.to_string_lossy().to_string())
-            }),
             ..Default::default()
         };
 
         // Ascend parent directories to detect project markers
-        if let Some((root, ptype, name)) = find_project_root(dir) {
+        if let Some((root, ptype, name)) = find_project_root(dir, limits, &budget) {
             ctx.project_root = Some(root.to_string_lossy().to_string());
             ctx.project_type = Some(ptype);
             ctx.project_name = name;
@@ -54,7 +117,7 @@ impl WorkspaceContext {
         }
 
         // Detect VCS (Git) hints starting from dir and ascending
-        if let Some(vcs) = probe_git_metadata(dir) {
+        if let Some(vcs) = probe_git_metadata(dir, limits, &budget) {
             ctx.vcs_system = Some("git".to_string());
             ctx.vcs_repository = vcs.repository;
             ctx.vcs_branch = vcs.branch;
@@ -64,7 +127,10 @@ impl WorkspaceContext {
             ctx.vcs_system = Some("none".to_string());
         }
 
-        ctx
+        ContextHarvest {
+            context: ctx,
+            completed: !budget.exhausted.get(),
+        }
     }
 
     /// Harvests context from current process working directory.
@@ -90,13 +156,23 @@ const PROJECT_MARKERS: &[(&str, &str)] = &[
     (".codex", "codex_workspace"),
 ];
 
-fn find_project_root(start_dir: &Path) -> Option<(PathBuf, String, Option<String>)> {
+fn find_project_root(
+    start_dir: &Path,
+    limits: HarvestLimits,
+    budget: &HarvestBudget,
+) -> Option<(PathBuf, String, Option<String>)> {
     let mut curr = start_dir.to_path_buf();
-    for _ in 0..15 {
+    for _ in 0..limits.max_ancestors {
+        if !budget.available() {
+            return None;
+        }
         for &(marker, ptype) in PROJECT_MARKERS {
+            if !budget.available() {
+                return None;
+            }
             let marker_path = curr.join(marker);
             if marker_path.exists() {
-                let name = extract_project_name(&curr, marker);
+                let name = extract_project_name(&curr, marker, limits.max_file_bytes, budget);
                 return Some((curr, ptype.to_string(), name));
             }
         }
@@ -107,9 +183,14 @@ fn find_project_root(start_dir: &Path) -> Option<(PathBuf, String, Option<String
     None
 }
 
-fn extract_project_name(root: &Path, marker: &str) -> Option<String> {
+fn extract_project_name(
+    root: &Path,
+    marker: &str,
+    max_file_bytes: usize,
+    budget: &HarvestBudget,
+) -> Option<String> {
     if marker == "Cargo.toml" {
-        if let Ok(content) = fs::read_to_string(root.join("Cargo.toml")) {
+        if let Some(content) = read_text_limited(&root.join("Cargo.toml"), max_file_bytes, budget) {
             for line in content.lines() {
                 let line = line.trim();
                 if line.starts_with("name =") || line.starts_with("name=") {
@@ -124,7 +205,8 @@ fn extract_project_name(root: &Path, marker: &str) -> Option<String> {
             }
         }
     } else if marker == "package.json" {
-        if let Ok(content) = fs::read_to_string(root.join("package.json")) {
+        if let Some(content) = read_text_limited(&root.join("package.json"), max_file_bytes, budget)
+        {
             for line in content.lines() {
                 let line = line.trim();
                 if line.starts_with("\"name\":") || line.starts_with("\"name\" :") {
@@ -150,15 +232,22 @@ struct GitProbeResult {
     is_worktree: bool,
 }
 
-fn probe_git_metadata(start_dir: &Path) -> Option<GitProbeResult> {
+fn probe_git_metadata(
+    start_dir: &Path,
+    limits: HarvestLimits,
+    budget: &HarvestBudget,
+) -> Option<GitProbeResult> {
     let mut curr = start_dir.to_path_buf();
-    for _ in 0..15 {
+    for _ in 0..limits.max_ancestors {
+        if !budget.available() {
+            return None;
+        }
         let git_marker = curr.join(".git");
         if git_marker.is_dir() {
-            return Some(read_git_dir(&git_marker, false));
+            return Some(read_git_dir(&git_marker, false, limits, budget));
         } else if git_marker.is_file() {
             // Git worktree pointer: format is "gitdir: /path/to/.git/worktrees/<name>"
-            if let Ok(content) = fs::read_to_string(&git_marker) {
+            if let Some(content) = read_text_limited(&git_marker, limits.max_file_bytes, budget) {
                 let line = content.trim();
                 if let Some(target) = line.strip_prefix("gitdir:") {
                     let target_path = target.trim();
@@ -168,11 +257,11 @@ fn probe_git_metadata(start_dir: &Path) -> Option<GitProbeResult> {
                         curr.join(target_path)
                     };
                     if resolved.exists() {
-                        return Some(read_git_dir(&resolved, true));
+                        return Some(read_git_dir(&resolved, true, limits, budget));
                     }
                 }
             }
-            return Some(read_git_dir(&git_marker, true));
+            return Some(read_git_dir(&git_marker, true, limits, budget));
         }
         if !curr.pop() {
             break;
@@ -181,27 +270,53 @@ fn probe_git_metadata(start_dir: &Path) -> Option<GitProbeResult> {
     None
 }
 
-fn read_git_dir(git_dir: &Path, is_worktree: bool) -> GitProbeResult {
+fn read_git_dir(
+    git_dir: &Path,
+    is_worktree: bool,
+    limits: HarvestLimits,
+    budget: &HarvestBudget,
+) -> GitProbeResult {
     let mut result = GitProbeResult {
         is_worktree,
         ..Default::default()
     };
 
+    let common_git_dir = if is_worktree {
+        read_text_limited(&git_dir.join("commondir"), limits.max_file_bytes, budget)
+            .map(|commondir| git_dir.join(commondir.trim()))
+            .unwrap_or_else(|| git_dir.to_path_buf())
+    } else {
+        git_dir.to_path_buf()
+    };
+
     // 1. Read HEAD
     let head_path = git_dir.join("HEAD");
-    if let Ok(head_content) = fs::read_to_string(head_path) {
+    if let Some(head_content) = read_text_limited(&head_path, limits.max_file_bytes, budget) {
         let head_line = head_content.trim();
         if let Some(branch_ref) = head_line.strip_prefix("ref: refs/heads/") {
             let branch = branch_ref.trim().to_string();
             result.branch = Some(branch.clone());
 
             // Try reading commit from refs/heads/<branch>
-            let ref_path = git_dir.join("refs").join("heads").join(&branch);
-            if let Ok(sha) = fs::read_to_string(ref_path) {
+            let ref_path = common_git_dir.join("refs").join("heads").join(&branch);
+            if let Some(sha) = read_text_limited(&ref_path, limits.max_file_bytes, budget) {
                 let sha = sha.trim();
                 if sha.len() >= 7 {
                     result.commit = Some(sha.to_string());
                 }
+            } else if let Some(packed_refs) = read_text_limited(
+                &common_git_dir.join("packed-refs"),
+                limits.max_file_bytes,
+                budget,
+            ) {
+                let wanted = format!("refs/heads/{branch}");
+                result.commit = packed_refs.lines().find_map(|line| {
+                    let mut parts = line.split_whitespace();
+                    let sha = parts.next()?;
+                    let reference = parts.next()?;
+                    (reference == wanted && sha.chars().all(|c| c.is_ascii_hexdigit()))
+                        .then(|| sha.to_string())
+                });
             }
         } else if head_line.len() >= 7 && head_line.chars().all(|c| c.is_ascii_hexdigit()) {
             // Detached HEAD
@@ -211,20 +326,9 @@ fn read_git_dir(git_dir: &Path, is_worktree: bool) -> GitProbeResult {
     }
 
     // 2. Read git config for remote origin
-    let config_path = if is_worktree {
-        // In worktrees, config may reside in the common dir
-        let commondir_path = git_dir.join("commondir");
-        if let Ok(commondir) = fs::read_to_string(commondir_path) {
-            let common_resolved = git_dir.join(commondir.trim());
-            common_resolved.join("config")
-        } else {
-            git_dir.join("config")
-        }
-    } else {
-        git_dir.join("config")
-    };
+    let config_path = common_git_dir.join("config");
 
-    if let Ok(config_content) = fs::read_to_string(config_path) {
+    if let Some(config_content) = read_text_limited(&config_path, limits.max_file_bytes, budget) {
         let mut in_origin = false;
         for line in config_content.lines() {
             let line = line.trim();
@@ -250,6 +354,25 @@ fn read_git_dir(git_dir: &Path, is_worktree: bool) -> GitProbeResult {
     }
 
     result
+}
+
+fn read_text_limited(path: &Path, max_file_bytes: usize, budget: &HarvestBudget) -> Option<String> {
+    if !budget.available() {
+        return None;
+    }
+    let metadata = fs::metadata(path).ok()?;
+    if metadata.len() > max_file_bytes as u64 || !budget.available() {
+        return None;
+    }
+    let file = fs::File::open(path).ok()?;
+    let mut bytes = Vec::with_capacity((metadata.len() as usize).min(max_file_bytes));
+    file.take(max_file_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() > max_file_bytes || !budget.available() {
+        return None;
+    }
+    String::from_utf8(bytes).ok()
 }
 
 fn sanitize_git_url(raw_url: &str) -> String {

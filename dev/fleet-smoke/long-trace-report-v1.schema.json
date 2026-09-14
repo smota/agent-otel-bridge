@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smota.dev/agent-otel-bridge/long-trace-report-v1.schema.json",
+  "title": "Controlled native long-trace report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "trace_id", "root_span_id", "service_name",
+    "start_ms", "end_ms", "duration_sec", "requested_duration_sec",
+    "pacing_interval_sec", "expected_events", "received_events",
+    "expected", "received", "hook_executions", "transport",
+    "backend_visibility", "diagnostics", "cleanup", "integrity",
+    "hard_gates", "verdict"
+  ],
+  "properties": {
+    "schema": {"const": "agent-otel-long-trace/v1"},
+    "run_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "trace_id": {"$ref": "#/$defs/traceId"},
+    "root_span_id": {"$ref": "#/$defs/spanId"},
+    "service_name": {"type": "string", "pattern": "^agent-otel-long-trace-[0-9a-f]{8}$"},
+    "start_ms": {"type": "integer", "minimum": 0},
+    "end_ms": {"type": "integer", "minimum": 0},
+    "duration_sec": {"type": "number", "minimum": 0},
+    "requested_duration_sec": {"type": "integer", "minimum": 10, "maximum": 120},
+    "pacing_interval_sec": {"type": "number", "exclusiveMinimum": 0},
+    "expected_events": {"type": "integer", "minimum": 3, "maximum": 120},
+    "received_events": {"type": "integer", "minimum": 0, "maximum": 200},
+    "arrival_progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_arrival_offset_ms", "middle_arrival_offset_ms", "last_arrival_offset_ms"],
+      "properties": {
+        "first_arrival_offset_ms": {"type": ["number", "null"], "minimum": 0},
+        "middle_arrival_offset_ms": {"type": ["number", "null"], "minimum": 0},
+        "last_arrival_offset_ms": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "expected": {"type": "array", "maxItems": 120, "items": {"$ref": "#/$defs/expectedSpan"}},
+    "received": {"type": "array", "maxItems": 120, "items": {"$ref": "#/$defs/receivedSpan"}},
+    "trace_evidence": {"$ref": "#/$defs/traceEvidence"},
+    "hook_executions": {"type": "array", "maxItems": 120, "items": {"$ref": "#/$defs/hookExecution"}},
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["error"]},
+        {"required": [
+          "collector_requests", "collector_forwarded_ok", "collector_forward_errors",
+          "collector_rejected_spans", "root_export"
+        ]}
+      ],
+      "properties": {
+        "collector_requests": {"type": "integer", "minimum": 0},
+        "collector_forwarded_ok": {"type": "integer", "minimum": 0},
+        "collector_forward_errors": {"type": "integer", "minimum": 0},
+        "collector_rejected_spans": {"type": "integer", "minimum": 0},
+        "root_export": {"$ref": "#/$defs/rootExport"},
+        "error": {"type": "string"}
+      }
+    },
+    "backend_visibility": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {
+          "enum": ["not_checked", "visible_complete", "visible_partial", "not_found", "query_failed"]
+        },
+        "reason": {"type": ["string", "null"]},
+        "source": {"enum": ["signoz_mcp", "signoz_api"]},
+        "queried_at_utc": {"type": "string", "format": "date-time"},
+        "observed_trace_id": {"$ref": "#/$defs/traceId"},
+        "observed_span_ids": {
+          "type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/spanId"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "visible_complete"}}},
+          "then": {"required": ["source", "queried_at_utc", "observed_trace_id", "observed_span_ids"]}
+        },
+        {
+          "if": {"properties": {"status": {"enum": ["visible_partial", "not_found", "query_failed"]}}},
+          "then": {"required": ["source", "queried_at_utc"]}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "object",
+      "required": ["daemon"],
+      "properties": {
+        "daemon": {"type": "object"},
+        "collector_errors": {"type": "array", "maxItems": 32, "items": {"type": "string"}},
+        "abort_reason": {"type": ["string", "null"]},
+        "root_clock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complete", "end_time_unix_nano", "monotonic_elapsed_sec", "wall_elapsed_sec", "max_catchup_sec"],
+          "properties": {
+            "complete": {"type": "boolean"},
+            "end_time_unix_nano": {"type": "integer", "minimum": 0},
+            "monotonic_elapsed_sec": {"type": "number", "minimum": 0},
+            "wall_elapsed_sec": {"type": "number"},
+            "max_catchup_sec": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["daemon_stopped", "workspace_removed", "collector_stopped"],
+      "properties": {
+        "daemon_stopped": {"type": "boolean"},
+        "workspace_removed": {"type": "boolean"},
+        "collector_stopped": {"type": "boolean"}
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": {"$ref": "#/$defs/integritySnapshot"},
+        "after": {"$ref": "#/$defs/integritySnapshot"}
+      }
+    },
+    "hard_gates": {
+      "type": "object",
+      "additionalProperties": {"type": "boolean"},
+      "minProperties": 1
+    },
+    "verdict": {"enum": ["passed", "failed"]}
+  },
+  "$defs": {
+    "traceId": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "spanId": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "sha256": {
+      "anyOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "expectedSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "parent_span_id", "tool_call_id"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "parent_span_id": {"$ref": "#/$defs/spanId"},
+        "span_id": {"$ref": "#/$defs/spanId"},
+        "tool_call_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "receivedSpan": {
+      "type": "object",
+      "required": [
+        "trace_id", "span_id", "parent_span_id", "name", "kind",
+        "start_time_unix_nano", "end_time_unix_nano", "attributes",
+        "arrival_monotonic"
+      ],
+      "properties": {
+        "trace_id": {"$ref": "#/$defs/traceId"},
+        "span_id": {"$ref": "#/$defs/spanId"},
+        "parent_span_id": {"$ref": "#/$defs/spanId"},
+        "name": {"type": "string"},
+        "kind": {"type": "integer", "minimum": 0},
+        "start_time_unix_nano": {"type": "integer", "minimum": 0},
+        "end_time_unix_nano": {"type": "integer", "minimum": 0},
+        "attributes": {"type": "object"},
+        "arrival_monotonic": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "hookExecution": {
+      "type": "object",
+      "required": [
+        "index", "trace_id", "parent_span_id", "send_start", "hook_end",
+        "duration_ms", "exit_code", "timed_out", "response_ok", "stderr",
+        "output_bounded", "output_drain_complete"
+      ],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "trace_id": {"$ref": "#/$defs/traceId"},
+        "parent_span_id": {"$ref": "#/$defs/spanId"},
+        "send_start": {"type": "number", "minimum": 0},
+        "hook_end": {"type": "number", "minimum": 0},
+        "duration_ms": {"type": "number", "minimum": 0},
+        "exit_code": {"type": ["integer", "null"]},
+        "timed_out": {"type": "boolean"},
+        "response_ok": {"type": "boolean"},
+        "output_bounded": {"type": "boolean"},
+        "output_drain_complete": {"type": "boolean"},
+        "stderr": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "rootExport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sent", "status_code", "rejected_spans", "error", "ok"],
+      "properties": {
+        "sent": {"type": "boolean"},
+        "status_code": {"type": ["integer", "null"]},
+        "rejected_spans": {"type": "integer", "minimum": 0},
+        "error": {"type": ["string", "null"]},
+        "ok": {"type": "boolean"}
+      }
+    },
+    "traceEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valid", "expected_count", "captured_count", "trace_capture_count",
+        "logical_count", "duplicate_capture_count", "conflicting_duplicate_ids",
+        "unexpected_trace_ids", "invalid_span_ids", "wrong_parent_ids", "orphan_ids"
+      ],
+      "properties": {
+        "valid": {"type": "boolean"},
+        "expected_count": {"type": "integer", "minimum": 0},
+        "captured_count": {"type": "integer", "minimum": 0},
+        "trace_capture_count": {"type": "integer", "minimum": 0},
+        "logical_count": {"type": "integer", "minimum": 0},
+        "duplicate_capture_count": {"type": "integer", "minimum": 0},
+        "conflicting_duplicate_ids": {"type": "array", "items": {"type": "string"}},
+        "unexpected_trace_ids": {"type": "array", "items": {"type": "string"}},
+        "invalid_span_ids": {"type": "array", "items": {"type": "string"}},
+        "wrong_parent_ids": {"type": "array", "items": {"type": "string"}},
+        "orphan_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "integritySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_daemon_sha256", "candidate_hook_sha256",
+        "installed_bridge", "source_state", "environment"
+      ],
+      "properties": {
+        "candidate_daemon_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_hook_sha256": {"$ref": "#/$defs/sha256"},
+        "installed_bridge": {"type": "object"},
+        "source_state": {"type": "object"},
+        "environment": {"type": "object"}
+      }
+    }
+  }
+}

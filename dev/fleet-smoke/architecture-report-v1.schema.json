@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smota.dev/agent-otel-bridge/architecture-report-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "timestamp", "seed", "repeats", "environment", "candidate_hashes", "source_state", "installed_bridge", "integrity_gates", "campaign_duration_seconds", "overall_verdict", "scenarios"],
+  "properties": {
+    "schema": {"const": "agent-otel-new-architecture/v1"},
+    "timestamp": {"type": "integer", "minimum": 0},
+    "seed": {"type": "integer"},
+    "repeats": {"type": "integer", "minimum": 1, "maximum": 3},
+    "environment": {"type": "object"},
+    "candidate_hashes": {
+      "type": "object", "additionalProperties": false, "required": ["daemon", "hook"],
+      "properties": {"daemon": {"$ref": "#/$defs/binary"}, "hook": {"$ref": "#/$defs/binary"}}
+    },
+    "source_state": {
+      "type": "object", "additionalProperties": false, "required": ["before", "after"],
+      "properties": {"before": {"type": "object"}, "after": {"type": "object"}}
+    },
+    "installed_bridge": {
+      "type": "object", "additionalProperties": false, "required": ["before", "after"],
+      "properties": {"before": {"$ref": "#/$defs/installed"}, "after": {"$ref": "#/$defs/installed"}}
+    },
+    "integrity_gates": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_intact", "candidate_binaries_intact", "installed_bridge_intact"],
+      "properties": {"source_intact": {"type": "boolean"}, "candidate_binaries_intact": {"type": "boolean"}, "installed_bridge_intact": {"type": "boolean"}}
+    },
+    "campaign_duration_seconds": {"type": "number", "minimum": 0},
+    "overall_verdict": {"$ref": "#/$defs/verdict"},
+    "scenarios": {"type": "array", "items": {"$ref": "#/$defs/scenario"}}
+  },
+  "$defs": {
+    "verdict": {"enum": ["passed", "failed", "not_measured"]},
+    "nullableSha": {"anyOf": [{"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}, {"type": "null"}]},
+    "binary": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+      "properties": {"path": {"type": "string"}, "sha256": {"$ref": "#/$defs/nullableSha"}}
+    },
+    "installed": {
+      "type": "object", "additionalProperties": false, "required": ["active_json_sha256", "bin_hashes"],
+      "properties": {
+        "active_json_sha256": {"$ref": "#/$defs/nullableSha"},
+        "bin_hashes": {"type": "object", "additionalProperties": {"$ref": "#/$defs/nullableSha"}}
+      }
+    },
+    "assertion": {
+      "type": "object", "additionalProperties": false, "required": ["id", "observed", "expected", "status", "reason"],
+      "properties": {"id": {"type": "string"}, "observed": {}, "expected": {}, "status": {"$ref": "#/$defs/verdict"}, "reason": {"type": ["string", "null"]}}
+    },
+    "traceEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["offered_count", "received_count", "missing_ids", "duplicate_ids", "unexpected_ids", "response_failure_ids", "wrong_parent_ids", "valid", "expected", "received"],
+      "properties": {
+        "offered_count": {"type": "integer", "minimum": 0}, "received_count": {"type": "integer", "minimum": 0},
+        "missing_ids": {"type": "array", "items": {"type": "string"}}, "duplicate_ids": {"type": "array", "items": {"type": "string"}},
+        "unexpected_ids": {"type": "array", "items": {"type": "string"}}, "response_failure_ids": {"type": "array", "items": {"type": "string"}},
+        "wrong_parent_ids": {"type": "array", "items": {"type": "string"}}, "valid": {"type": "boolean"},
+        "expected": {"type": "array", "items": {"type": "object"}}, "received": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "scenario": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "verdict", "round", "assertions", "metrics", "trace_evidence", "cleanup"],
+      "properties": {
+        "id": {"enum": ["cold_cache", "warm_cache", "stale_refresh", "multi_workspace", "exporter_blocked", "concurrent_delivery"]},
+        "verdict": {"$ref": "#/$defs/verdict"}, "round": {"type": "integer", "minimum": 0},
+        "assertions": {"type": "array", "items": {"$ref": "#/$defs/assertion"}},
+        "metrics": {"type": "object"}, "trace_evidence": {"$ref": "#/$defs/traceEvidence"}, "cleanup": {"type": "object"}
+      }
+    }
+  }
+}

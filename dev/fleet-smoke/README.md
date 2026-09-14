@@ -1,5 +1,31 @@
 # Fleet smoke laboratory
 
+The candidate implementation follows the [performance implementation specification](performance-implementation-spec.md), [execution plan](performance-implementation-plan.md), and [task manifest](performance-work-items.json). The manifest distinguishes implementation from acceptance; performance approval requires measured evidence. Codex coordinates candidate implementation; Antigravity remains the native fleet campaign coordinator. Runtime reports remain transient.
+
+## Candidate performance loop
+
+Run from the repository root, with all source writers stopped. Build candidate binaries without installing them:
+
+```text
+cargo guardrails
+cargo build -p agent-otel-bridge
+cargo build --release -p agent-otel-bridge -p agent-otel-client
+cargo build --release -p agent-otel-fleet-smoke --examples
+python dev/fleet-smoke/perf_loop.py --repeats 3 --timeout 900
+```
+
+The controller creates a temporary campaign directory and ledger. An explicit `--campaign-dir` may instead name an owned temporary directory outside the source tree. One ledger limits the entire campaign to five reserved attempts. A failed assertion stops automatic advancement; after reviewing and fixing the candidate, explicitly resume that same ledger:
+
+```text
+python dev/fleet-smoke/perf_loop.py --resume-ledger <temporary-directory>/ledger.json --repeats 3 --timeout 900
+```
+
+`--observe-hook` adds per-client transport observation for delivery diagnosis on Windows. `--preload-stdin` changes the stimulus and is diagnostic only; neither option turns diagnostic delivery evidence into approval of the original scenario. Do not replace an earlier failed report with a later passing report. The controller preserves attempt identities, source fingerprints, assertions, trace IDs, and bounded cleanup results. Local collector receipts are not proof of SigNoz visibility.
+
+The hook timing campaign uses explicit candidate binaries, a private daemon pipe and a loopback collector. It reports missing observer records as not measured and measures internal hook work separately from external process lifetime. Native Linux/macOS performance and actual harness compatibility require separate evidence. No command above installs binaries, edits global hooks, or launches paid agents. Delete only the owned temporary campaign directory after evaluating its reports; keep the code and contracts in source control.
+
+Performance validation is coordinated primarily by Antigravity, with independent Codex review. See [measurement methodology](performance-validation.md) and [coordination contract](performance-coordination.md). The current local campaign measures Windows; unavailable native platforms are explicitly `not_measured`. Runtime reports remain transient.
+
 `agent-otel-fleet-smoke` is a development-only Rust lab for bounded fleet trace behavior. Its package is `publish = false`; it does not install hooks, activate a runtime, edit harness configuration, or start a campaign. No live fleet run or provider call is claimed here.
 
 ## Fixed fleet and profiles
@@ -123,3 +149,14 @@ The known native core gap is that the hook forwards stdin while the daemon envir
 Explicitly retained artifacts use unique system temporary directories beginning `agent-otel-fleet-report-`. The legacy library `Runner::run` also retains its artifact for compatibility; the CLI uses the memory-only `run_outcome` path. Fixture workspaces begin `agent-otel-fleet-fixture-` and clean up on drop. There is no PowerShell launcher, install command, active runtime change, hook activation, provider calibration, or default network/provider call. CI is configured for three operating systems; only local Windows execution is tested evidence.
 
 Implementation workers are Codex Terra (scheduler/contracts/verifier) and Codex Luna (fixtures/adapters/docs), with distinct runtime roles. The fixed runtime fleet remains Codex Luna, Grok 4.5, and Antigravity Gemini 3.8 Flash Low, all low reasoning. This table does not launch runtime agents.
+
+## Architecture characterization suite
+
+`architecture_suite.py` is a development-only candidate check. From the repository root run `python dev/fleet-smoke/architecture_suite.py --daemon-bin target/release/agent-otel-bridge.exe --hook-bin target/release/agent-hook.exe --seed 42 --repeats 3`. It characterizes end-to-end timing and local synthetic trace lineage. Existing hard SLAs remain binding and require their own evidence; synthetic trace IDs and local receipts do not prove SigNoz visibility, native bridge propagation, or provider/fleet behavior. The report captures the actual Windows environment; Linux and macOS remain `not_measured` without native evidence.
+
+The command does not install, activate, restart, or mutate hooks, daemon state, or global configuration. Source changes remain unshipped, report data is transient unless explicitly written, and QA repair is bounded to five attempts before the result is frozen. See [architecture-report-v1.schema.json](architecture-report-v1.schema.json).
+
+The report records each scenario's batch size, batch timeout, and the fixed 1-second context freshness TTL. The multi-workspace case uses immediate one-event batches because it primes two workspaces sequentially and then requires both final snapshots to remain fresh; the other cases keep their documented profiles. This test setting does not change the product TTL or relax its path, branch, and freshness assertions.
+The next bounded campaign is described in [load-loop-plan.md](load-loop-plan.md). Run `python dev/fleet-smoke/load_campaign.py --daemon-bin target/release/agent-otel-bridge.exe --hook-bin target/release/agent-hook.exe` from the repository root. It creates a temporary campaign directory and runs the architecture regression, paced load, existing micro/IPC/internal-hook probes and a 60-second controlled long trace sequentially. Repeat with the printed `--campaign-dir` to consume the next attempt; the same ledger permits at most three, including interrupted attempts. Coordination and surgical refinements happen between invocations.
+
+The long-trace probe forwards its controlled telemetry to the configured `OTEL_EXPORTER_OTLP_ENDPOINT` (or explicit `--endpoint`). It reports transport separately from SigNoz visibility. The coordinator must query the emitted exact trace ID and time window through MCP/API, compare root and descendant identities/parents, and retain that assessment separately. No HTTP success or zero controller exit code is overall performance/SLA approval.

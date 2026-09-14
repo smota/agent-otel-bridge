@@ -16,6 +16,16 @@ use crate::trace_id::{
     derive_span_id, resolve_trace_context_with_environment, ResolvedTraceContext,
 };
 
+/// Ambient values resolved before span construction.
+///
+/// Keeping these values explicit makes [`build_span_from_resolved`] suitable
+/// for the daemon hot path and deterministic benchmarks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ResolvedSpanMetadata<'a> {
+    pub user_email: Option<&'a str>,
+    pub terminal_type: Option<&'a str>,
+}
+
 pub fn kv_string(key: &str, value: &str) -> KeyValue {
     KeyValue {
         key: key.to_string(),
@@ -122,6 +132,54 @@ pub fn build_span_from_hook_with_context_opts(
     end_time_unix_nano: u64,
     salt: u32,
     context: ResolvedTraceContext,
+    emit_legacy_aliases: bool,
+) -> Span {
+    let email = input
+        .user_email
+        .clone()
+        .or_else(|| std::env::var("USER_EMAIL").ok())
+        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
+        .or_else(crate::context::harvest_user_email);
+    let terminal = input
+        .terminal_type
+        .clone()
+        .or_else(|| std::env::var("TERM_PROGRAM").ok())
+        .or_else(|| {
+            std::env::var("WT_SESSION")
+                .ok()
+                .map(|_| "windows-terminal".to_string())
+        })
+        .or_else(|| std::env::var("TERM").ok());
+
+    build_span_from_resolved(
+        event,
+        input,
+        start_time_unix_nano,
+        end_time_unix_nano,
+        salt,
+        context,
+        ResolvedSpanMetadata {
+            user_email: email.as_deref(),
+            terminal_type: terminal.as_deref(),
+        },
+        emit_legacy_aliases,
+    )
+}
+
+/// Builds one span entirely from caller-supplied values.
+///
+/// This function performs no filesystem, environment, clock, random, or
+/// tracing-context reads. The daemon should resolve all ambient data before
+/// calling it; the historical builders above remain compatibility wrappers.
+#[allow(clippy::too_many_arguments)]
+pub fn build_span_from_resolved(
+    event: HookEvent,
+    input: &AgentHookInput,
+    start_time_unix_nano: u64,
+    end_time_unix_nano: u64,
+    salt: u32,
+    context: ResolvedTraceContext,
+    metadata: ResolvedSpanMetadata<'_>,
     emit_legacy_aliases: bool,
 ) -> Span {
     let tool_name = input.resolved_tool_name();
@@ -242,29 +300,13 @@ pub fn build_span_from_hook_with_context_opts(
         attributes.push(kv_bool(AGENT_SUCCESS, success));
     }
 
-    // Identity & Terminal context (payload or environment fallback)
-    let email_opt = input
-        .user_email
-        .clone()
-        .or_else(|| std::env::var("USER_EMAIL").ok())
-        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
-        .or_else(crate::context::harvest_user_email);
-    if let Some(email) = email_opt {
-        attributes.push(kv_string(USER_EMAIL, &email));
+    // Identity and terminal values were resolved outside this pure builder.
+    if let Some(email) = input.user_email.as_deref().or(metadata.user_email) {
+        attributes.push(kv_string(USER_EMAIL, email));
     }
 
-    let terminal_opt = input
-        .terminal_type
-        .clone()
-        .or_else(|| std::env::var("TERM_PROGRAM").ok())
-        .or_else(|| {
-            std::env::var("WT_SESSION")
-                .ok()
-                .map(|_| "windows-terminal".to_string())
-        })
-        .or_else(|| std::env::var("TERM").ok());
-    if let Some(term) = terminal_opt {
-        attributes.push(kv_string(TERMINAL_TYPE, &term));
+    if let Some(term) = input.terminal_type.as_deref().or(metadata.terminal_type) {
+        attributes.push(kv_string(TERMINAL_TYPE, term));
     }
 
     if let Some(mode) = input.execution_mode {

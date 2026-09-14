@@ -16,3 +16,6 @@ path = "src/main.rs"
 
 [dependencies]
 agent-otel-ipc = { workspace = true, default-features = false, features = ["client-sync"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
