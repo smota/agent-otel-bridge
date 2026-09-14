@@ -14,7 +14,7 @@
 1. **Sub-Millisecond Client Execution**: `agent-hook.exe` MUST execute in **< 1.0 ms**. It is a tiny, static PE32 binary whose sole job is to grab `stdin`, write to the Win32 Named Pipe via Overlapped I/O, and exit with `code 0`.
 2. **Fail-Open Backstop**: The client MUST NEVER block, freeze, or fail an AI agent turn. A dedicated 3ms OS watchdog thread terminates the client with `{}` and `exit 0` if pipe I/O stalls.
 3. **Zero LLM Prompt Pollution**: Distributed tracing context MUST propagate via process environment variables (`$env:TRACEPARENT`). Agents and LLMs must **never** be instructed to append `--traceparent` CLI flags or pollute tool schemas with tracing plumbing.
-4. **Non-Blocking Context Harvesting**: Workspace, project, and VCS context must be harvested in **< 150 µs** using direct filesystem stat/reads. **NEVER spawn external processes (like `git.exe` or `bash`) on the telemetry path.**
+4. **Non-Blocking Context Lookup**: The daemon's event path uses workspace-scoped snapshots without filesystem access or waiting for refresh. Misses schedule bounded asynchronous harvesting; events may export with explicitly missing context. Direct harvest latency is diagnostic, not the retired <150 µs release gate. **NEVER spawn external processes (like `git.exe` or `bash`) on the telemetry path.** Validate lookup, freshness and limits against [current acceptance contracts](dev/fleet-smoke/production-path-round.md).
 5. **Preference-Agnostic Tool Modeling**: Never hardcode developer-specific tool choices (`rtk`, `jq`, `bat`, `delta`) in the core engine. All commands are modeled as **Behavioral Execution Archetypes** (`FilterCompressor`, `StructuredParser`, `InspectorDiff`, `SearchRetrieval`, `BuildTestVerify`, `GenericExec`).
 6. **Objective Telemetry Only in Core**: The Rust core engine measures and emits raw facts (`capability.schema_tokens`, `tool.tokens_saved_estimate`). Alert thresholds and policy decisions belong in downstream observability platforms (SigNoz, Prometheus).
 7. **Zero Hot-Path Disk I/O**: `agent-hook` MUST NOT read configuration files from disk. Common tool mappings are compiled directly into the binary; custom overrides are cached in-memory by the long-running daemon at startup.
@@ -29,9 +29,11 @@ All pull requests, features, and refactors MUST respect the following SLAs, cont
 | :--- | :--- | :--- | :--- |
 | **`agent-hook.exe` Binary Size** | **< 300 KB** | `profile.release.package.agent-otel-client` (opt-level "s", strip, lto) | Bloated process creation time on Windows |
 | **Named Pipe Client RTT (p99)** | **< 3,000 µs** | Observed: `150 µs` (Win32 Overlapped) | Test failure in `ipc_tests` / `agent-otel-bench` |
-| **ProtoJSON Parser Throughput** | **> 50,000 spans/s** | Observed: `62,943 spans/s` (Mean: `14.4 µs`) | Dropped spans under heavy agent loops |
-| **Context Harvester Latency** | **< 150 µs** | Direct file read of `.git/HEAD` | Degraded agent turn latency |
+| **ProtoJSON Parser Throughput** | **> 50,000 inputs/s** | `parse_slice` only, explicit corpus; span construction measured separately | Parser acceptance failure; does not certify whole-daemon capacity |
+| **Context Lookup / Refresh** | **Zero filesystem work or refresh wait on event path; bounded refresh and correct freshness** | Hit, miss+enqueue and direct-harvest latencies reported separately; [current contracts](dev/fleet-smoke/production-path-round.md) | Context correctness or isolation failure |
 | **Watchdog Deadline** | **3.0 ms** | Dedicated background thread | Watchdog fires, fails open cleanly |
+
+Production transformation and end-to-end capacity use distinct measurements of the actual production path. Mixed compatibility-wrapper benchmarks are historical diagnostics, not current parser or daemon gates. A new numerical lookup or whole-daemon target requires an explicit workload contract; a fast cache hit does not retroactively approve historical full-harvest results. Existing release notes retain their original evidence.
 
 ---
 

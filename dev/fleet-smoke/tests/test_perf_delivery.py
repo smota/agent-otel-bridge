@@ -85,26 +85,76 @@ class TestPerfDelivery(unittest.TestCase):
 
     def test_observer_classifies_completed_send(self):
         raw = perf_delivery.HOOK_OBSERVER_RECORD.pack(
-            b"AOBT", 1, perf_delivery.HOOK_OBSERVER_RECORD.size, 1234, 3, 10, 20, 30
+            b"AOBT", 2, perf_delivery.HOOK_OBSERVER_RECORD.size, 1234, 3, 0, 0, 10, 20, 30
         )
         result = perf_delivery.classify_observer(raw, 1234, True, 0)
         self.assertEqual(result["status"], "send_completed")
         self.assertTrue(result["send_completed"])
-        self.assertEqual(result["record_bytes"], 40)
+        self.assertEqual(result["record_bytes"], 48)
+        self.assertIsNone(result["transport_stage"])
+        self.assertEqual(result["os_code"], 0)
 
-    def test_missing_observer_record_keeps_watchdog_as_inference(self):
+    def test_missing_observer_record_is_unknown(self):
         result = perf_delivery.classify_observer(b"", 1234, True, 0)
-        self.assertEqual(result["status"], "missing_record")
-        self.assertTrue(result["watchdog_inferred"])
-        self.assertEqual(result["inference"], "missing_record_with_valid_fail_open_exit")
+        self.assertEqual(result["status"], "unknown")
+        self.assertIsNone(result["send_completed"])
+        self.assertFalse(result["watchdog_inferred"])
+        self.assertIsNone(result["inference"])
+
+    def test_observer_classifies_explicit_transport_error(self):
+        raw = perf_delivery.HOOK_OBSERVER_RECORD.pack(
+            b"AOBT", 2, perf_delivery.HOOK_OBSERVER_RECORD.size, 1234, 1, 1, 2, 10, 20, 30
+        )
+        result = perf_delivery.classify_observer(raw, 1234, True, 0)
+        self.assertEqual(result["status"], "send_error")
+        self.assertFalse(result["send_completed"])
+        self.assertEqual(result["transport_stage"], "connect")
+        self.assertEqual(result["os_code"], 2)
+
+    def test_v1_observer_record_remains_decodable(self):
+        raw = perf_delivery.RECORD_V1.pack(
+            b"AOBT", 1, perf_delivery.RECORD_V1.size, 1234, 3, 10, 20, 30
+        )
+        result = perf_delivery.classify_observer(raw, 1234, True, 0)
+        self.assertEqual(result["status"], "send_completed")
+        self.assertEqual(result["version"], 1)
+        self.assertIsNone(result["transport_stage"])
+        self.assertIsNone(result["os_code"])
+
+        incomplete = perf_delivery.RECORD_V1.pack(
+            b"AOBT", 1, perf_delivery.RECORD_V1.size, 1234, 1, 10, 20, 30
+        )
+        result = perf_delivery.classify_observer(incomplete, 1234, True, 0)
+        self.assertEqual(result["status"], "send_not_completed_legacy")
+        self.assertFalse(result["send_completed"])
+        self.assertIsNone(result["transport_stage"])
+
+    def test_truncated_unknown_version_and_pid_mismatch_are_invalid(self):
+        valid = perf_delivery.HOOK_OBSERVER_RECORD.pack(
+            b"AOBT", 2, perf_delivery.HOOK_OBSERVER_RECORD.size, 1234, 3, 0, 0, 10, 20, 30
+        )
+        cases = [
+            valid[:-1],
+            bytearray(valid),
+            perf_delivery.HOOK_OBSERVER_RECORD.pack(
+                b"AOBT", 2, perf_delivery.HOOK_OBSERVER_RECORD.size, 9999, 3, 0, 0, 10, 20, 30
+            ),
+        ]
+        cases[1][4:6] = (99).to_bytes(2, "little")
+        for raw in cases:
+            result = perf_delivery.classify_observer(bytes(raw), 1234, True, 0)
+            self.assertEqual(result["status"], "invalid_record")
+            self.assertIsNone(result["send_completed"])
 
     def test_missing_trace_is_correlated_with_its_observer(self):
         clients = [{"trace_id": "lost", "event_idx": 2, "response_ok": True,
-                    "observer": {"status": "missing_record", "send_completed": False,
-                                 "watchdog_inferred": True}}]
+                    "observer": {"status": "unknown", "send_completed": None,
+                                 "transport_stage": None, "os_code": None,
+                                 "watchdog_inferred": False}}]
         result = perf_delivery.correlate_missing_clients(["lost"], clients)
         self.assertEqual(result[0]["event_idx"], 2)
-        self.assertTrue(result[0]["watchdog_inferred"])
+        self.assertFalse(result[0]["watchdog_inferred"])
+        self.assertIsNone(result[0]["send_completed"])
 
 if __name__ == "__main__":
     unittest.main()

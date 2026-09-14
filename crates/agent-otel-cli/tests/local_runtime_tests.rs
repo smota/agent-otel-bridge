@@ -4,8 +4,8 @@
  */
 
 use agent_otel_bridge::hooks::{
-    format_hook_command, install_antigravity_hooks, install_claude_hooks,
-    uninstall_antigravity_hooks, uninstall_claude_hooks,
+    format_antigravity_hook_command, format_hook_command, install_antigravity_hooks,
+    install_claude_hooks, uninstall_antigravity_hooks, uninstall_claude_hooks,
 };
 use agent_otel_bridge::local::{
     compute_sha256, safe_copy_or_replace, BinaryArtifactInfo, LocalVersionManifest,
@@ -128,7 +128,7 @@ fn test_antigravity_hooks_full_lifecycle_preservation() {
     let bridge = &content["agent-otel-bridge"];
     assert_eq!(
         bridge["PreToolUse"][0]["hooks"][0]["command"],
-        format!("\"{bin_path}\" PreToolUse")
+        format_antigravity_hook_command(bin_path, "PreToolUse", None)
     );
 
     // 3. Reinstall with updated path (e.g. new version)

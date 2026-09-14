@@ -16,8 +16,10 @@ pub mod platform;
 pub mod platforms;
 pub mod quota;
 mod quota_worker;
+pub mod transform;
 
 pub use config::DaemonConfig;
 pub use daemon::Daemon;
 pub use exporter::OtlpExporter;
 pub use quota::QuotaEngine;
+pub use transform::{production_transform, ProductionTransformOutcome, TransformError};

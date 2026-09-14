@@ -1,5 +1,7 @@
 # Performance Validation Methodology & Execution Guide
 
+> Historical protocol. For current implementation and acceptance use [production-path-round.md](production-path-round.md). Mixed compatibility-wrapper throughput and full-harvest <150 us are retired active gates; original observations below remain historical evidence.
+
 For the next candidate architecture, use the [implementation specification](performance-implementation-spec.md) and [execution plan](performance-implementation-plan.md). The commands below describe the existing suite; new controller/schema/timing capabilities are planned until their work items pass. Benchmark `--repeats` counts statistical repetitions and is distinct from the controller's maximum five attempts. No local collector result certifies SigNoz visibility.
 
 ## Overview

@@ -8,6 +8,16 @@ use agent_otel_ipc::frame::MsgType;
 use reqwest::{StatusCode, Url};
 use std::time::Duration;
 
+const MAX_OTLP_RESPONSE_BYTES: usize = 64 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OtlpProbeResult {
+    Accepted,
+    PartiallyRejected(u64),
+    TransportOnly,
+    ProtocolUnknown(&'static str),
+}
+
 fn sanitize_url(raw: &str) -> String {
     let Ok(mut url) = Url::parse(raw) else {
         return "<invalid URL redacted>".to_string();
@@ -44,6 +54,170 @@ fn format_http_probe(level: &str, service: &str, url: &str, status: StatusCode) 
             "  [warn] {service} responded at {url} (HTTP status: {status}; request was not accepted)"
         )
     }
+}
+
+fn is_protobuf_content_type(value: Option<&str>) -> bool {
+    value
+        .and_then(|v| v.split(';').next())
+        .map(|v| v.trim().eq_ignore_ascii_case("application/x-protobuf"))
+        .unwrap_or(false)
+}
+
+// Validate the small response envelope without adding a protobuf runtime to
+// the CLI binary. Empty ExportTraceServiceResponse is the valid default.
+fn parse_otlp_response(body: &[u8]) -> Result<Option<u64>, &'static str> {
+    let mut i = 0;
+    let mut rejected = None;
+    while i < body.len() {
+        let (key, used) = read_varint(&body[i..])?;
+        i += used;
+        let field = key >> 3;
+        if field == 0 {
+            return Err("invalid protobuf field number");
+        }
+        match key & 7 {
+            wire if field == 1 && wire != 2 => return Err("invalid partialSuccess wire type"),
+            0 => {
+                let (_, used) = read_varint(&body[i..])?;
+                i += used;
+            }
+            2 => {
+                let (len, used) = read_varint(&body[i..])?;
+                i += used;
+                let length = usize::try_from(len).map_err(|_| "length overflow")?;
+                let end = i.checked_add(length).ok_or("length overflow")?;
+                if end > body.len() {
+                    return Err("truncated protobuf response");
+                }
+                if field == 1 {
+                    rejected = parse_partial_success(&body[i..end])?;
+                }
+                i = end;
+            }
+            1 => i = i.checked_add(8).ok_or("length overflow")?,
+            5 => i = i.checked_add(4).ok_or("length overflow")?,
+            _ => return Err("unsupported protobuf wire type"),
+        }
+        if i > body.len() {
+            return Err("truncated protobuf response");
+        }
+    }
+    Ok(rejected)
+}
+
+fn parse_partial_success(body: &[u8]) -> Result<Option<u64>, &'static str> {
+    let mut i = 0;
+    let mut rejected = None;
+    while i < body.len() {
+        let (key, used) = read_varint(&body[i..])?;
+        i += used;
+        if key >> 3 == 0 {
+            return Err("invalid partialSuccess field number");
+        }
+        match (key >> 3, key & 7) {
+            (1, wire) if wire != 0 => return Err("invalid rejectedSpans wire type"),
+            (2, wire) if wire != 2 => return Err("invalid errorMessage wire type"),
+            (1, 0) => {
+                let (value, used) = read_varint(&body[i..])?;
+                rejected = Some(value);
+                i += used;
+            }
+            (_, 0) => {
+                let (_, used) = read_varint(&body[i..])?;
+                i += used;
+            }
+            (2, 2) => {
+                let (len, used) = read_varint(&body[i..])?;
+                i += used;
+                let length = usize::try_from(len).map_err(|_| "length overflow")?;
+                let end = i.checked_add(length).ok_or("length overflow")?;
+                if end > body.len() {
+                    return Err("truncated partialSuccess protobuf");
+                }
+                i = end;
+            }
+            (field, 2) if field != 1 && field != 2 => {
+                let (len, used) = read_varint(&body[i..])?;
+                i += used;
+                let length = usize::try_from(len).map_err(|_| "length overflow")?;
+                let end = i.checked_add(length).ok_or("length overflow")?;
+                if end > body.len() {
+                    return Err("truncated partialSuccess protobuf");
+                }
+                i = end;
+            }
+            _ => return Err("invalid partialSuccess protobuf"),
+        }
+    }
+    Ok(rejected)
+}
+
+fn read_varint(bytes: &[u8]) -> Result<(u64, usize), &'static str> {
+    let mut value = 0u64;
+    for (idx, byte) in bytes.iter().copied().enumerate().take(10) {
+        let shift = idx * 7;
+        if idx == 9 && byte > 1 {
+            return Err("invalid protobuf varint");
+        }
+        value |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Ok((value, idx + 1));
+        }
+    }
+    Err("truncated protobuf varint")
+}
+
+fn classify_otlp_response(
+    status: StatusCode,
+    content_type: Option<&str>,
+    body: &[u8],
+) -> OtlpProbeResult {
+    if !status.is_success() {
+        return OtlpProbeResult::TransportOnly;
+    }
+    if body.len() > MAX_OTLP_RESPONSE_BYTES {
+        return OtlpProbeResult::ProtocolUnknown("response exceeds bounded limit");
+    }
+    if !is_protobuf_content_type(content_type) {
+        return OtlpProbeResult::ProtocolUnknown("unexpected response content type");
+    }
+    match parse_otlp_response(body) {
+        Ok(Some(count)) if count > 0 => OtlpProbeResult::PartiallyRejected(count),
+        Ok(_) => OtlpProbeResult::Accepted,
+        Err(reason) => OtlpProbeResult::ProtocolUnknown(reason),
+    }
+}
+
+async fn send_otlp_probe(
+    client: &reqwest::Client,
+    traces_url: &str,
+) -> Result<(StatusCode, Option<String>, Vec<u8>), String> {
+    let mut response = client
+        .post(traces_url)
+        .header(reqwest::header::CONTENT_TYPE, "application/x-protobuf")
+        .body(Vec::<u8>::new())
+        .send()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| error.without_url().to_string())?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_OTLP_RESPONSE_BYTES {
+            body.resize(MAX_OTLP_RESPONSE_BYTES + 1, 0);
+            break;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok((status, content_type, body))
 }
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -97,23 +271,31 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let traces_url = format!("{}/v1/traces", endpoint.trim_end_matches('/'));
-    match client.post(&traces_url).body(vec![]).send().await {
-        Ok(resp) => {
+    match send_otlp_probe(&client, &traces_url).await {
+        Ok((status, content_type, body)) => {
             println!(
                 "{}",
-                format_http_probe(
-                    "ok",
-                    "OTLP Collector",
-                    &sanitize_url(&traces_url),
-                    resp.status()
-                )
+                format_http_probe("ok", "OTLP Collector", &sanitize_url(&traces_url), status)
             );
+            match classify_otlp_response(status, content_type.as_deref(), &body) {
+                OtlpProbeResult::Accepted =>
+                    println!("  [ok] OTLP protocol accepted the probe (backend visibility not checked)"),
+                OtlpProbeResult::PartiallyRejected(count) => println!(
+                    "  [warn] OTLP protocol partially rejected the probe ({count} spans; backend visibility not checked)"
+                ),
+                OtlpProbeResult::TransportOnly => println!(
+                    "  [warn] HTTP endpoint is reachable, but the OTLP request was not accepted"
+                ),
+                OtlpProbeResult::ProtocolUnknown(reason) => println!(
+                    "  [warn] HTTP endpoint responded, but OTLP protocol acceptance is unknown: {reason}"
+                ),
+            }
         }
         Err(e) => {
             println!(
                 "  [fail] OTLP Collector UNREACHABLE at {}: {}",
                 sanitize_url(&traces_url),
-                e.without_url()
+                e
             );
         }
     }
@@ -222,6 +404,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn collector_http_errors_are_not_reported_as_ok() {
@@ -267,5 +450,106 @@ mod tests {
         );
         assert!(!output.contains("production"));
         assert!(!output.contains("secret"));
+    }
+
+    #[test]
+    fn otlp_probe_requires_matching_content_type_and_valid_body() {
+        assert_eq!(
+            classify_otlp_response(StatusCode::OK, Some("application/x-protobuf"), &[]),
+            OtlpProbeResult::Accepted
+        );
+        assert_eq!(
+            classify_otlp_response(StatusCode::OK, Some("application/json"), &[]),
+            OtlpProbeResult::ProtocolUnknown("unexpected response content type")
+        );
+        assert_eq!(
+            classify_otlp_response(
+                StatusCode::OK,
+                Some("application/x-protobuf"),
+                &[0x0a, 0x05]
+            ),
+            OtlpProbeResult::ProtocolUnknown("truncated protobuf response")
+        );
+    }
+
+    #[test]
+    fn otlp_probe_distinguishes_transport_and_partial_rejection() {
+        assert_eq!(
+            classify_otlp_response(StatusCode::BAD_REQUEST, Some("application/x-protobuf"), &[]),
+            OtlpProbeResult::TransportOnly
+        );
+        // partial_success { rejected_spans: 2 }
+        assert_eq!(
+            classify_otlp_response(
+                StatusCode::OK,
+                Some("application/x-protobuf; charset=binary"),
+                // partial_success { rejected_spans: 2, error_message: "x" }
+                &[0x0a, 0x05, 0x08, 0x02, 0x12, 0x01, b'x']
+            ),
+            OtlpProbeResult::PartiallyRejected(2)
+        );
+        assert_eq!(
+            classify_otlp_response(StatusCode::OK, Some("application/x-protobuf"), &[0x00]),
+            OtlpProbeResult::ProtocolUnknown("invalid protobuf field number")
+        );
+        assert_eq!(
+            classify_otlp_response(
+                StatusCode::OK,
+                Some("application/x-protobuf"),
+                &[0x0a, 0x02, 0x0a, 0x00]
+            ),
+            OtlpProbeResult::ProtocolUnknown("invalid rejectedSpans wire type")
+        );
+    }
+
+    #[test]
+    fn otlp_probe_response_is_bounded() {
+        let body = vec![0; MAX_OTLP_RESPONSE_BYTES + 1];
+        assert_eq!(
+            classify_otlp_response(StatusCode::OK, Some("application/x-protobuf"), &body),
+            OtlpProbeResult::ProtocolUnknown("response exceeds bounded limit")
+        );
+    }
+
+    #[tokio::test]
+    async fn otlp_probe_sends_matching_header_and_valid_empty_body() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let receiver = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            loop {
+                let count = stream.read(&mut buffer).await.unwrap();
+                request.extend_from_slice(&buffer[..count]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let request_text = String::from_utf8_lossy(&request).to_ascii_lowercase();
+            assert!(request_text.starts_with("post /v1/traces "));
+            assert!(request_text.contains("content-type: application/x-protobuf"));
+            assert!(request_text.ends_with("\r\n\r\n"));
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/x-protobuf\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await
+                .unwrap();
+        });
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let (status, content_type, body) =
+            send_otlp_probe(&client, &format!("http://{address}/v1/traces"))
+                .await
+                .unwrap();
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(content_type.as_deref(), Some("application/x-protobuf"));
+        assert!(body.is_empty());
+        assert_eq!(
+            classify_otlp_response(status, content_type.as_deref(), &body),
+            OtlpProbeResult::Accepted
+        );
+        receiver.await.unwrap();
     }
 }

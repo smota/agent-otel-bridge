@@ -223,7 +223,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--levels", type=str, default=",".join(map(str, DEFAULT_LEVELS)), help="Comma-separated concurrency levels")
     parser.add_argument("--events", type=str, default=",".join(map(str, DEFAULT_EVENTS)), help="Comma-separated event counts matching --levels")
-    parser.add_argument("--seconds", type=float, default=4.0, help="Duration per level in seconds [1..10]")
+    parser.add_argument("--seconds", type=float, default=4.0, help="Duration per level in seconds [1..60]")
     parser.add_argument("--max-events", type=int, default=MAX_EVENTS_PER_PROFILE, help="Safety cap per level; maximum 900")
     args = parser.parse_args()
 
@@ -233,8 +233,8 @@ def parse_args() -> argparse.Namespace:
     if not os.path.isabs(args.hook_bin):
         sys.stderr.write(f"Error: --hook-bin must be an absolute path: {args.hook_bin}\n")
         sys.exit(2)
-    if not (1.0 <= args.seconds <= 10.0):
-        sys.stderr.write(f"Error: --seconds must be within bounds 1..10: {args.seconds}\n")
+    if not (1.0 <= args.seconds <= 60.0):
+        sys.stderr.write(f"Error: --seconds must be within bounds 1..60: {args.seconds}\n")
         sys.exit(2)
     try:
         levels = parse_positive_csv(args.levels, "--levels")
@@ -257,7 +257,8 @@ def _run_load_probe() -> None:
     args = parse_args()
     overall_start = time.monotonic()
     arch.CAMPAIGN_DEADLINE = overall_start + 175.0
-    arch.SCENARIO_TIMEOUT_SECONDS = 20.0
+    # Reserve setup/drain time in addition to the declared sustained offer window.
+    arch.SCENARIO_TIMEOUT_SECONDS = max(20.0, args.seconds + 10.0)
 
     run_id = str(uuid.uuid4())
     rng = random.Random(f"{args.seed}:{run_id}")

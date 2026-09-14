@@ -1,5 +1,7 @@
 # Three-attempt load and long-trace loop
 
+> Historical protocol. For current implementation and acceptance use [production-path-round.md](production-path-round.md). Mixed compatibility-wrapper throughput and full-harvest <150 us are retired active gates; original observations below remain historical evidence.
+
 This extends the passing architecture suite. It does not replace historical benchmarks or change their SLAs. Implementation and execution are authorized on candidate binaries on the current Windows host; the installed runtime and global hooks remain untouched. Source is development-only; local execution data uses an owned temporary directory. Telemetry intentionally submitted to the configured collector follows that backend's retention policy.
 
 ## Boundaries and diagnosis

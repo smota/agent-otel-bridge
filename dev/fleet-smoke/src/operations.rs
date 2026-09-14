@@ -156,6 +156,16 @@ fn http_timeout() -> io::Result<Option<String>> {
     stream.write_all(b"GET / HTTP/1.1\r\n\r\n")?;
     let mut response = [0; 16];
     let timed_out = matches!(stream.read(&mut response), Err(error) if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock));
+    // A TCP connection can complete before the fixture thread is scheduled to
+    // accept it. Preserve the actual read verdict, but give that independent
+    // evidence a bounded interval to become visible on loaded CI hosts.
+    let evidence_deadline = std::time::Instant::now() + Duration::from_secs(1);
+    while timed_out
+        && service.evidence().accepted == 0
+        && std::time::Instant::now() < evidence_deadline
+    {
+        std::thread::sleep(Duration::from_millis(1));
+    }
     let accepted = service.evidence().accepted == 1;
     Ok((timed_out && accepted).then(|| "timeout".into()))
 }

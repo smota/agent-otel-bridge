@@ -1,5 +1,7 @@
 # Plano de implementação e validação
 
+> Historical protocol. For current implementation and acceptance use [production-path-round.md](production-path-round.md). Mixed compatibility-wrapper throughput and full-harvest <150 us are retired active gates; original observations below remain historical evidence.
+
 Versão 1, 2026-09-14. Documento normativo desta rodada: [especificação](performance-implementation-spec.md). Distribuição: [work items](performance-work-items.json). Estado: planejado, não executado. Autorização desta rodada: especificar e atualizar o plano. A instalação ativa está fora do escopo.
 
 ## Responsabilidade e escolha de modelos
