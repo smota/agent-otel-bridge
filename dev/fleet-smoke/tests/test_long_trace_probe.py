@@ -220,7 +220,10 @@ class LongTraceProbeTests(unittest.TestCase):
             process.returncode = 0
             return {"exit_code": 0}
 
-        with (mock.patch.object(probe, "make_git_workspace", return_value="owned-workspace"),
+        with (mock.patch.object(probe, "collect_environment", return_value={"os": "fixture"}),
+              mock.patch.object(probe, "inspect_source_state", return_value={}),
+              mock.patch.object(probe, "inspect_installed_bridge", return_value={}),
+              mock.patch.object(probe, "make_git_workspace", return_value="owned-workspace"),
               mock.patch.object(probe, "cleanup_git_workspace", return_value=True) as cleanup,
               mock.patch.object(probe, "ForwardingCollectorServer", return_value=server),
               mock.patch.object(probe.subprocess, "Popen", return_value=process),
