@@ -288,10 +288,12 @@ pub fn format_hook_command(binary: &str, event: &str, client_tag: Option<&str>) 
         None => String::new(),
     };
 
-    let bin_str = if binary.contains(' ') && !binary.starts_with('"') && !binary.ends_with('"') {
-        format!("\"{binary}\"")
-    } else {
+    // Always protect the executable path from shell splitting.  Keep a path
+    // that the caller has already quoted unchanged.
+    let bin_str = if binary.starts_with('"') && binary.ends_with('"') {
         binary.to_string()
+    } else {
+        format!("\"{binary}\"")
     };
 
     format!("{bin_str} {event}{client_arg}")
@@ -890,7 +892,7 @@ mod tests {
     #[test]
     fn test_format_hook_command_with_and_without_spaces() {
         let cmd1 = format_hook_command("C:\\Tools\\agent-hook.exe", "PreToolUse", None);
-        assert_eq!(cmd1, "C:\\Tools\\agent-hook.exe PreToolUse");
+        assert_eq!(cmd1, "\"C:\\Tools\\agent-hook.exe\" PreToolUse");
 
         let cmd2 = format_hook_command(
             "C:\\Program Files\\Bridge\\agent-hook.exe",
@@ -901,6 +903,19 @@ mod tests {
             cmd2,
             "\"C:\\Program Files\\Bridge\\agent-hook.exe\" PreToolUse --client claude"
         );
+    }
+
+    #[test]
+    fn test_format_hook_command_preserves_quoted_and_unix_paths() {
+        let quoted = format_hook_command(
+            "\"C:\\Program Files\\Bridge\\agent-hook.exe\"",
+            "Stop",
+            None,
+        );
+        assert_eq!(quoted, "\"C:\\Program Files\\Bridge\\agent-hook.exe\" Stop");
+
+        let unix = format_hook_command("/opt/Agent Otel/agent-hook", "Stop", None);
+        assert_eq!(unix, "\"/opt/Agent Otel/agent-hook\" Stop");
     }
 
     #[test]
@@ -936,7 +951,7 @@ mod tests {
         let bridge = &parsed["agent-otel-bridge"];
         assert_eq!(
             bridge["PreToolUse"][0]["hooks"][0]["command"],
-            "C:\\Bridge\\agent-hook.exe PreToolUse"
+            "\"C:\\Bridge\\agent-hook.exe\" PreToolUse"
         );
 
         // Uninstall
@@ -986,7 +1001,7 @@ mod tests {
         assert_eq!(pre_tool[0]["hooks"][0]["command"], "rtk hook claude");
         assert_eq!(
             pre_tool[1]["hooks"][0]["command"],
-            "C:\\Bridge\\agent-hook.exe PreToolUse"
+            "\"C:\\Bridge\\agent-hook.exe\" PreToolUse"
         );
 
         // Re-install (idempotent update check)
@@ -1000,7 +1015,7 @@ mod tests {
         assert_eq!(pre_tool2[0]["hooks"][0]["command"], "rtk hook claude");
         assert_eq!(
             pre_tool2[1]["hooks"][0]["command"],
-            "C:\\NewPath\\agent-hook.exe PreToolUse"
+            "\"C:\\NewPath\\agent-hook.exe\" PreToolUse"
         );
 
         // Uninstall
@@ -1109,7 +1124,7 @@ mod tests {
         assert_eq!(pre_tool[0]["hooks"][0]["command"], "my-check.sh");
         assert_eq!(
             pre_tool[1]["hooks"][0]["command"],
-            "C:\\Tools\\agent-hook.exe PreToolUse"
+            "\"C:\\Tools\\agent-hook.exe\" PreToolUse"
         );
 
         // Running sync a second time is idempotent
