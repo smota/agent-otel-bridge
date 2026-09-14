@@ -1,0 +1,19 @@
+[package]
+name = "agent-otel-fleet-smoke"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Development-only synthetic fleet smoke laboratory"
+
+[dependencies]
+command-group = "5.0.1"
+reqwest = { workspace = true, features = ["blocking", "json"] }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+time = { version = "0.3", features = ["formatting"] }
+ctrlc = "3.5"
+
+[dev-dependencies]
+jsonschema = { version = "0.33", default-features = false }

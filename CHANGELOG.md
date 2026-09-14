@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+- Carry bounded hook-origin trace context over IPC message 0x04 without rewriting stdin. Resolve valid payload context before origin context and conversation fallback; preserve trace flags and reject malformed IDs safely.
+- Keep legacy messages supported by the new daemon. Upgrade hook and daemon together: new hooks require the new receiver. IPC events no longer inherit the daemon's ambient TRACEPARENT or invent agent depth from a parent span.
+- Align Unix daemon socket selection with the client and improve doctor endpoint diagnostics and credential sanitization.
+- Add the source-only, non-distributed fleet smoke laboratory with seeded scenarios, failure injection, report contracts and native context probes. Runtime evidence remains transient; recoverable queues and optional messaging integration remain backlog.
+- Windows release process validation, workspace guardrails and SigNoz MCP evidence passed before publication. Full performance acceptance and native Linux/macOS validation remain open; see [the session plan](docs/native-context-session-plan.md). The next test campaign is deferred to a separate user-requested thread.
+
 ## [0.5.0] - 2026-09-13
 
 ### Release v0.5.0 — Decoupled Platform Architecture, 3-Byte Wire Protocol (65K Platforms) & FDE Fleet Operations 🚀

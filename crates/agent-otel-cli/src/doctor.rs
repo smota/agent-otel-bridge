@@ -5,7 +5,46 @@
 
 use agent_otel_ipc::client::try_send;
 use agent_otel_ipc::frame::MsgType;
+use reqwest::{StatusCode, Url};
 use std::time::Duration;
+
+fn sanitize_url(raw: &str) -> String {
+    let Ok(mut url) = Url::parse(raw) else {
+        return "<invalid URL redacted>".to_string();
+    };
+
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    if url.query().is_some() {
+        url.set_query(Some("redacted"));
+    }
+    if url.fragment().is_some() {
+        url.set_fragment(Some("<redacted>"));
+    }
+    url.to_string()
+}
+
+fn sanitize_resource_attributes(raw: &str) -> String {
+    raw.split(',')
+        .map(|attribute| {
+            attribute
+                .split_once('=')
+                .map(|(key, _)| format!("{key}=<redacted>"))
+                .unwrap_or_else(|| "<redacted>".to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn format_http_probe(level: &str, service: &str, url: &str, status: StatusCode) -> String {
+    if status.is_success() {
+        format!("  [{level}] {service} reachable at {url} (HTTP status: {status})")
+    } else {
+        format!(
+            "  [warn] {service} responded at {url} (HTTP status: {status}; request was not accepted)"
+        )
+    }
+}
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== agent-otel-bridge doctor ===");
@@ -15,7 +54,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("[1/5] Checking environment contract variables...");
     let endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .unwrap_or_else(|_| "http://127.0.0.1:4318".to_string());
-    println!("  [ok] OTEL_EXPORTER_OTLP_ENDPOINT = {}", endpoint);
+    println!(
+        "  [ok] OTEL_EXPORTER_OTLP_ENDPOINT = {}",
+        sanitize_url(&endpoint)
+    );
 
     match std::env::var("OTEL_SERVICE_NAME") {
         Ok(v) => println!("  [ok] OTEL_SERVICE_NAME = {} (per-process)", v),
@@ -25,7 +67,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     match std::env::var("OTEL_RESOURCE_ATTRIBUTES") {
-        Ok(v) => println!("  [ok] OTEL_RESOURCE_ATTRIBUTES = {}", v),
+        Ok(v) => println!(
+            "  [ok] OTEL_RESOURCE_ATTRIBUTES = {}",
+            sanitize_resource_attributes(&v)
+        ),
         Err(_) => println!("  [info] OTEL_RESOURCE_ATTRIBUTES unset (defaulting to 'deployment.environment=homelab')"),
     }
 
@@ -55,15 +100,20 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     match client.post(&traces_url).body(vec![]).send().await {
         Ok(resp) => {
             println!(
-                "  [ok] OTLP Collector reachable at {} (HTTP status: {})",
-                traces_url,
-                resp.status()
+                "{}",
+                format_http_probe(
+                    "ok",
+                    "OTLP Collector",
+                    &sanitize_url(&traces_url),
+                    resp.status()
+                )
             );
         }
         Err(e) => {
             println!(
                 "  [fail] OTLP Collector UNREACHABLE at {}: {}",
-                traces_url, e
+                sanitize_url(&traces_url),
+                e.without_url()
             );
         }
     }
@@ -75,26 +125,31 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "\n[4/5] Checking Observability UI reachability ({})...",
-        ui_url
+        sanitize_url(&ui_url)
     );
     match client.get(&ui_url).send().await {
         Ok(resp) => {
             println!(
-                "  [ok] Observability UI reachable at {} (HTTP status: {})",
-                ui_url,
-                resp.status()
+                "{}",
+                format_http_probe(
+                    "ok",
+                    "Observability UI",
+                    &sanitize_url(&ui_url),
+                    resp.status()
+                )
             );
             if ui_url.contains("localhost:8080") {
                 println!(
                     "  [dashboard] {}/dashboard/01a091c1-c5c7-7105-9963-436f893fa832 (AI Agent Observability)",
-                    ui_url.trim_end_matches('/')
+                    sanitize_url(ui_url.trim_end_matches('/'))
                 );
             }
         }
         Err(e) => {
             println!(
                 "  [info] Observability UI not reachable at {} (optional): {}",
-                ui_url, e
+                sanitize_url(&ui_url),
+                e.without_url()
             );
         }
     }
@@ -162,4 +217,55 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nDoctor check completed.\n");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collector_http_errors_are_not_reported_as_ok() {
+        let output = format_http_probe(
+            "ok",
+            "OTLP Collector",
+            "http://collector/v1/traces",
+            StatusCode::INTERNAL_SERVER_ERROR,
+        );
+        assert!(output.starts_with("  [warn]"));
+        assert!(output.contains("request was not accepted"));
+
+        let output = format_http_probe(
+            "ok",
+            "OTLP Collector",
+            "http://collector/v1/traces",
+            StatusCode::UNAUTHORIZED,
+        );
+        assert!(output.starts_with("  [warn]"));
+        assert!(!output.contains("[ok]"));
+    }
+
+    #[test]
+    fn sensitive_url_parts_are_redacted() {
+        let output =
+            sanitize_url("https://user:password@example.test/v1/traces?api_key=secret&token=abc");
+        assert_eq!(output, "https://example.test/v1/traces?redacted");
+        assert!(!output.contains("password"));
+        assert!(!output.contains("secret"));
+        assert_eq!(
+            sanitize_url("not a URL user:password@example.test"),
+            "<invalid URL redacted>"
+        );
+    }
+
+    #[test]
+    fn resource_attribute_values_are_redacted() {
+        let output =
+            sanitize_resource_attributes("deployment.environment=production,api.key=secret");
+        assert_eq!(
+            output,
+            "deployment.environment=<redacted>,api.key=<redacted>"
+        );
+        assert!(!output.contains("production"));
+        assert!(!output.contains("secret"));
+    }
 }

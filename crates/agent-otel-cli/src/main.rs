@@ -420,12 +420,13 @@ fn run_fast_hook(event_str: &str) {
     let mut stdin = io::stdin().take(256 * 1024);
     let _ = stdin.read_to_end(&mut buf);
 
-    let mut payload = Vec::with_capacity(WireHeader::LEN + buf.len());
-    payload.extend_from_slice(&header.encode());
-    payload.extend_from_slice(&buf);
+    // Capture inherited context before the CLI starts any runtime work.
+    let traceparent = unsafe { agent_otel_ipc::client::read_traceparent() };
+    let payload =
+        agent_otel_ipc::frame::encode_context_payload(header, traceparent.as_deref(), &buf);
 
     agent_otel_ipc::client::send_fire_and_forget(
-        agent_otel_ipc::frame::MsgType::HookPayload,
+        agent_otel_ipc::frame::MsgType::HookPayloadWithContext,
         &payload,
     );
 

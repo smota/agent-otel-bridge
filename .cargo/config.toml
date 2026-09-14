@@ -1,3 +1,4 @@
 [alias]
+fleet-smoke = "run -p agent-otel-fleet-smoke --"
 guardrails = "run --release -p agent-otel-bridge -- check-guardrails"
 bench-submit = "run --release -p agent-otel-bench -- --submit"

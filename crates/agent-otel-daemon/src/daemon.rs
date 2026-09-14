@@ -4,9 +4,10 @@
  */
 
 use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent, WireHeader};
-use agent_otel_core::otlp::build_span_from_hook_opts;
+use agent_otel_core::otlp::build_span_from_hook_with_context_opts;
 use agent_otel_core::quota::build_multi_quota_metrics_request_opts;
-use agent_otel_ipc::frame::MsgType;
+use agent_otel_core::trace_id::resolve_trace_context;
+use agent_otel_ipc::frame::{decode_context_payload, MsgType};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -76,12 +77,15 @@ impl Daemon {
 
                 maybe_msg = rx.recv() => {
                     match maybe_msg {
-                        Some((MsgType::HookPayload, payload)) => {
+                        Some((msg_type @ (MsgType::HookPayload | MsgType::HookPayloadWithContext), payload)) => {
                             last_activity = Instant::now();
-                            if payload.len() >= WireHeader::LEN {
-                                let header = WireHeader::decode(&payload)
-                                    .unwrap_or_else(|| WireHeader::new(0, 255));
-                                let json_bytes = &payload[WireHeader::LEN..];
+                            let decoded = match msg_type {
+                                MsgType::HookPayload => WireHeader::decode(&payload)
+                                    .map(|header| (header, None, &payload[WireHeader::LEN..])),
+                                MsgType::HookPayloadWithContext => decode_context_payload(&payload).ok(),
+                                _ => None,
+                            };
+                            if let Some((header, origin_traceparent, json_bytes)) = decoded {
                                 let mut event = HookEvent::from_wire(header.event_id);
                                 let client_kind = agent_otel_core::model::ClientKind::from_wire(header.client_id);
 
@@ -160,15 +164,25 @@ impl Daemon {
                                     }
                                 }
 
-                                // Enrich with workspace context, tool archetypes, capabilities, lineage, and error categories
-                                input.auto_enrich();
+                                // Resolve only from this event. The daemon's ambient TRACEPARENT
+                                // must never associate unrelated hook processes.
+                                let trace_context = resolve_trace_context(
+                                    input.traceparent.as_deref(),
+                                    origin_traceparent,
+                                    input.conversation_id.as_deref(),
+                                );
 
-                                let span = build_span_from_hook_opts(
+                                // Keep explicit harness lineage but do not infer agent depth from
+                                // a transported parent span or daemon environment.
+                                input.auto_enrich_with_resolved_context();
+
+                                let span = build_span_from_hook_with_context_opts(
                                     event,
                                     &input,
                                     now_nano.saturating_sub(1_000_000), // ~1ms approximate duration if not given
                                     now_nano,
                                     salt_counter,
+                                    trace_context,
                                     self.config.emit_legacy_aliases,
                                 );
 

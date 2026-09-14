@@ -203,11 +203,11 @@ Quantifies context tax, payload overhead, and retry thrashing:
 | `capability.is_waste` | `bool` | True if invocation is classified as unproductive loop waste | `true`, `false` |
 
 ### 5.4 Cross-Agent Distributed Tracing & Lineage
-Links heterogeneous subagent sessions into a single distributed trace tree:
+Links heterogeneous subagent sessions into a single distributed trace tree. A hook captures the source process's `TRACEPARENT` into the versioned IPC context envelope (`HookPayloadWithContext`, message type `0x04`); the legacy `HookPayload` (`0x01`) body remains unchanged. The transport carries only `TRACEPARENT`, with a local 512 UTF-8 byte limit. Missing, invalid, or oversized values are omitted without truncation. The daemon resolves context per event and does not use its own environment as a daemon-wide fallback.
 
 | Attribute | Type | Description | Example Values |
 | :--- | :--- | :--- | :--- |
-| `gen_ai.agent.depth` | `int` | Recursion hop depth ($0 = \text{root orchestrator}$) | `0`, `1`, `2` |
+| `gen_ai.agent.depth` | `int` | Explicitly recorded recursion hop depth ($0 = \text{root orchestrator}$); never inferred solely from TRACEPARENT presence | `0`, `1`, `2` |
 | `gen_ai.agent.parent_name` | `string` | Name of the calling harness | `antigravity`, `claude-code` |
 | `gen_ai.agent.root_id` | `string` | Root conversation ID binding the fleet turn | `conv-root-12345` |
 | `gen_ai.agent.is_root` | `bool` | True if root orchestrator span | `true`, `false` |

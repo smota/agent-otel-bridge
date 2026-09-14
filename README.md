@@ -321,6 +321,7 @@ curl -X POST http://localhost:8080/api/v2/dashboards \
 * [SigNoz Dashboard Catalog](contrib/dashboards/signoz/README.md) — Ready-to-import production templates and ClickHouse SQL queries.
 
 ### ⚡ Benchmarks & Verification
+* [Fleet Smoke Laboratory](dev/fleet-smoke/README.md) — Development-only Rust scenarios, controlled failures, and trace verification; excluded from installed binaries.
 * [Performance Benchmark Report](docs/BENCHMARKS.md) — Microsecond hardware measurements and profiling methodology.
 * [Community Benchmark Leaderboard](docs/COMMUNITY_BENCHMARKS.md) — Hardware leaderboard comparing cross-platform performance.
 * [Contributing & Quality Guardrails](CONTRIBUTING.md) — Branching policy, testing invariants, and automated guardrail commands.
