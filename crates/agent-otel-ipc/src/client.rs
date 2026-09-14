@@ -73,6 +73,7 @@ impl SendError {
         }
     }
 
+    #[cfg(windows)]
     pub(crate) const fn short_write(expected_bytes: u32, transferred_bytes: u32) -> Self {
         Self {
             stage: SendStage::ShortWrite,
