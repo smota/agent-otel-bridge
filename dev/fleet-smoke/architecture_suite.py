@@ -360,9 +360,11 @@ def _finalize_registered_results(sess: ScenarioSession) -> None:
 
 
 @contextlib.contextmanager
-def scenario_session(daemon_bin: str, extra_env: Optional[Dict[str, str]] = None, deadline: Optional[float] = None):
+def scenario_session(daemon_bin: str, extra_env: Optional[Dict[str, str]] = None, deadline: Optional[float] = None, *, pipe_name: Optional[str] = None):
     deadline = min(CAMPAIGN_DEADLINE, deadline or (time.monotonic() + SCENARIO_TIMEOUT_SECONDS))
-    pipe = f"\\\\.\\pipe\\agy-arch-{secrets.token_hex(6)}" if os.name == "nt" else f"/tmp/agy-arch-{secrets.token_hex(6)}.sock"
+    if pipe_name is not None and "aob-round-" not in pipe_name:
+        raise ValueError("explicit scenario endpoint must be round-owned")
+    pipe = pipe_name or (f"\\\\.\\pipe\\agy-arch-{secrets.token_hex(6)}" if os.name == "nt" else f"/tmp/agy-arch-{secrets.token_hex(6)}.sock")
     col = MockOTLPServer(("127.0.0.1", 0))
     port = col.server_address[1]
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)

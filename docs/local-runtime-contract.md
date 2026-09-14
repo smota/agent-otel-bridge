@@ -22,6 +22,9 @@ Any failure, unhandled crash, or unresolved path directly degrades or breaks the
    ```json
    "command": "\"C:\\Users\\Username\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse"
    ```
+   Adapters whose contract evaluates commands through `cmd.exe` use the
+   equivalent `call "<absolute path>" <event>` form so quoted paths with
+   spaces remain executable when arguments are present.
 4. **Preservation of Third-Party Tools**: Installing or updating bridge hooks MUST NEVER erase, duplicate, or alter third-party hooks (such as `herdr`, `rtk`, custom scripts). Bridge hook registrations are updated in-place by matching the executable name (`agent-hook.exe`).
 5. **Atomic Deployment & Instant Rollback**: Active binaries MUST be staged in immutable version directories and copied to the canonical runtime path. Locked Windows binaries must be replaced using atomic rename-on-replace semantics. A full backup of the previous runtime is preserved for single-command rollback.
 6. **Strict Separation of Candidate vs Active Testing**: `cargo test` and local development builds MUST NEVER modify or lock the host's active installation in `%LOCALAPPDATA%`. Verification of candidate builds occurs strictly within `target/`, and promotion to active is a deliberate action via `agent-otel-bridge local install`.

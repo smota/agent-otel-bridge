@@ -31,6 +31,111 @@ CHUNK_BYTES = 64 * 1024
 SUITES = ("regression", "faults", "performance", "confirmation")
 
 
+def _windows_affinity_api():
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    kernel32.GetProcessAffinityMask.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t),
+                                                 ctypes.POINTER(ctypes.c_size_t)]
+    kernel32.GetProcessAffinityMask.restype = ctypes.c_int
+    kernel32.SetProcessAffinityMask.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+    kernel32.SetProcessAffinityMask.restype = ctypes.c_int
+    return kernel32
+
+
+def _windows_process_masks(handle, kernel32=None):
+    api = kernel32 or _windows_affinity_api()
+    process_mask, system_mask = ctypes.c_size_t(), ctypes.c_size_t()
+    if not api.GetProcessAffinityMask(handle, ctypes.byref(process_mask), ctypes.byref(system_mask)):
+        raise OSError(ctypes.get_last_error(), "GetProcessAffinityMask")
+    return process_mask.value, system_mask.value
+
+
+def available_cpu_ids() -> List[int]:
+    """Return CPUs allowed to the controller, without widening inherited affinity."""
+    if os.name == "nt":
+        count = os.cpu_count() or 0
+        if count > 64:
+            raise ValueError("windows_processor_groups_over_64_unsupported")
+        api = _windows_affinity_api()
+        process_mask, _ = _windows_process_masks(api.GetCurrentProcess(), api)
+        cpus = [cpu for cpu in range(64) if process_mask & (1 << cpu)]
+    elif hasattr(os, "sched_getaffinity"):
+        cpus = sorted(os.sched_getaffinity(0))
+    else:
+        count = os.cpu_count() or 0
+        cpus = list(range(count))
+    if not cpus:
+        raise ValueError("logical_cpu_inventory_unavailable")
+    return cpus
+
+
+def apply_process_affinity(proc: subprocess.Popen[bytes], cpus: Optional[List[int]],
+                           timing: Optional[str] = None) -> Dict[str, Any]:
+    if cpus is None:
+        return {"requested": False, "status": "not_requested", "timing": None}
+    normalized = sorted(set(cpus))
+    if not normalized or any(type(cpu) is not int or cpu < 0 for cpu in normalized):
+        return {"requested": True, "status": "failed", "error": "invalid_cpu_set",
+                "cpus": cpus, "timing": None}
+    if os.name == "nt":
+        count = os.cpu_count() or 0
+        if count > 64 or any(cpu >= 64 for cpu in normalized):
+            return {"requested": True, "status": "unsupported",
+                    "error": "windows_processor_groups_over_64_unsupported", "cpus": normalized,
+                    "timing": None}
+        api = _windows_affinity_api()
+        handle = ctypes.c_void_p(int(proc._handle))  # type: ignore[attr-defined]
+        try:
+            original, system = _windows_process_masks(handle, api)
+        except OSError as exc:
+            return {"requested": True, "status": "failed", "error": f"GetProcessAffinityMask:{exc.errno}",
+                    "cpus": normalized, "timing": None}
+        mask = sum(1 << cpu for cpu in normalized)
+        if mask & ~original:
+            return {"requested": True, "status": "failed", "error": "cpu_outside_inherited_mask",
+                    "cpus": normalized, "requested_mask": mask, "original_mask": original,
+                    "system_mask": system, "timing": None}
+        if not api.SetProcessAffinityMask(handle, ctypes.c_size_t(mask)):
+            return {"requested": True, "status": "failed",
+                    "error": f"SetProcessAffinityMask:{ctypes.get_last_error()}", "cpus": normalized,
+                    "requested_mask": mask, "original_mask": original, "system_mask": system,
+                    "timing": None}
+        try:
+            observed, _ = _windows_process_masks(handle, api)
+        except OSError as exc:
+            return {"requested": True, "status": "failed",
+                    "error": f"GetProcessAffinityMask_after_set:{exc.errno}", "cpus": normalized,
+                    "requested_mask": mask, "original_mask": original, "system_mask": system,
+                    "timing": None}
+        if observed != mask:
+            return {"requested": True, "status": "failed", "error": "observed_mask_mismatch",
+                    "cpus": normalized, "requested_mask": mask, "observed_mask": observed,
+                    "original_mask": original, "system_mask": system, "timing": None}
+        return {"requested": True, "status": "applied", "cpus": normalized,
+                "requested_mask": mask, "observed_mask": observed, "original_mask": original,
+                "system_mask": system, "timing": timing or "unspecified"}
+    if not hasattr(os, "sched_getaffinity") or not hasattr(os, "sched_setaffinity"):
+        return {"requested": True, "status": "unsupported", "error": "sched_affinity_unavailable",
+                "cpus": normalized, "timing": None}
+    try:
+        original = sorted(os.sched_getaffinity(proc.pid))
+        if not set(normalized).issubset(original):
+            return {"requested": True, "status": "failed", "error": "cpu_outside_inherited_mask",
+                    "cpus": normalized, "original_cpus": original, "timing": None}
+        os.sched_setaffinity(proc.pid, normalized)
+        observed = sorted(os.sched_getaffinity(proc.pid))
+    except OSError as exc:
+        return {"requested": True, "status": "failed", "error": f"sched_affinity:{exc.errno}",
+                "cpus": normalized, "timing": None}
+    if observed != normalized:
+        return {"requested": True, "status": "failed", "error": "observed_mask_mismatch",
+                "cpus": normalized, "original_cpus": original, "observed_cpus": observed,
+                "timing": None}
+    return {"requested": True, "status": "applied", "cpus": normalized,
+            "original_cpus": original, "observed_cpus": observed,
+            "timing": timing or "best_effort_after_spawn"}
+
+
 def canonical_hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -184,7 +289,7 @@ def _read_pipe(pipe, stream: str, capture: _BoundedCapture) -> None:
 
 
 def run_bounded_process(cmd: List[str], timeout_sec: float, output_limit: int = MAX_CHILD_OUTPUT_BYTES,
-                        cwd: Optional[str] = None) -> Dict[str, Any]:
+                        cwd: Optional[str] = None, cpus: Optional[List[int]] = None) -> Dict[str, Any]:
     """Run fixed argv with bounded capture, monotonic deadline and tree cleanup."""
     if timeout_sec <= 0 or output_limit <= 0:
         raise ValueError("timeout and output_limit must be positive")
@@ -194,9 +299,11 @@ def run_bounded_process(cmd: List[str], timeout_sec: float, output_limit: int = 
         proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False,
                                 text=False, start_new_session=(os.name != "nt"), creationflags=creationflags)
     except OSError as exc:
-        return {"exit_code": -1, "error": f"os_error: {exc}", "stdout": b"", "stderr": b""}
+        return {"exit_code": -1, "error": f"os_error: {exc}", "stdout": b"", "stderr": b"",
+                "affinity": {"requested": cpus is not None, "status": "not_started", "timing": None}}
     owner = _OwnedProcessTree(proc)
     containment_ready = os.name != "nt" or owner.assignment_error is None
+    affinity = apply_process_affinity(proc, cpus, "before_resume" if os.name == "nt" else "best_effort_after_spawn")
     capture = _BoundedCapture(output_limit)
     readers = [threading.Thread(target=_read_pipe, args=(proc.stdout, "stdout", capture), daemon=True),
                threading.Thread(target=_read_pipe, args=(proc.stderr, "stderr", capture), daemon=True)]
@@ -205,7 +312,10 @@ def run_bounded_process(cmd: List[str], timeout_sec: float, output_limit: int = 
     error = None
     deadline = time.monotonic() + timeout_sec
     try:
-        if os.name == "nt" and owner.assignment_error:
+        if affinity["status"] in ("failed", "unsupported"):
+            error = "process_affinity_unavailable"
+            owner.terminate()
+        elif os.name == "nt" and owner.assignment_error:
             error = "process_containment_unavailable"
             owner.terminate()
         elif os.name == "nt":
@@ -257,12 +367,14 @@ def run_bounded_process(cmd: List[str], timeout_sec: float, output_limit: int = 
             "containment": "windows_job" if os.name == "nt" and owner.assignment_error is None else
                            "posix_process_group" if os.name != "nt" else "windows_process_group_fallback",
             "containment_error": owner.assignment_error,
+            "affinity": affinity,
             "process_tree_cleanup": "complete" if cleanup_complete else "incomplete",
             "stdout": capture.value("stdout"), "stderr": capture.value("stderr")}
 
 
-def run_subprocess_json(cmd: List[str], timeout_sec: int) -> Dict[str, Any]:
-    completed = run_bounded_process(cmd, timeout_sec)
+def run_subprocess_json(cmd: List[str], timeout_sec: int, output_limit: int = MAX_CHILD_OUTPUT_BYTES,
+                        cpus: Optional[List[int]] = None) -> Dict[str, Any]:
+    completed = run_bounded_process(cmd, timeout_sec, output_limit=output_limit, cpus=cpus)
     stdout_raw = completed.pop("stdout", b"").decode("utf-8", errors="replace").strip()
     completed["stderr"] = completed.pop("stderr", b"").decode("utf-8", errors="replace").strip()[-4000:]
     if completed.get("error"):

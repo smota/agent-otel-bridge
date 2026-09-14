@@ -22,28 +22,77 @@ from dataclasses import dataclass
 from typing import Any
 
 
-RECORD = struct.Struct("<4sHHIIQQQ")
+RECORD_V1 = struct.Struct("<4sHHIIQQQ")
+RECORD_V2 = struct.Struct("<4sHHIIB3xIQQQ")
+# Current writer size. Decoding remains compatible with RECORD_V1.
+RECORD = RECORD_V2
 MAGIC = b"AOBT"
-VERSION = 1
+VERSION = 2
 NORMAL_COMPLETION = 1 << 0
 SEND_COMPLETED = 1 << 1
+TRANSPORT_STAGES = (
+    None,
+    "connect",
+    "wait_for_pipe",
+    "reopen",
+    "create_event",
+    "frame_too_large",
+    "submit",
+    "await_completion",
+    "observe_completion",
+    "deadline",
+    "short_write",
+)
 
 
 @dataclass(frozen=True)
 class TimingRecord:
+    version: int
     pid: int
     flags: int
+    transport_stage: str | None
+    os_code: int | None
     response_completed_ns: int
     before_transport_ns: int
     work_completed_ns: int
 
     @classmethod
     def decode(cls, data: bytes, expected_pid: int) -> "TimingRecord":
-        if len(data) != RECORD.size:
-            raise ValueError(f"record length {len(data)} != {RECORD.size}")
-        magic, version, size, pid, flags, response, transport, work = RECORD.unpack(data)
-        if magic != MAGIC or version != VERSION or size != RECORD.size:
-            raise ValueError("invalid observer magic, version, or size")
+        if len(data) < 8:
+            raise ValueError(f"truncated observer header: {len(data)} bytes")
+        magic, version, size = struct.unpack_from("<4sHH", data)
+        if magic != MAGIC:
+            raise ValueError("invalid observer magic")
+        if version == 1:
+            if size != RECORD_V1.size or len(data) != RECORD_V1.size:
+                raise ValueError(
+                    f"v1 observer length {len(data)} != declared/current {size}/{RECORD_V1.size}"
+                )
+            _, _, _, pid, flags, response, transport, work = RECORD_V1.unpack(data)
+            stage = None
+            os_code = None
+        elif version == VERSION:
+            if size != RECORD_V2.size or len(data) != RECORD_V2.size:
+                raise ValueError(
+                    f"v2 observer length {len(data)} != declared/current {size}/{RECORD_V2.size}"
+                )
+            (
+                _,
+                _,
+                _,
+                pid,
+                flags,
+                stage_code,
+                os_code,
+                response,
+                transport,
+                work,
+            ) = RECORD_V2.unpack(data)
+            if stage_code >= len(TRANSPORT_STAGES):
+                raise ValueError(f"unknown transport stage {stage_code}")
+            stage = TRANSPORT_STAGES[stage_code]
+        else:
+            raise ValueError(f"unknown observer version {version}")
         if pid != expected_pid:
             raise ValueError(f"record pid {pid} != child pid {expected_pid}")
         if flags & ~(NORMAL_COMPLETION | SEND_COMPLETED):
@@ -52,7 +101,13 @@ class TimingRecord:
             raise ValueError("record does not describe normal completion")
         if not response <= transport <= work:
             raise ValueError("observer checkpoints are not monotonic")
-        return cls(pid, flags, response, transport, work)
+        send_completed = bool(flags & SEND_COMPLETED)
+        if version == VERSION:
+            if send_completed and (stage is not None or os_code != 0):
+                raise ValueError("successful transport has error stage or OS code")
+            if not send_completed and stage is None:
+                raise ValueError("failed transport has no stage")
+        return cls(version, pid, flags, stage, os_code, response, transport, work)
 
 
 def _read_all(fd: int, destination: list[bytes], errors: list[str]) -> None:
@@ -157,7 +212,10 @@ def run_once(args: argparse.Namespace, index: int) -> dict[str, Any]:
         if record is None
         else {
             "flags": record.flags,
+            "version": record.version,
             "send_completed": bool(record.flags & SEND_COMPLETED),
+            "transport_stage": record.transport_stage,
+            "os_code": record.os_code,
             "response_completed_ns": record.response_completed_ns,
             "before_transport_ns": record.before_transport_ns,
             "work_completed_ns": record.work_completed_ns,

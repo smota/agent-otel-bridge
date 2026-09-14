@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from native_context_probe import pipe_ready
 from perf_driver import collect_environment, compute_sha256, inspect_source_state, sanitize_for_json
-from hook_timing_probe import RECORD as HOOK_OBSERVER_RECORD, SEND_COMPLETED, TimingRecord
+from hook_timing_probe import RECORD as HOOK_OBSERVER_RECORD, RECORD_V1, SEND_COMPLETED, TimingRecord
 
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_SPANS = 1000
@@ -64,14 +64,16 @@ def parse_daemon_diagnostics(stderr: str) -> Optional[Dict[str, Any]]:
 
 def classify_observer(raw: bytes, expected_pid: int, response_ok: bool, exit_code: int) -> Dict[str, Any]:
     if not raw:
-        inferred = response_ok and exit_code == 0
         return {
-            "status": "missing_record",
+            "status": "unknown",
+            "observation_validity": "missing",
             "record_bytes": 0,
             "raw_hex": "",
-            "send_completed": False,
-            "watchdog_inferred": inferred,
-            "inference": "missing_record_with_valid_fail_open_exit" if inferred else None,
+            "send_completed": None,
+            "transport_stage": None,
+            "os_code": None,
+            "watchdog_inferred": False,
+            "inference": None,
             "error": "observer record missing",
         }
     try:
@@ -79,19 +81,27 @@ def classify_observer(raw: bytes, expected_pid: int, response_ok: bool, exit_cod
     except ValueError as exc:
         return {
             "status": "invalid_record",
+            "observation_validity": "invalid",
             "record_bytes": len(raw),
             "raw_hex": raw.hex(),
-            "send_completed": False,
+            "send_completed": None,
+            "transport_stage": None,
+            "os_code": None,
             "watchdog_inferred": False,
             "inference": None,
             "error": str(exc),
         }
     completed = bool(record.flags & SEND_COMPLETED)
     return {
-        "status": "send_completed" if completed else "send_not_completed",
+        "status": "send_completed" if completed else ("send_error" if record.transport_stage else "send_not_completed_legacy"),
+        "observation_validity": "valid",
         "record_bytes": len(raw),
         "raw_hex": raw.hex(),
+        "version": record.version,
+        "pid": record.pid,
         "send_completed": completed,
+        "transport_stage": record.transport_stage,
+        "os_code": record.os_code,
         "watchdog_inferred": False,
         "inference": None,
         "error": None,
@@ -354,9 +364,10 @@ def summarize_observers(clients: List[Dict[str, Any]]) -> Optional[Dict[str, int
         return None
     return {
         "clients": len(observed),
-        "send_completed": sum(item["send_completed"] for item in observed),
-        "send_not_completed": sum(item["status"] == "send_not_completed" for item in observed),
-        "missing_record": sum(item["status"] == "missing_record" for item in observed),
+        "send_completed": sum(item["send_completed"] is True for item in observed),
+        "send_error": sum(item["status"] == "send_error" for item in observed),
+        "send_not_completed_legacy": sum(item["status"] == "send_not_completed_legacy" for item in observed),
+        "unknown": sum(item["status"] == "unknown" for item in observed),
         "invalid_record": sum(item["status"] == "invalid_record" for item in observed),
         "watchdog_inferred": sum(item["watchdog_inferred"] for item in observed),
     }
@@ -373,6 +384,8 @@ def correlate_missing_clients(missing_ids: List[str], clients: List[Dict[str, An
             "client_response_ok": client.get("response_ok"),
             "observer_status": observer.get("status", "not_observed"),
             "send_completed": observer.get("send_completed"),
+            "transport_stage": observer.get("transport_stage"),
+            "os_code": observer.get("os_code"),
             "watchdog_inferred": observer.get("watchdog_inferred"),
         })
     return result

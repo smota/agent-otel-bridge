@@ -57,13 +57,29 @@ fn main() {
                     response_completed,
                     before_transport,
                     work_completed,
-                    result.is_ok(),
+                    result.err(),
                 );
             }
             process::exit(0);
         }
         #[cfg(windows)]
-        SendAttempt::CleanupRequired { pending, .. } => finish_with_guard(pending),
+        SendAttempt::CleanupRequired { error, pending } => {
+            if let (Some(observer), Some(response_completed), Some(before_transport)) =
+                (observer, response_completed, before_transport)
+            {
+                let work_completed = observer.elapsed();
+                observer.emit(
+                    response_completed,
+                    before_transport,
+                    work_completed,
+                    Some(error),
+                );
+            }
+            // Pending owns the overlapped operation through process exit. If
+            // the bounded observer write stalls, the watchdog terminates the
+            // process without releasing kernel-referenced memory early.
+            finish_with_guard(pending)
+        }
     }
 }
 

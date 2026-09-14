@@ -1,5 +1,7 @@
 # New Architecture Test Suite Plan & Execution Specification
 
+> Historical protocol. For current implementation and acceptance use [production-path-round.md](production-path-round.md). Mixed compatibility-wrapper throughput and full-harvest <150 us are retired active gates; original observations below remain historical evidence.
+
 This dev-only suite validates isolated candidate daemon and hook processes on Windows. It characterizes end-to-end delivery while preserving existing hard SLAs as normative requirements. E2E timing is empirical characterization; correctness and state transitions are pass/fail assertions.
 
 ## Architecture

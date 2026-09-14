@@ -42,6 +42,36 @@ pub struct IngressStats {
     pub peak_reserved_bytes: AtomicUsize,
     pub active_connections: AtomicUsize,
     pub peak_connections: AtomicUsize,
+
+    // IPC listener lifecycle & scheduler diagnostic metrics:
+    /// Count of successful CreateNamedPipe instance creations.
+    pub accept_created: AtomicU64,
+    /// Count of failed CreateNamedPipe instance creations.
+    pub accept_create_failed: AtomicU64,
+    /// Count of successful ConnectNamedPipe completions observed in main loop.
+    pub accept_connected: AtomicU64,
+    /// Count of failed ConnectNamedPipe attempts or panicked accept tasks.
+    pub accept_connect_failed: AtomicU64,
+    /// Count of accept tasks spawned via JoinSet::spawn. Does NOT mean free kernel instances.
+    pub accept_spawned: AtomicU64,
+    /// Count of accept task futures that reached their first poll in the runtime.
+    pub accept_polled: AtomicU64,
+    /// Count of replacement listener creations measured.
+    pub replacement_create_count: AtomicU64,
+    /// Peak duration (microseconds) of create_listener syscall.
+    pub replacement_create_max_micros: AtomicU64,
+    /// Count of main-loop accept receipt to replacement JoinSet::spawn calls.
+    pub dispatch_to_spawn_count: AtomicU64,
+    /// Peak latency (microseconds) between main loop accept receipt and replacement JoinSet::spawn.
+    pub dispatch_to_spawn_max_micros: AtomicU64,
+    /// Count of task connect completions received in main loop.
+    pub completion_to_dispatch_count: AtomicU64,
+    /// Peak latency (microseconds) between connect() returning in task and main loop join_next receipt.
+    pub completion_to_dispatch_max_micros: AtomicU64,
+    /// Count of spawned accept tasks reaching their first poll (same event as `accept_polled`).
+    pub accept_spawn_to_poll_count: AtomicU64,
+    /// Peak latency (microseconds) between JoinSet::spawn and the accept task future being first polled.
+    pub accept_spawn_to_poll_max_micros: AtomicU64,
 }
 struct ByteLease {
     _permit: OwnedSemaphorePermit,
@@ -256,34 +286,126 @@ pub async fn run_server_bounded(
 
 #[cfg(windows)]
 async fn serve(name: Option<&str>, state: ServerState) -> io::Result<()> {
-    use tokio::net::windows::named_pipe::ServerOptions;
+    use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+
+    #[inline]
+    fn saturate_u64(micros: u128) -> u64 {
+        u64::try_from(micros).unwrap_or(u64::MAX)
+    }
+
+    fn create_listener(name: &str, first: bool) -> io::Result<NamedPipeServer> {
+        ServerOptions::new()
+            .first_pipe_instance(first)
+            .in_buffer_size(64 * 1024)
+            .out_buffer_size(4096)
+            .create(name)
+    }
+
+    fn arm_listener(
+        listener: NamedPipeServer,
+        accepts: &mut JoinSet<io::Result<(NamedPipeServer, Instant)>>,
+        stats: &Arc<IngressStats>,
+    ) {
+        let spawn_at = Instant::now();
+        stats.accept_spawned.fetch_add(1, Ordering::Relaxed);
+        let stats_task = stats.clone();
+        accepts.spawn(async move {
+            let poll_at = Instant::now();
+            stats_task.accept_polled.fetch_add(1, Ordering::Relaxed);
+            let spawn_to_poll = poll_at.saturating_duration_since(spawn_at).as_micros();
+            stats_task
+                .accept_spawn_to_poll_count
+                .fetch_add(1, Ordering::Relaxed);
+            stats_task
+                .accept_spawn_to_poll_max_micros
+                .fetch_max(saturate_u64(spawn_to_poll), Ordering::Relaxed);
+
+            listener.connect().await?;
+            let connected_at = Instant::now();
+            Ok((listener, connected_at))
+        });
+    }
+
     let name = name
         .map(str::to_owned)
         .or_else(|| std::env::var("AGENT_OTEL_PIPE").ok())
         .or_else(|| std::env::var("AGY_OTEL_PIPE").ok())
         .unwrap_or_else(|| crate::frame::DEFAULT_PIPE_NAME.into());
-    let mut server = Some(
-        ServerOptions::new()
-            .first_pipe_instance(true)
-            .in_buffer_size(64 * 1024)
-            .out_buffer_size(4096)
-            .create(&name)?,
-    );
+    let pool_size = state.limits.max_connections.clamp(1, 4);
+    // Create the full pool before arming it. The first instance remains the
+    // collision guard, while every pool member receives its own pending
+    // ConnectNamedPipe operation below.
+    let mut initial = Vec::with_capacity(pool_size);
+    match create_listener(&name, true) {
+        Ok(listener) => {
+            state.stats.accept_created.fetch_add(1, Ordering::Relaxed);
+            initial.push(listener);
+        }
+        Err(err) => {
+            state
+                .stats
+                .accept_create_failed
+                .fetch_add(1, Ordering::Relaxed);
+            return Err(err);
+        }
+    }
+    for _ in 1..pool_size {
+        match create_listener(&name, false) {
+            Ok(listener) => {
+                state.stats.accept_created.fetch_add(1, Ordering::Relaxed);
+                initial.push(listener);
+            }
+            Err(err) => {
+                state
+                    .stats
+                    .accept_create_failed
+                    .fetch_add(1, Ordering::Relaxed);
+                return Err(err);
+            }
+        }
+    }
+    let mut accepts = JoinSet::new();
+    for listener in initial {
+        arm_listener(listener, &mut accepts, &state.stats);
+    }
     let mut readers = JoinSet::new();
     loop {
         if state.shutdown.is_cancelled() {
             break;
         }
-        if server.is_none() {
-            match ServerOptions::new()
-                .in_buffer_size(64 * 1024)
-                .out_buffer_size(4096)
-                .create(&name)
-            {
-                Ok(next) => server = Some(next),
+        if accepts.len() < pool_size {
+            let create_start = Instant::now();
+            match create_listener(&name, false) {
+                Ok(listener) => {
+                    state.stats.accept_created.fetch_add(1, Ordering::Relaxed);
+                    let create_micros = create_start.elapsed().as_micros();
+                    state
+                        .stats
+                        .replacement_create_count
+                        .fetch_add(1, Ordering::Relaxed);
+                    state
+                        .stats
+                        .replacement_create_max_micros
+                        .fetch_max(saturate_u64(create_micros), Ordering::Relaxed);
+                    arm_listener(listener, &mut accepts, &state.stats);
+                }
                 Err(_) => {
-                    tokio::select! { _ = state.shutdown.cancelled() => break, _ = tokio::time::sleep(Duration::from_millis(20)) => {} }
-                    continue;
+                    state
+                        .stats
+                        .accept_create_failed
+                        .fetch_add(1, Ordering::Relaxed);
+                    // A partial pool can still make progress. Only back off
+                    // when no accept remains armed; otherwise the select below
+                    // continues servicing existing listeners and readers.
+                    if accepts.is_empty() {
+                        tokio::select! {
+                            biased;
+                            _ = state.shutdown.cancelled() => break,
+                            _ = readers.join_next(), if !readers.is_empty() => {},
+                            _ = tokio::time::sleep(Duration::from_millis(10)) => {},
+                        }
+                        continue;
+                    }
                 }
             }
         }
@@ -291,25 +413,55 @@ async fn serve(name: Option<&str>, state: ServerState) -> io::Result<()> {
             biased;
             _ = state.shutdown.cancelled() => break,
             _ = readers.join_next(), if !readers.is_empty() => {},
-            result = server.as_ref().expect("listener present").connect() => {
-                if result.is_ok() {
-                    let connected = server.take().expect("connected listener");
-                    // Install the replacement before handing the established connection to a
-                    // reader. If allocation fails, preserve the accepted connection and let the
-                    // bounded retry at the top of the loop restore the listener.
-                    server = ServerOptions::new()
-                        .in_buffer_size(64 * 1024)
-                        .out_buffer_size(4096)
-                        .create(&name)
-                        .ok();
-                    state.spawn_reader(connected, &mut readers);
-                } else {
-                    server.take();
-                    tokio::select! { _ = state.shutdown.cancelled() => break, _ = tokio::time::sleep(Duration::from_millis(10)) => {} }
+            result = accepts.join_next(), if !accepts.is_empty() => {
+                let join_received_at = Instant::now();
+                match result {
+                    Some(Ok(Ok((connected, connected_at)))) => {
+                        state.stats.accept_connected.fetch_add(1, Ordering::Relaxed);
+                        let comp_to_disp = join_received_at
+                            .saturating_duration_since(connected_at)
+                            .as_micros();
+                        state.stats.completion_to_dispatch_count.fetch_add(1, Ordering::Relaxed);
+                        state.stats
+                            .completion_to_dispatch_max_micros
+                            .fetch_max(saturate_u64(comp_to_disp), Ordering::Relaxed);
+
+                        // Replenish the pending accept pool before dispatching the
+                        // established connection to a bounded reader.
+                        let dispatch_start = Instant::now();
+                        let create_start = Instant::now();
+                        match create_listener(&name, false) {
+                            Ok(listener) => {
+                                state.stats.accept_created.fetch_add(1, Ordering::Relaxed);
+                                let create_micros = create_start.elapsed().as_micros();
+                                state.stats.replacement_create_count.fetch_add(1, Ordering::Relaxed);
+                                state.stats
+                                    .replacement_create_max_micros
+                                    .fetch_max(saturate_u64(create_micros), Ordering::Relaxed);
+
+                                arm_listener(listener, &mut accepts, &state.stats);
+                                let disp_to_spawn = dispatch_start.elapsed().as_micros();
+                                state.stats.dispatch_to_spawn_count.fetch_add(1, Ordering::Relaxed);
+                                state.stats
+                                    .dispatch_to_spawn_max_micros
+                                    .fetch_max(saturate_u64(disp_to_spawn), Ordering::Relaxed);
+                            }
+                            Err(_) => {
+                                state.stats.accept_create_failed.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                        state.spawn_reader(connected, &mut readers);
+                    }
+                    Some(Ok(Err(_))) | Some(Err(_)) => {
+                        state.stats.accept_connect_failed.fetch_add(1, Ordering::Relaxed);
+                    }
+                    None => {}
                 }
             }
         }
     }
+    accepts.abort_all();
+    while accepts.join_next().await.is_some() {}
     readers.abort_all();
     while readers.join_next().await.is_some() {}
     Ok(())

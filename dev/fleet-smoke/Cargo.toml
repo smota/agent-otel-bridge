@@ -19,6 +19,7 @@ ctrlc = "3.5"
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-util = { workspace = true }
 agent-otel-core = { path = "../../crates/agent-otel-core" }
+agent-otel-daemon = { path = "../../crates/agent-otel-daemon" }
 agent-otel-ipc = { path = "../../crates/agent-otel-ipc" }
 tempfile = "3"
 jsonschema = { version = "0.33", default-features = false }

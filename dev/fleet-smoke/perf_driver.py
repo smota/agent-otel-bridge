@@ -188,8 +188,15 @@ def inspect_source_state(repo_root: str = ".") -> Dict[str, Any]:
                 if file_hash:
                     untracked_hashes[rel.replace("\\", "/")] = file_hash
 
+    installed_revision = None
+    try:
+        active_path = os.path.join(os.environ.get("LOCALAPPDATA", ""), "agent-otel-bridge", "active.json")
+        with open(active_path, encoding="utf-8") as active_file:
+            installed_revision = json.load(active_file).get("git_commit")
+    except (OSError, ValueError, AttributeError):
+        pass
     return {
-        "installed_reference_revision": "a27470c",
+        "installed_reference_revision": installed_revision,
         "candidate_git_revision": rev,
         "is_dirty": dirty,
         "git_diff_head_sha256": diff_hash,

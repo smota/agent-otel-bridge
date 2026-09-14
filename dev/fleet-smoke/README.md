@@ -1,8 +1,22 @@
 # Fleet smoke laboratory
 
-The candidate implementation follows the [performance implementation specification](performance-implementation-spec.md), [execution plan](performance-implementation-plan.md), and [task manifest](performance-work-items.json). The manifest distinguishes implementation from acceptance; performance approval requires measured evidence. Codex coordinates candidate implementation; Antigravity remains the native fleet campaign coordinator. Runtime reports remain transient.
+Current candidate implementation and acceptance: [production-path round](production-path-round.md). Older `perf_loop.py` / `perf_driver.py` preserve historical replay semantics and must not be used to certify the current architecture. The documents linked below retain previous campaign context.
 
-## Candidate performance loop
+The current contract is [production-path-round.md](production-path-round.md). Antigravity authors the primary changes, smaller Codex models handle bounded integration, and Codex coordinates acceptance. Runtime reports remain transient.
+
+## Current candidate acceptance loop
+
+Stop source writers and run `cargo guardrails`, then build the development examples with `cargo build --release -p agent-otel-fleet-smoke --examples`. Invoke from the repository root:
+
+```text
+python dev/fleet-smoke/production_round.py --output-dir <owned-temporary-directory> --attempt 1 --daemon-bin <candidate-bridge> --hook-bin <candidate-hook> --production-bench <production_path> --ipc-bench <performance_ipc> --ipc-load <ipc_load> --seed 502
+```
+
+Use absolute candidate executable paths (`target/release` and `target/release/examples`, with `.exe` on Windows). Reserve at most three sequential attempts in the same directory. Review each report before incrementing `--attempt`; retain failed attempts. The controller checks the shared production boundary, architecture scenarios, real-hook delivery, native IPC delivery and established latency/size SLAs. Long-trace backend validation is a separate final step through `long_trace_probe.py` and SigNoz MCP/API. A passed functional verdict does not certify maximum sustained capacity.
+
+## Historical mixed performance loop (replay only)
+
+The following commands and five-attempt ledger belong to the superseded measurement boundary. They are retained for historical reproduction, not current candidate acceptance.
 
 Run from the repository root, with all source writers stopped. Build candidate binaries without installing them:
 

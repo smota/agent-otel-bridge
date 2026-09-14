@@ -248,7 +248,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         workspace_markers: &[".grok"],
         global_config_fn: || get_grok_config_path(false),
         project_config_fn: get_grok_project_path,
-        install_fn: install_standard_hooks,
+        install_fn: install_grok_hooks,
         uninstall_fn: uninstall_standard_hooks,
         is_registered_fn: |path| {
             path.exists()
@@ -266,7 +266,7 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         workspace_markers: &[".pi"],
         global_config_fn: || get_pi_config_path(false),
         project_config_fn: get_pi_project_path,
-        install_fn: install_antigravity_hooks,
+        install_fn: install_pi_hooks,
         uninstall_fn: |path, _bin| uninstall_antigravity_hooks(path),
         is_registered_fn: |path| {
             path.exists()
@@ -297,6 +297,57 @@ pub fn format_hook_command(binary: &str, event: &str, client_tag: Option<&str>) 
     };
 
     format!("{bin_str} {event}{client_arg}")
+}
+
+/// Render a command for adapters whose interpreter evaluates hook commands as
+/// PowerShell expressions.  A quoted executable path by itself is a string
+/// expression in PowerShell; the call operator is required before arguments
+/// can be passed (otherwise the harness reports a ParserError and continues).
+pub fn format_powershell_hook_command(
+    binary: &str,
+    event: &str,
+    client_tag: Option<&str>,
+) -> String {
+    let path = binary
+        .trim_matches('"')
+        .replace('`', "``")
+        .replace('$', "`$")
+        .replace('"', "`\"");
+    let client_arg = client_tag
+        .map(|tag| format!(" --client {tag}"))
+        .unwrap_or_default();
+    format!("& \"{path}\" {event}{client_arg}")
+}
+
+/// Render the nested quoting required by `cmd.exe /c` when the executable
+/// path contains spaces. This is useful for adapters that expose a CMD shell
+/// contract; it remains opt-in so existing adapter semantics stay unchanged.
+pub fn format_cmd_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
+    let path = binary.trim_matches('"');
+    let client_arg = client_tag
+        .map(|tag| format!(" --client {tag}"))
+        .unwrap_or_default();
+    format!("call \"{path}\" {event}{client_arg}")
+}
+
+pub fn format_grok_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
+    if cfg!(windows) {
+        format_powershell_hook_command(binary, event, client_tag)
+    } else {
+        format_hook_command(binary, event, client_tag)
+    }
+}
+
+pub fn format_antigravity_hook_command(
+    binary: &str,
+    event: &str,
+    client_tag: Option<&str>,
+) -> String {
+    if cfg!(windows) {
+        format_cmd_hook_command(binary, event, client_tag)
+    } else {
+        format_hook_command(binary, event, client_tag)
+    }
 }
 
 pub fn check_binary_in_path(binary: &str) -> bool {
@@ -383,11 +434,11 @@ pub fn install_antigravity_hooks(
         root = json!({});
     }
 
-    let pre_tool = format_hook_command(binary, "PreToolUse", client_tag);
-    let post_tool = format_hook_command(binary, "PostToolUse", client_tag);
-    let pre_inv = format_hook_command(binary, "PreInvocation", client_tag);
-    let post_inv = format_hook_command(binary, "PostInvocation", client_tag);
-    let stop = format_hook_command(binary, "Stop", client_tag);
+    let pre_tool = format_antigravity_hook_command(binary, "PreToolUse", client_tag);
+    let post_tool = format_antigravity_hook_command(binary, "PostToolUse", client_tag);
+    let pre_inv = format_antigravity_hook_command(binary, "PreInvocation", client_tag);
+    let post_inv = format_antigravity_hook_command(binary, "PostInvocation", client_tag);
+    let stop = format_antigravity_hook_command(binary, "Stop", client_tag);
 
     let hook_spec = json!({
         "PreToolUse": [
@@ -441,6 +492,15 @@ pub fn install_standard_hooks(
     binary: &str,
     client_tag: Option<&str>,
 ) -> Result<bool, Box<dyn std::error::Error>> {
+    install_hooks_with_command_formatter(path, binary, client_tag, format_hook_command)
+}
+
+fn install_hooks_with_command_formatter(
+    path: &Path,
+    binary: &str,
+    client_tag: Option<&str>,
+    formatter: fn(&str, &str, Option<&str>) -> String,
+) -> Result<bool, Box<dyn std::error::Error>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -469,7 +529,7 @@ pub fn install_standard_hooks(
 
     let events = ["PreToolUse", "PostToolUse", "Stop"];
     for event in events {
-        let target_cmd = format_hook_command(binary, event, client_tag);
+        let target_cmd = formatter(binary, event, client_tag);
 
         let entry = json!({
             "matcher": ".*",
@@ -511,6 +571,25 @@ pub fn install_standard_hooks(
     let serialized = serde_json::to_string_pretty(&root)?;
     fs::write(path, serialized)?;
     Ok(true)
+}
+
+/// Grok evaluates its command field through PowerShell on Windows. Keep its
+/// registration isolated while retaining the standard JSON shape and update
+/// semantics used by the other adapters.
+pub fn install_grok_hooks(
+    path: &Path,
+    binary: &str,
+    client_tag: Option<&str>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    install_hooks_with_command_formatter(path, binary, client_tag, format_grok_hook_command)
+}
+
+pub fn install_pi_hooks(
+    path: &Path,
+    binary: &str,
+    client_tag: Option<&str>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    install_hooks_with_command_formatter(path, binary, client_tag, format_hook_command)
 }
 
 pub fn uninstall_standard_hooks(
@@ -919,6 +998,47 @@ mod tests {
     }
 
     #[test]
+    fn powershell_renderer_uses_call_operator_for_quoted_executable() {
+        let command = format_powershell_hook_command(
+            "C:\\Program Files\\Agent Bridge\\agent-hook.exe",
+            "PreToolUse",
+            Some("grok"),
+        );
+        assert_eq!(
+            command,
+            "& \"C:\\Program Files\\Agent Bridge\\agent-hook.exe\" PreToolUse --client grok"
+        );
+    }
+
+    #[test]
+    fn cmd_renderer_nests_quotes_around_command_line() {
+        assert_eq!(
+            format_cmd_hook_command("C:\\Program Files\\agent-hook.exe", "Stop", None),
+            "call \"C:\\Program Files\\agent-hook.exe\" Stop"
+        );
+    }
+
+    #[test]
+    fn grok_registration_is_powershell_safe_and_idempotent() {
+        let dir = std::env::temp_dir().join(format!("grok_renderer_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("agent-otel.json");
+        install_grok_hooks(&path, "C:\\Program Files\\agent-hook.exe", Some("grok")).unwrap();
+        let first = fs::read_to_string(&path).unwrap();
+        install_grok_hooks(&path, "C:\\Program Files\\agent-hook.exe", Some("grok")).unwrap();
+        let second = fs::read_to_string(&path).unwrap();
+        assert_eq!(first, second);
+        let parsed: Value = serde_json::from_str(&first).unwrap();
+        let command = parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(command.starts_with("& \""));
+        assert!(command.ends_with(" PreToolUse --client grok"));
+        assert!(command.contains("C:\\Program Files\\agent-hook.exe"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn test_antigravity_hooks_install_and_uninstall_preserves_third_party() {
         let temp_dir = std::env::temp_dir().join(format!("agy_test_{}", std::process::id()));
         let hooks_path = temp_dir.join("hooks.json");
@@ -949,10 +1069,14 @@ mod tests {
 
         // Check bridge hooks
         let bridge = &parsed["agent-otel-bridge"];
-        assert_eq!(
-            bridge["PreToolUse"][0]["hooks"][0]["command"],
-            "\"C:\\Bridge\\agent-hook.exe\" PreToolUse"
-        );
+        let command = bridge["PreToolUse"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        if cfg!(windows) {
+            assert_eq!(command, "call \"C:\\Bridge\\agent-hook.exe\" PreToolUse");
+        } else {
+            assert_eq!(command, "\"C:\\Bridge\\agent-hook.exe\" PreToolUse");
+        }
 
         // Uninstall
         let uninst = uninstall_antigravity_hooks(&hooks_path);

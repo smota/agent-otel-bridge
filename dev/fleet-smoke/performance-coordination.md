@@ -1,5 +1,7 @@
 # Performance validation coordination
 
+> Historical protocol. For current implementation and acceptance use [production-path-round.md](production-path-round.md). Mixed compatibility-wrapper throughput and full-harvest <150 us are retired active gates; original observations below remain historical evidence.
+
 ## Next implementation phase
 
 The [implementation specification](performance-implementation-spec.md) and [execution plan](performance-implementation-plan.md) govern the next candidate changes. Per the latest user request, Codex coordinates specification and implementation subagents, using fixed Luna/Sol assignments. Antigravity remains coordinator of native fleet execution, with Codex QA/relay. The original campaign protocol below records the completed suite-update phase; it does not authorize active installation or automatically start another campaign. Planned APIs and flags are not yet implemented.

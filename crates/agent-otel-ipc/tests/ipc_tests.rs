@@ -190,6 +190,135 @@ async fn concurrent_waiters_retry_busy_reopen_until_private_endpoint_accepts_all
 
 #[cfg(windows)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn listener_pool_consumes_four_stalled_connections_and_cleans_up() {
+    use agent_otel_ipc::server::{IngressLimits, IngressStats};
+    use std::sync::{atomic::Ordering, Arc};
+    use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
+
+    let pipe_name = format!(
+        r"\\.\pipe\agent-otel-listener-pool-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let (events, _event_rx) = tokio::sync::mpsc::channel(8);
+    let (control, _control_rx) = tokio::sync::mpsc::channel(8);
+    let shutdown = CancellationToken::new();
+    let stats = Arc::new(IngressStats::default());
+    let server_name = pipe_name.clone();
+    let server_shutdown = shutdown.clone();
+    let server_stats = stats.clone();
+    let server_handle = tokio::spawn(async move {
+        server::run_server_bounded(
+            Some(&server_name),
+            events,
+            control,
+            server_shutdown,
+            IngressLimits {
+                max_connections: 8,
+                read_timeout: std::time::Duration::from_secs(5),
+                ..IngressLimits::default()
+            },
+            server_stats,
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Keep the clients silent so all four accepted connections remain visible
+    // as active readers. Merely opening four handles would not prove that all
+    // four ConnectNamedPipe futures were concurrently polled by the server.
+    let mut clients = Vec::with_capacity(4);
+    for _ in 0..4 {
+        clients.push(
+            ClientOptions::new()
+                .open(&pipe_name)
+                .expect("open pooled listener"),
+        );
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while stats.active_connections.load(Ordering::Relaxed) != 4 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("server did not consume all four pooled connections");
+    assert_eq!(stats.peak_connections.load(Ordering::Relaxed), 4);
+    assert!(stats.peak_connections.load(Ordering::Relaxed) <= 8);
+
+    shutdown.cancel();
+    tokio::time::timeout(std::time::Duration::from_secs(1), server_handle)
+        .await
+        .expect("pooled server shutdown timed out")
+        .expect("pooled server task panicked")
+        .expect("pooled server failed");
+    assert_eq!(stats.active_connections.load(Ordering::Relaxed), 0);
+    drop(clients);
+
+    // A fresh first-instance listener on the same name proves that shutdown
+    // dropped the entire accept pool rather than leaking a pipe instance. The
+    // kernel may retain the just-closed client objects briefly, so retry only
+    // this post-cleanup observation within a fixed deadline.
+    let cleanup_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+    loop {
+        match ServerOptions::new()
+            .first_pipe_instance(true)
+            .create(&pipe_name)
+        {
+            Ok(listener) => {
+                drop(listener);
+                break;
+            }
+            Err(error) if tokio::time::Instant::now() < cleanup_deadline => {
+                let _ = error;
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            Err(error) => panic!("accept pool leaked after shutdown: {error:?}"),
+        }
+    }
+}
+
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn first_pipe_instance_rejects_a_second_server() {
+    let pipe_name = format!(
+        r"\\.\pipe\agent-otel-first-instance-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let (tx, _rx) = tokio::sync::mpsc::channel(1);
+    let shutdown = CancellationToken::new();
+    let server_name = pipe_name.clone();
+    let server_shutdown = shutdown.clone();
+    let first =
+        tokio::spawn(
+            async move { server::run_server(Some(&server_name), tx, server_shutdown).await },
+        );
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let (second_tx, _second_rx) = tokio::sync::mpsc::channel(1);
+    let second_result =
+        server::run_server(Some(&pipe_name), second_tx, CancellationToken::new()).await;
+    assert!(
+        second_result.is_err(),
+        "second server acquired guarded pipe"
+    );
+
+    shutdown.cancel();
+    tokio::time::timeout(std::time::Duration::from_secs(1), first)
+        .await
+        .expect("first server shutdown timed out")
+        .expect("first server task panicked")
+        .expect("first server failed");
+}
+
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn repeated_pending_writes_retain_ownership_and_release_handles() {
     use agent_otel_ipc::client::{attempt_send_until, DrainStatus, SendAttempt, SendStage};
     use tokio::net::windows::named_pipe::ServerOptions;
@@ -290,4 +419,118 @@ async fn repeated_pending_writes_retain_ownership_and_release_handles() {
             steady_state_handles = Some(current_handles);
         }
     }
+}
+
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn listener_pool_diagnostics_lifecycle_and_rebind() {
+    use agent_otel_ipc::server::{IngressLimits, IngressStats};
+    use std::sync::{atomic::Ordering, Arc};
+    use tokio::net::windows::named_pipe::ClientOptions;
+
+    let pipe_name = format!(
+        r"\\.\pipe\agent-otel-diag-lifecycle-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let (events, _event_rx) = tokio::sync::mpsc::channel(8);
+    let (control, _control_rx) = tokio::sync::mpsc::channel(8);
+    let shutdown = CancellationToken::new();
+    let stats = Arc::new(IngressStats::default());
+    let server_name = pipe_name.clone();
+    let server_shutdown = shutdown.clone();
+    let server_stats = stats.clone();
+    let server_handle = tokio::spawn(async move {
+        server::run_server_bounded(
+            Some(&server_name),
+            events,
+            control,
+            server_shutdown,
+            IngressLimits {
+                max_connections: 4,
+                read_timeout: std::time::Duration::from_secs(5),
+                ..IngressLimits::default()
+            },
+            server_stats,
+        )
+        .await
+    });
+
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while stats.accept_spawn_to_poll_count.load(Ordering::Relaxed) < 4 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("initial 4 pool instances not polled");
+
+    assert_eq!(stats.accept_created.load(Ordering::Relaxed), 4);
+    assert_eq!(stats.accept_spawned.load(Ordering::Relaxed), 4);
+    assert_eq!(stats.accept_polled.load(Ordering::Relaxed), 4);
+    assert_eq!(stats.accept_connected.load(Ordering::Relaxed), 0);
+    assert_eq!(stats.accept_create_failed.load(Ordering::Relaxed), 0);
+    assert_eq!(stats.accept_connect_failed.load(Ordering::Relaxed), 0);
+    assert_eq!(stats.accept_spawn_to_poll_count.load(Ordering::Relaxed), 4);
+
+    let client = ClientOptions::new().open(&pipe_name).expect("open client");
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while stats.accept_connected.load(Ordering::Relaxed) < 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("client connection not accepted");
+
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while stats.accept_spawn_to_poll_count.load(Ordering::Relaxed) < 5 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("replacement instance not polled");
+
+    assert_eq!(stats.accept_created.load(Ordering::Relaxed), 5);
+    assert_eq!(stats.accept_spawned.load(Ordering::Relaxed), 5);
+    assert_eq!(stats.replacement_create_count.load(Ordering::Relaxed), 1);
+    assert_eq!(stats.dispatch_to_spawn_count.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        stats.completion_to_dispatch_count.load(Ordering::Relaxed),
+        1
+    );
+
+    drop(client);
+    shutdown.cancel();
+    tokio::time::timeout(std::time::Duration::from_secs(1), server_handle)
+        .await
+        .expect("server shutdown timed out")
+        .expect("server task panicked")
+        .expect("server failed");
+
+    let (rebind_tx, _rebind_rx) = tokio::sync::mpsc::channel(1);
+    let rebind_shutdown = CancellationToken::new();
+    let rebind_name = pipe_name.clone();
+    let rebind_stop = rebind_shutdown.clone();
+    let rebind_server = tokio::spawn(async move {
+        server::run_server(Some(&rebind_name), rebind_tx, rebind_stop).await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if let Ok(client) = ClientOptions::new().open(&pipe_name) {
+                drop(client);
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("rebind server did not accept a client");
+    rebind_shutdown.cancel();
+    tokio::time::timeout(std::time::Duration::from_secs(1), rebind_server)
+        .await
+        .expect("rebind server shutdown timed out")
+        .expect("rebind server task panicked")
+        .expect("rebind server failed");
 }

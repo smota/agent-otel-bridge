@@ -1,5 +1,7 @@
 # Especificação executável de desempenho e entrega
 
+> Historical protocol. For current implementation and acceptance use [production-path-round.md](production-path-round.md). Mixed compatibility-wrapper throughput and full-harvest <150 us are retired active gates; original observations below remain historical evidence.
+
 Versão 1 — 2026-09-14. Estado: especificação para implementação candidata; não é evidência de código implementado. Base inspecionada: `66ba326` com alterações locais do laboratório. Revalidar diff e hashes antes de executar.
 
 ## 1. Escopo, precedência e entrega

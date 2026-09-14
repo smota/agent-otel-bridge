@@ -3,16 +3,15 @@
 use crate::{
     batch::SpanBatcher,
     config::DaemonConfig,
-    context_cache::{ContextCache, ContextState},
+    context_cache::ContextCache,
     diagnostics::Diagnostics,
     exporter::{OtlpExporter, EXPORT_DEADLINE},
     pipeline::{export_worker, ExportQueue},
     quota_worker::QuotaWorker,
 };
-use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent, WireHeader};
-use agent_otel_core::otlp::{build_span_from_resolved, kv_int, kv_string, ResolvedSpanMetadata};
-use agent_otel_core::trace_id::resolve_trace_context;
-use agent_otel_ipc::frame::{decode_context_payload, MsgType};
+use agent_otel_core::model::ExecutionMode;
+use agent_otel_core::otlp::ResolvedSpanMetadata;
+use agent_otel_ipc::frame::MsgType;
 use agent_otel_ipc::server::{IngressFrame, IngressLimits, IngressStats};
 use std::sync::{atomic::Ordering, Arc};
 use std::time::{Duration, Instant};
@@ -257,7 +256,14 @@ impl Daemon {
             "ingress":{"received":ingress.received.load(Ordering::Relaxed),"admitted":ingress.admitted.load(Ordering::Relaxed),
                 "invalid":ingress.invalid.load(Ordering::Relaxed),"capacity":ingress.capacity.load(Ordering::Relaxed),
                 "read_failed":ingress.read_failed.load(Ordering::Relaxed),"read_deadline":ingress.read_deadline.load(Ordering::Relaxed),
-                "reserved_bytes":ingress.reserved_bytes.load(Ordering::Relaxed),"peak_bytes":ingress.peak_reserved_bytes.load(Ordering::Relaxed)}});
+                "reserved_bytes":ingress.reserved_bytes.load(Ordering::Relaxed),"peak_bytes":ingress.peak_reserved_bytes.load(Ordering::Relaxed),
+                "accept_created":ingress.accept_created.load(Ordering::Relaxed),"accept_create_failed":ingress.accept_create_failed.load(Ordering::Relaxed),
+                "accept_connected":ingress.accept_connected.load(Ordering::Relaxed),"accept_connect_failed":ingress.accept_connect_failed.load(Ordering::Relaxed),
+                "accept_spawned":ingress.accept_spawned.load(Ordering::Relaxed),"accept_polled":ingress.accept_polled.load(Ordering::Relaxed),
+                "replacement_create_count":ingress.replacement_create_count.load(Ordering::Relaxed),"replacement_create_max_micros":ingress.replacement_create_max_micros.load(Ordering::Relaxed),
+                "dispatch_to_spawn_count":ingress.dispatch_to_spawn_count.load(Ordering::Relaxed),"dispatch_to_spawn_max_micros":ingress.dispatch_to_spawn_max_micros.load(Ordering::Relaxed),
+                "completion_to_dispatch_count":ingress.completion_to_dispatch_count.load(Ordering::Relaxed),"completion_to_dispatch_max_micros":ingress.completion_to_dispatch_max_micros.load(Ordering::Relaxed),
+                "accept_spawn_to_poll_count":ingress.accept_spawn_to_poll_count.load(Ordering::Relaxed),"accept_spawn_to_poll_max_micros":ingress.accept_spawn_to_poll_max_micros.load(Ordering::Relaxed)}});
         eprintln!("{summary}");
         if let Some(error) = server_error {
             Err(error)
@@ -322,92 +328,42 @@ fn transform(
     aliases: bool,
     metadata: ResolvedSpanMetadata<'_>,
 ) {
-    let decoded = match frame.msg_type {
-        MsgType::HookPayload => {
-            WireHeader::decode(&frame.payload).map(|h| (h, None, &frame.payload[WireHeader::LEN..]))
-        }
-        MsgType::HookPayloadWithContext => decode_context_payload(&frame.payload).ok(),
-        _ => None,
-    };
-    let Some((header, traceparent, bytes)) = decoded else {
-        stats.invalid.fetch_add(1, Ordering::Relaxed);
-        return;
-    };
-    let Ok(mut input) = AntigravityHookInput::parse_slice(bytes) else {
-        stats.invalid.fetch_add(1, Ordering::Relaxed);
-        return;
-    };
-    let mut event = HookEvent::from_wire(header.event_id);
-    if event == HookEvent::Unknown {
-        if let Some(name) = &input.hook_event_name {
-            event = HookEvent::from_str_name(name);
-        }
-    }
-    if input.agent_name.is_none() {
-        input.agent_name = agent_otel_core::model::ClientKind::from_wire(header.client_id)
-            .as_str()
-            .map(str::to_owned);
-    }
-    input.execution_mode.get_or_insert(mode);
-    if let (Some(quotas), Some(name)) = (quotas, input.agent_name.as_deref()) {
-        let tokens = match (input.input_tokens, input.output_tokens) {
-            (None, None) => None,
-            (a, b) => Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)).max(0) as u64),
-        };
-        if !quotas.activity(name, tokens) {
-            stats.quota_activity_dropped.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-    let context = resolve_trace_context(
-        input.traceparent.as_deref(),
-        traceparent,
-        input.conversation_id.as_deref(),
-    );
-    let lookup = contexts.lookup(&input, Instant::now());
-    input.normalize_with_context(lookup.context.as_ref());
-    *salt = salt.wrapping_add(1);
-    let now = std::time::SystemTime::now()
+    let now_instant = Instant::now();
+    let now_nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
-    let mut span =
-        build_span_from_resolved(event, &input, now, now, *salt, context, metadata, aliases);
-    let provided = lookup.context.is_none()
-        && input
-            .workspace_path
-            .as_ref()
-            .is_some_and(|p| std::path::Path::new(p).is_absolute());
-    let state = if provided {
-        "provided"
-    } else {
-        match lookup.state {
-            ContextState::Fresh => "fresh",
-            ContextState::Stale => "stale",
-            ContextState::Missing => "missing",
+    let next_salt = salt.wrapping_add(1);
+
+    let outcome = match crate::transform::production_transform(
+        frame.msg_type,
+        &frame.payload,
+        contexts,
+        next_salt,
+        mode,
+        aliases,
+        metadata,
+        now_instant,
+        now_nanos,
+    ) {
+        Ok(res) => {
+            *salt = next_salt;
+            res
+        }
+        Err(_) => {
+            stats.invalid.fetch_add(1, Ordering::Relaxed);
+            return;
         }
     };
-    span.attributes
-        .push(kv_string("agent.context.state", state));
-    span.attributes.push(kv_string(
-        "agent.context.source",
-        if lookup.context.is_some() {
-            "workspace_cache"
-        } else if provided {
-            "event"
-        } else {
-            "none"
-        },
-    ));
-    if !provided && lookup.context.is_some() {
-        if let Some(age) = lookup.age {
-            span.attributes.push(kv_int(
-                "agent.context.age_ms",
-                age.as_millis().min(i64::MAX as u128) as i64,
-            ));
+
+    if let (Some(quotas), Some(name)) = (quotas, outcome.meta.agent_name.as_deref()) {
+        if !quotas.activity(name, outcome.meta.total_tokens) {
+            stats.quota_activity_dropped.fetch_add(1, Ordering::Relaxed);
         }
     }
+
     stats.transformed.fetch_add(1, Ordering::Relaxed);
-    match batch.try_push(span, Instant::now()) {
+    match batch.try_push(outcome.span, Instant::now()) {
         Ok(ready) => {
             if let Some(ready) = ready {
                 queue.enqueue(ready);
