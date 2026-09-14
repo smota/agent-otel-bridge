@@ -65,10 +65,17 @@ impl SeededWorkspace {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
+        Self::create_with_stamp(stamp)
+    }
+
+    fn create_with_stamp(stamp: u128) -> std::io::Result<Self> {
+        static NEXT_WORKSPACE: AtomicUsize = AtomicUsize::new(0);
+        let sequence = NEXT_WORKSPACE.fetch_add(1, Ordering::Relaxed);
         let root = std::env::temp_dir().join(format!(
-            "agent-otel-fleet-fixture-{}-{}",
+            "agent-otel-fleet-fixture-{}-{}-{}",
             std::process::id(),
-            stamp
+            stamp,
+            sequence
         ));
         fs::create_dir(&root)?;
         let result = (|| {
@@ -297,6 +304,20 @@ pub const MCP_TOOLS_CALL_RESPONSE: &str =
 mod tests {
     use super::*;
     use std::net::TcpStream;
+
+    #[test]
+    fn same_clock_tick_workspaces_remain_isolated() {
+        let first = SeededWorkspace::create_with_stamp(0).unwrap();
+        let second = SeededWorkspace::create_with_stamp(0).unwrap();
+        assert_ne!(first.root(), second.root());
+        fs::write(first.root().join("event.json"), "first only").unwrap();
+        assert_ne!(
+            first.read("event.json").unwrap(),
+            second.read("event.json").unwrap()
+        );
+        first.cleanup().unwrap();
+        assert!(second.root().is_dir());
+    }
 
     #[test]
     fn workspace_is_seeded_and_cleaned() {
