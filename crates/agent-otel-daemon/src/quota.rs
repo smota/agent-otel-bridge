@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use crate::platform::PlatformQuotaProvider;
 use agent_otel_core::quota::QuotaSnapshot;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -50,12 +49,7 @@ impl QuotaEngine {
             }
         }
 
-        // If no provider is detected on machine, populate default fallback baseline to guarantee non-empty headroom
-        if map.is_empty() {
-            let default_provider = &crate::platforms::GeminiQuotaProvider;
-            let snap = default_provider.fallback_baseline();
-            map.insert(snap.bucket.clone(), snap);
-        }
+        // An absent platform must not produce a phantom quota snapshot.
 
         Self {
             state_file,
@@ -80,6 +74,9 @@ impl QuotaEngine {
 
         let now = current_unix_nano();
         if let Ok(mut lock) = self.quotas.write() {
+            if lock.len() >= 128 && !lock.contains_key(&bucket) {
+                return;
+            }
             let entry = lock.entry(bucket.clone()).or_insert_with(|| QuotaSnapshot {
                 remaining_fraction: 0.95,
                 seconds_to_reset: 3600.0,
@@ -143,11 +140,13 @@ impl QuotaEngine {
                 let quotas_dir = home.join(".agent-otel").join("quotas");
                 if quotas_dir.is_dir() {
                     if let Ok(entries) = std::fs::read_dir(quotas_dir) {
-                        for entry in entries.flatten() {
+                        for entry in entries.take(128).flatten() {
                             let p = entry.path();
                             if p.extension().map(|e| e == "json").unwrap_or(false) {
                                 if let Some(snap) = read_quota_file(&p) {
-                                    lock.insert(snap.bucket.clone(), snap);
+                                    if lock.len() < 128 || lock.contains_key(&snap.bucket) {
+                                        lock.insert(snap.bucket.clone(), snap);
+                                    }
                                 }
                             }
                         }
@@ -179,7 +178,16 @@ impl QuotaEngine {
 }
 
 pub fn read_quota_file(path: &Path) -> Option<QuotaSnapshot> {
-    let bytes = std::fs::read(path).ok()?;
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(65537)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() > 65536 {
+        return None;
+    }
     let parsed: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
 
     let mut remaining = parsed

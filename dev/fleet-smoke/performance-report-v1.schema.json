@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smota.github.io/agent-otel-bridge/fleet-smoke/performance-report-v1.schema.json",
+  "title": "Performance campaign report v1",
+  "oneOf": [{ "$ref": "#/$defs/attempt" }, { "$ref": "#/$defs/campaign" }],
+  "$defs": {
+    "verdict": { "type": "string", "enum": ["passed", "failed", "not_measured", "blocked"] },
+    "attempt": {
+      "type": "object",
+      "required": ["record_type", "schema_version", "spec_version", "campaign_id", "run_id", "attempt_index", "mode", "suite", "started_at_utc", "ended_at_utc", "seed", "environment", "candidate", "active_before", "active_after", "commands", "assertions", "trace_evidence", "cleanup", "verdict"],
+      "properties": {
+        "record_type": { "const": "attempt" }, "schema_version": { "const": 1 }, "spec_version": { "type": "string" },
+        "campaign_id": { "type": "string", "minLength": 1 }, "run_id": { "type": "string", "minLength": 1 },
+        "attempt_index": { "type": "integer", "minimum": 1, "maximum": 5 }, "mode": { "enum": ["candidate", "standalone"] },
+        "suite": { "$ref": "#/$defs/suite" },
+        "started_at_utc": { "type": "string", "format": "date-time" }, "ended_at_utc": { "type": "string", "format": "date-time" },
+        "seed": { "type": "integer", "minimum": 0 }, "environment": { "type": "object" },
+        "candidate": { "$ref": "#/$defs/provenance" }, "active_before": { "type": "object" }, "active_after": { "type": "object" },
+        "commands": { "type": "array", "items": { "type": "object" } }, "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
+        "trace_evidence": { "type": "object" }, "cleanup": { "type": "object" }, "verdict": { "$ref": "#/$defs/verdict" }
+      }, "additionalProperties": true
+    },
+    "campaign": {
+      "type": "object",
+      "required": ["record_type", "schema_version", "spec_version", "campaign_kind", "campaign_id", "max_attempts", "attempts_consumed", "state", "state_history", "attempts", "coverage", "decision", "terminal_reason", "verdict", "elapsed_total_seconds", "candidate_history"],
+      "properties": {
+        "record_type": { "const": "campaign" }, "schema_version": { "const": 1 }, "spec_version": { "type": "string" },
+        "campaign_kind": { "enum": ["performance", "fleet"] }, "campaign_id": { "type": "string", "minLength": 1 },
+        "max_attempts": { "const": 5 }, "attempts_consumed": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "state": { "type": "string" },
+        "state_history": { "type": "array", "items": { "$ref": "#/$defs/transition" } },
+        "attempts": { "type": "array", "items": { "$ref": "#/$defs/ledgerAttempt" } },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "decision": { "type": "string" }, "terminal_reason": { "type": "string" },
+        "verdict": { "$ref": "#/$defs/verdict" }, "elapsed_total_seconds": { "type": "number", "minimum": 0 },
+        "candidate_history": { "type": "array" }
+      }, "additionalProperties": true
+    },
+    "suite": { "enum": ["regression", "faults", "performance", "confirmation"] },
+    "coverage": {
+      "type": "object", "required": ["required", "obtained", "missing", "invalidated"],
+      "properties": {
+        "required": { "type": "array", "items": { "$ref": "#/$defs/suite" } },
+        "obtained": { "type": "array", "items": { "$ref": "#/$defs/suite" } },
+        "missing": { "type": "array", "items": { "$ref": "#/$defs/suite" } },
+        "invalidated": { "type": "array" }
+      }
+    },
+    "ledgerAttempt": {
+      "type": "object", "required": ["attempt_index", "run_id", "suite", "started_at_utc", "seed", "mode", "commands", "candidate", "assertions", "verdict"],
+      "properties": {
+        "attempt_index": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "run_id": { "type": "string", "minLength": 1 }, "suite": { "$ref": "#/$defs/suite" },
+        "started_at_utc": { "type": "string", "format": "date-time" }, "ended_at_utc": { "type": "string", "format": "date-time" },
+        "seed": { "type": "integer", "minimum": 0 }, "mode": { "const": "candidate" },
+        "commands": { "type": "array", "items": { "type": "object" } }, "candidate": { "type": "object" },
+        "assertions": { "type": "array" }, "verdict": { "type": ["string", "null"] },
+        "raw_report": { "$ref": "#/$defs/attempt" }, "raw_report_sha256": { "type": "string", "minLength": 64 }
+      }
+    },
+    "transition": { "type": "object", "required": ["from", "to", "at_utc", "reason"], "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "at_utc": { "type": "string", "format": "date-time" }, "reason": { "type": "string" } } },
+    "provenance": { "type": "object", "required": ["revision", "dirty", "diff_digest", "binaries"], "properties": { "revision": { "type": ["string", "null"] }, "dirty": { "type": ["boolean", "null"] }, "diff_digest": { "type": ["string", "null"] }, "binaries": { "type": "array" } }, "additionalProperties": true },
+    "assertion": { "type": "object", "required": ["id", "requirement_id", "implementation_refs", "test_id", "boundary", "unit", "operator", "threshold", "samples", "observed", "status", "reason", "evidence_refs"], "properties": { "id": { "type": "string" }, "requirement_id": { "type": "string" }, "implementation_refs": { "type": "array" }, "test_id": { "type": "string" }, "boundary": { "type": "string" }, "unit": { "type": "string" }, "operator": { "type": "string" }, "threshold": {}, "samples": {}, "observed": {}, "status": { "enum": ["passed", "failed", "not_measured"] }, "reason": { "type": "string" }, "evidence_refs": { "type": "array" } }, "additionalProperties": true }
+  }
+}

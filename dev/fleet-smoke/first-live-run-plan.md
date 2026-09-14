@@ -1,5 +1,9 @@
 # Primeira execução real: loop de validação com até cinco tentativas
 
+Atualização de fase: a próxima implementação candidata segue a [especificação executável](performance-implementation-spec.md) e o [plano de tarefas](performance-implementation-plan.md), coordenados no Codex conforme a solicitação mais recente. Antigravity permanece coordenador da campanha nativa de agentes. As referências abaixo a bloqueios de contexto descrevem o diagnóstico original: o envelope 0x04 já existe na base `66ba326` e deve ser validado como regressão, não reimplementado por pressuposição. Benchmark repetitions e tentativas live possuem contadores distintos; nenhuma campanha começa automaticamente por leitura deste plano.
+
+Coordenação atual: Antigravity conduz implementação, sequência de testes e análise; Codex revisa metodologia, alterações e evidências. O [contrato de desempenho](performance-coordination.md) detalha essa divisão e o relay quando ferramentas do coordenador estiverem indisponíveis. Flash Low é a primeira opção; Flash Medium é usado para corrigir divergências encontradas em revisão. Esta rodada mede apenas Windows e não altera a instalação ativa. Os modelos da frota abaixo continuam separados do modelo coordenador.
+
 A correção do transporte de contexto tem [plano próprio de implementação e validação](../../docs/native-context-session-plan.md). Esta campanha só será retomada após seus pré-requisitos; suas cinco tentativas não incluem testes determinísticos da correção.
 
 Estado: plano pronto para execução; nenhuma tentativa real foi iniciada por este documento. Escopo: preparar, executar, observar, diagnosticar, refinar a suíte e corrigir defeitos localizados e não bloqueantes do produto. A frota usa os modelos fixados abaixo; Claude permanece excluído.

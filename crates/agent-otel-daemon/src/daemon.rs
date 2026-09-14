@@ -1,263 +1,425 @@
-/*
- * Copyright The OpenTelemetry Authors
- * SPDX-License-Identifier: Apache-2.0
- */
-
+/* Copyright The OpenTelemetry Authors
+ * SPDX-License-Identifier: Apache-2.0 */
+use crate::{
+    batch::SpanBatcher,
+    config::DaemonConfig,
+    context_cache::{ContextCache, ContextState},
+    diagnostics::Diagnostics,
+    exporter::{OtlpExporter, EXPORT_DEADLINE},
+    pipeline::{export_worker, ExportQueue},
+    quota_worker::QuotaWorker,
+};
 use agent_otel_core::model::{AntigravityHookInput, ExecutionMode, HookEvent, WireHeader};
-use agent_otel_core::otlp::build_span_from_hook_with_context_opts;
-use agent_otel_core::quota::build_multi_quota_metrics_request_opts;
+use agent_otel_core::otlp::{build_span_from_resolved, kv_int, kv_string, ResolvedSpanMetadata};
 use agent_otel_core::trace_id::resolve_trace_context;
 use agent_otel_ipc::frame::{decode_context_payload, MsgType};
-use std::time::Instant;
+use agent_otel_ipc::server::{IngressFrame, IngressLimits, IngressStats};
+use std::sync::{atomic::Ordering, Arc};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-
-use crate::batch::SpanBatcher;
-use crate::config::DaemonConfig;
-use crate::exporter::OtlpExporter;
-use crate::quota::QuotaEngine;
 
 pub struct Daemon {
     config: DaemonConfig,
     exporter: OtlpExporter,
-    quota_engine: QuotaEngine,
     shutdown: CancellationToken,
 }
-
 impl Daemon {
     pub fn new(config: DaemonConfig, shutdown: CancellationToken) -> Result<Self, reqwest::Error> {
         let exporter = OtlpExporter::new(config.traces_url(), config.metrics_url())?;
-        let quota_engine = QuotaEngine::new();
-
         Ok(Self {
             config,
             exporter,
-            quota_engine,
             shutdown,
         })
     }
-
     pub async fn run(self) -> std::io::Result<()> {
-        let (tx, mut rx) = mpsc::channel::<(MsgType, Vec<u8>)>(4096);
-        let pipe_name = self.config.pipe_name.clone();
-        let shutdown_server = self.shutdown.clone();
-
-        // Spawn IPC Named Pipe server
-        let server_handle = tokio::spawn(async move {
-            agent_otel_ipc::server::run_server(Some(&pipe_name), tx, shutdown_server).await
+        self.run_with_diagnostics(
+            Arc::new(Diagnostics::default()),
+            Arc::new(IngressStats::default()),
+        )
+        .await
+    }
+    /// Run with externally inspectable fact counters (also used by isolated conformance probes).
+    pub async fn run_with_diagnostics(
+        self,
+        stats: Arc<Diagnostics>,
+        ingress: Arc<IngressStats>,
+    ) -> std::io::Result<()> {
+        if self.config.batch_size == 0
+            || self.config.batch_size > 4096
+            || self.config.batch_timeout.is_zero()
+            || self.config.quota_interval.is_zero()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid daemon pipeline configuration",
+            ));
+        }
+        use prost::Message;
+        if agent_otel_core::otlp::build_trace_request(self.config.resource(), Vec::new())
+            .encoded_len()
+            >= crate::exporter::MAX_REQUEST_BYTES
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "resource exceeds request limit",
+            ));
+        }
+        let (tx, mut rx) = mpsc::channel(4096);
+        let (ctrl, mut controls) = mpsc::channel(8);
+        let name = self.config.pipe_name.clone();
+        let stop_server = self.shutdown.clone();
+        let ingress_copy = ingress.clone();
+        let mut server = tokio::spawn(async move {
+            agent_otel_ipc::server::run_server_bounded(
+                Some(&name),
+                tx,
+                ctrl,
+                stop_server,
+                IngressLimits::default(),
+                ingress_copy,
+            )
+            .await
         });
-
-        println!(
-            "[agent-otel-daemon] Listening on named pipe: {}",
-            self.config.pipe_name
-        );
-        println!(
-            "[agent-otel-daemon] OTLP traces endpoint: {}",
-            self.config.traces_url()
-        );
-        println!(
-            "[agent-otel-daemon] OTLP metrics endpoint: {}",
-            self.config.metrics_url()
-        );
-
-        let mut batcher = SpanBatcher::new(self.config.resource(), self.config.batch_size);
+        let (queue, export_rx) = ExportQueue::new(stats.clone());
+        let mut export = tokio::spawn(export_worker(
+            export_rx,
+            self.exporter.clone(),
+            stats.clone(),
+        ));
+        let (quotas, mut metrics_rx) = match QuotaWorker::start(self.config.clone()) {
+            Ok(worker) => worker,
+            Err(error) => {
+                self.shutdown.cancel();
+                server.abort();
+                export.abort();
+                let _ = server.await;
+                let _ = export.await;
+                return Err(error);
+            }
+        };
+        let contexts = Arc::new(ContextCache::new());
+        let metrics_exporter = self.exporter.clone();
+        let metrics_stats = stats.clone();
+        let metrics_ingress = ingress.clone();
+        let metrics_contexts = contexts.clone();
+        let metrics_resource = self.config.resource();
+        let mut metrics = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    changed = metrics_rx.changed() => { if changed.is_err() { break; } },
+                    _ = interval.tick() => {},
+                }
+                let mut request = metrics_rx.borrow_and_update().clone().unwrap_or_else(|| {
+                    agent_otel_core::quota::build_multi_quota_metrics_request_opts(
+                        metrics_resource.clone(),
+                        &[],
+                        false,
+                    )
+                });
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos() as u64;
+                crate::diagnostic_metrics::append_bridge_metrics(
+                    &mut request,
+                    now,
+                    &metrics_ingress,
+                    &metrics_stats.snapshot(),
+                    &metrics_contexts.stats(Instant::now()),
+                );
+                let _ = metrics_exporter
+                    .export_metrics_until(&request, tokio::time::Instant::now() + EXPORT_DEADLINE)
+                    .await;
+            }
+        });
+        let mut batch = SpanBatcher::new(self.config.resource(), self.config.batch_size);
+        let mut salt = 0u32;
+        // Resolve ambient metadata once, never on the event-processing path.
+        let user_email = std::env::var("USER_EMAIL")
+            .or_else(|_| std::env::var("GIT_AUTHOR_EMAIL"))
+            .ok();
+        let terminal_type = std::env::var("TERM_PROGRAM")
+            .ok()
+            .or_else(|| std::env::var_os("WT_SESSION").map(|_| "windows-terminal".to_string()))
+            .or_else(|| std::env::var("TERM").ok());
+        let metadata = ResolvedSpanMetadata {
+            user_email: user_email.as_deref(),
+            terminal_type: terminal_type.as_deref(),
+        };
+        let execution_mode = if ["CI", "GITHUB_ACTIONS", "AUTOMATION"]
+            .iter()
+            .any(|k| std::env::var_os(k).is_some())
+        {
+            ExecutionMode::Automation
+        } else {
+            ExecutionMode::Interactive
+        };
         let mut last_activity = Instant::now();
-        let mut salt_counter: u32 = 0;
-
-        let mut flush_interval = tokio::time::interval(self.config.batch_timeout);
-        let mut quota_interval = tokio::time::interval(self.config.quota_interval);
-        let mut idle_interval = tokio::time::interval(std::time::Duration::from_secs(10));
-
-        // Initial quota probe on start
-        self.emit_quota_metrics().await;
-
+        let mut tick =
+            tokio::time::interval(self.config.batch_timeout.min(Duration::from_millis(200)));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut server_finished = false;
+        let mut server_error = None;
+        let mut processed = 0;
         loop {
+            if self.shutdown.is_cancelled() {
+                break;
+            }
+            if processed >= 64 {
+                if let Some(ready) = batch.take_due(Instant::now(), self.config.batch_timeout) {
+                    queue.enqueue(ready);
+                }
+                processed = 0;
+                tokio::task::yield_now().await;
+            }
             tokio::select! {
-                biased;
-
-                maybe_msg = rx.recv() => {
-                    match maybe_msg {
-                        Some((msg_type @ (MsgType::HookPayload | MsgType::HookPayloadWithContext), payload)) => {
-                            last_activity = Instant::now();
-                            let decoded = match msg_type {
-                                MsgType::HookPayload => WireHeader::decode(&payload)
-                                    .map(|header| (header, None, &payload[WireHeader::LEN..])),
-                                MsgType::HookPayloadWithContext => decode_context_payload(&payload).ok(),
-                                _ => None,
-                            };
-                            if let Some((header, origin_traceparent, json_bytes)) = decoded {
-                                let mut event = HookEvent::from_wire(header.event_id);
-                                let client_kind = agent_otel_core::model::ClientKind::from_wire(header.client_id);
-
-                                let now_nano = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_nanos() as u64;
-
-                                salt_counter = salt_counter.wrapping_add(1);
-
-                                let mut input = AntigravityHookInput::parse_slice(json_bytes)
-                                    .unwrap_or_default();
-
-                                if event == HookEvent::Unknown {
-                                    if let Some(ref name) = input.hook_event_name {
-                                        event = HookEvent::from_str_name(name);
-                                    }
-                                }
-
-                                if input.agent_name.is_none() {
-                                    if let Some(c) = client_kind.as_str() {
-                                        input.agent_name = Some(c.to_string());
-                                    }
-                                }
-
-                                if let Some(ref name) = input.agent_name {
-                                    let tokens = match (input.input_tokens, input.output_tokens) {
-                                        (Some(i), Some(o)) => Some((i + o).max(0) as u64),
-                                        (Some(i), None) => Some(i.max(0) as u64),
-                                        (None, Some(o)) => Some(o.max(0) as u64),
-                                        (None, None) => None,
-                                    };
-                                    self.quota_engine.record_activity(name, tokens);
-                                }
-
-                                // Populate execution_mode if missing
-                                if input.execution_mode.is_none() {
-                                    let mode = if std::env::var("CI").is_ok()
-                                        || std::env::var("GITHUB_ACTIONS").is_ok()
-                                        || std::env::var("AUTOMATION").is_ok()
-                                    {
-                                        ExecutionMode::Automation
-                                    } else {
-                                        ExecutionMode::Interactive
-                                    };
-                                    input.execution_mode = Some(mode);
-                                }
-
-                                // On Stop event, collect Git stats from workspace
-                                if event == HookEvent::Stop {
-                                    let ws = input
-                                        .workspace_paths
-                                        .as_ref()
-                                        .and_then(|v| v.first().cloned())
-                                        .or_else(|| {
-                                            std::env::current_dir()
-                                                .ok()
-                                                .map(|p| p.to_string_lossy().to_string())
-                                        });
-                                    if let Some(ws_path) = ws {
-                                        let stats = crate::git::collect_git_stats(&ws_path);
-                                        if stats.lines_added.is_some() || stats.files_changed.is_some() {
-                                            if input.git_lines_added.is_none() {
-                                                input.git_lines_added = stats.lines_added;
-                                            }
-                                            if input.git_lines_deleted.is_none() {
-                                                input.git_lines_deleted = stats.lines_deleted;
-                                            }
-                                            if input.git_files_changed.is_none() {
-                                                input.git_files_changed = stats.files_changed;
-                                            }
-                                        }
-                                        if stats.self_revert.is_some() && input.git_self_revert.is_none() {
-                                            input.git_self_revert = stats.self_revert;
-                                        }
-                                    }
-                                }
-
-                                // Resolve only from this event. The daemon's ambient TRACEPARENT
-                                // must never associate unrelated hook processes.
-                                let trace_context = resolve_trace_context(
-                                    input.traceparent.as_deref(),
-                                    origin_traceparent,
-                                    input.conversation_id.as_deref(),
-                                );
-
-                                // Keep explicit harness lineage but do not infer agent depth from
-                                // a transported parent span or daemon environment.
-                                input.auto_enrich_with_resolved_context();
-
-                                let span = build_span_from_hook_with_context_opts(
-                                    event,
-                                    &input,
-                                    now_nano.saturating_sub(1_000_000), // ~1ms approximate duration if not given
-                                    now_nano,
-                                    salt_counter,
-                                    trace_context,
-                                    self.config.emit_legacy_aliases,
-                                );
-
-                                if batcher.push(span) {
-                                    batcher.flush(&self.exporter).await;
-                                }
-                            }
-                        }
-                        Some((MsgType::QuotaPing, _)) => {
-                            last_activity = Instant::now();
-                            self.emit_quota_metrics().await;
-                        }
-                        Some((MsgType::HealthPing, _)) => {
-                            last_activity = Instant::now();
-                        }
-                        Some((MsgType::Shutdown, _)) => {
-                            println!("[agent-otel-daemon] Shutdown requested via IPC");
-                            break;
-                        }
-                        Some((MsgType::Unknown, _)) => {}
-                        None => {
-                            // Channel closed
-                            break;
-                        }
-                    }
-                }
-
-                _ = flush_interval.tick() => {
-                    if !batcher.is_empty() {
-                        batcher.flush(&self.exporter).await;
-                    }
-                }
-
-                _ = quota_interval.tick() => {
-                    last_activity = Instant::now();
-                    self.emit_quota_metrics().await;
-                }
-
-                _ = idle_interval.tick() => {
-                    if last_activity.elapsed() >= self.config.idle_timeout {
-                        println!(
-                            "[agent-otel-daemon] Idle timeout reached ({:?}), shutting down automatically",
-                            self.config.idle_timeout
-                        );
-                        break;
-                    }
-                }
-
-                _ = self.shutdown.cancelled() => {
-                    println!("[agent-otel-daemon] Shutdown cancellation signal received");
+                _ = self.shutdown.cancelled() => break,
+                result = &mut server => {
+                    server_finished = true;
+                    server_error = match result {
+                        Ok(Ok(())) if self.shutdown.is_cancelled() => None,
+                        Ok(Ok(())) => Some(std::io::Error::other("IPC server stopped")),
+                        Ok(Err(error)) => Some(error),
+                        Err(error) => Some(std::io::Error::other(error.to_string())),
+                    };
                     break;
+                }
+                control = controls.recv() => {
+                    match control {
+                        Some(MsgType::QuotaPing) => { quotas.refresh(); last_activity = Instant::now(); },
+                        Some(MsgType::Shutdown) => break,
+                        Some(_) => last_activity = Instant::now(),
+                        None => break,
+                    }
+                }
+                frame = rx.recv() => {
+                    let Some(frame) = frame else { break; };
+                    last_activity = Instant::now();
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, metadata);
+                    processed += 1;
+                }
+                _ = tick.tick() => {
+                    if let Some(ready) = batch.take_due(Instant::now(), self.config.batch_timeout) { queue.enqueue(ready); }
+                    if last_activity.elapsed() >= self.config.idle_timeout { break; }
                 }
             }
         }
-
-        // Final flush of remaining spans
-        batcher.flush(&self.exporter).await;
+        // One absolute shutdown budget. Queue guards reconcile all unexported work.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         self.shutdown.cancel();
-
-        // Wait briefly for server handle
-        let _ = tokio::time::timeout(std::time::Duration::from_millis(500), server_handle).await;
-
-        println!("[agent-otel-daemon] Daemon cleanly stopped");
-        Ok(())
+        drop(quotas);
+        metrics.abort();
+        let _ = (&mut metrics).await;
+        if !server_finished
+            && tokio::time::timeout_at(deadline, &mut server)
+                .await
+                .is_err()
+        {
+            server.abort();
+            let _ = (&mut server).await;
+        }
+        rx.close();
+        while let Ok(frame) = rx.try_recv() {
+            if tokio::time::Instant::now() >= deadline {
+                stats.shutdown_dropped.fetch_add(1, Ordering::Relaxed);
+            } else {
+                // Quota collection is stopped during drain; event transformation remains pure.
+                process_frame_without_quota(
+                    frame,
+                    &contexts,
+                    &mut batch,
+                    &queue,
+                    &stats,
+                    &mut salt,
+                    execution_mode,
+                    self.config.emit_legacy_aliases,
+                    metadata,
+                );
+            }
+        }
+        if let Some(ready) = batch.take() {
+            queue.enqueue(ready);
+        }
+        drop(queue);
+        if tokio::time::timeout_at(deadline, &mut export)
+            .await
+            .is_err()
+        {
+            export.abort();
+            let _ = (&mut export).await;
+        }
+        // Bounded fact-only summary, useful to an owned test collector even if OTLP is down.
+        let summary = serde_json::json!({"kind":"bridge_diagnostics", "pipeline":stats.snapshot(),
+            "ingress":{"received":ingress.received.load(Ordering::Relaxed),"admitted":ingress.admitted.load(Ordering::Relaxed),
+                "invalid":ingress.invalid.load(Ordering::Relaxed),"capacity":ingress.capacity.load(Ordering::Relaxed),
+                "read_failed":ingress.read_failed.load(Ordering::Relaxed),"read_deadline":ingress.read_deadline.load(Ordering::Relaxed),
+                "reserved_bytes":ingress.reserved_bytes.load(Ordering::Relaxed),"peak_bytes":ingress.peak_reserved_bytes.load(Ordering::Relaxed)}});
+        eprintln!("{summary}");
+        if let Some(error) = server_error {
+            Err(error)
+        } else {
+            Ok(())
+        }
     }
+}
 
-    async fn emit_quota_metrics(&self) {
-        let snapshots = self.quota_engine.snapshots();
-        let request = build_multi_quota_metrics_request_opts(
-            self.config.resource(),
-            &snapshots,
-            self.config.emit_legacy_aliases,
-        );
-        if let Err(e) = self.exporter.export_metrics(request).await {
-            eprintln!("[agent-otel-daemon] Failed to export quota metrics: {e}");
+#[allow(clippy::too_many_arguments)]
+fn process_frame(
+    frame: IngressFrame,
+    contexts: &ContextCache,
+    quotas: &QuotaWorker,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+    salt: &mut u32,
+    mode: ExecutionMode,
+    aliases: bool,
+    metadata: ResolvedSpanMetadata<'_>,
+) {
+    transform(
+        frame,
+        contexts,
+        Some(quotas),
+        batch,
+        queue,
+        stats,
+        salt,
+        mode,
+        aliases,
+        metadata,
+    );
+}
+#[allow(clippy::too_many_arguments)]
+fn process_frame_without_quota(
+    frame: IngressFrame,
+    contexts: &ContextCache,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+    salt: &mut u32,
+    mode: ExecutionMode,
+    aliases: bool,
+    metadata: ResolvedSpanMetadata<'_>,
+) {
+    transform(
+        frame, contexts, None, batch, queue, stats, salt, mode, aliases, metadata,
+    );
+}
+#[allow(clippy::too_many_arguments)]
+fn transform(
+    frame: IngressFrame,
+    contexts: &ContextCache,
+    quotas: Option<&QuotaWorker>,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+    salt: &mut u32,
+    mode: ExecutionMode,
+    aliases: bool,
+    metadata: ResolvedSpanMetadata<'_>,
+) {
+    let decoded = match frame.msg_type {
+        MsgType::HookPayload => {
+            WireHeader::decode(&frame.payload).map(|h| (h, None, &frame.payload[WireHeader::LEN..]))
+        }
+        MsgType::HookPayloadWithContext => decode_context_payload(&frame.payload).ok(),
+        _ => None,
+    };
+    let Some((header, traceparent, bytes)) = decoded else {
+        stats.invalid.fetch_add(1, Ordering::Relaxed);
+        return;
+    };
+    let Ok(mut input) = AntigravityHookInput::parse_slice(bytes) else {
+        stats.invalid.fetch_add(1, Ordering::Relaxed);
+        return;
+    };
+    let mut event = HookEvent::from_wire(header.event_id);
+    if event == HookEvent::Unknown {
+        if let Some(name) = &input.hook_event_name {
+            event = HookEvent::from_str_name(name);
+        }
+    }
+    if input.agent_name.is_none() {
+        input.agent_name = agent_otel_core::model::ClientKind::from_wire(header.client_id)
+            .as_str()
+            .map(str::to_owned);
+    }
+    input.execution_mode.get_or_insert(mode);
+    if let (Some(quotas), Some(name)) = (quotas, input.agent_name.as_deref()) {
+        let tokens = match (input.input_tokens, input.output_tokens) {
+            (None, None) => None,
+            (a, b) => Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)).max(0) as u64),
+        };
+        if !quotas.activity(name, tokens) {
+            stats.quota_activity_dropped.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let context = resolve_trace_context(
+        input.traceparent.as_deref(),
+        traceparent,
+        input.conversation_id.as_deref(),
+    );
+    let lookup = contexts.lookup(&input, Instant::now());
+    input.normalize_with_context(lookup.context.as_ref());
+    *salt = salt.wrapping_add(1);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    let mut span =
+        build_span_from_resolved(event, &input, now, now, *salt, context, metadata, aliases);
+    let provided = lookup.context.is_none()
+        && input
+            .workspace_path
+            .as_ref()
+            .is_some_and(|p| std::path::Path::new(p).is_absolute());
+    let state = if provided {
+        "provided"
+    } else {
+        match lookup.state {
+            ContextState::Fresh => "fresh",
+            ContextState::Stale => "stale",
+            ContextState::Missing => "missing",
+        }
+    };
+    span.attributes
+        .push(kv_string("agent.context.state", state));
+    span.attributes.push(kv_string(
+        "agent.context.source",
+        if lookup.context.is_some() {
+            "workspace_cache"
+        } else if provided {
+            "event"
+        } else {
+            "none"
+        },
+    ));
+    if !provided && lookup.context.is_some() {
+        if let Some(age) = lookup.age {
+            span.attributes.push(kv_int(
+                "agent.context.age_ms",
+                age.as_millis().min(i64::MAX as u128) as i64,
+            ));
+        }
+    }
+    stats.transformed.fetch_add(1, Ordering::Relaxed);
+    match batch.try_push(span, Instant::now()) {
+        Ok(ready) => {
+            if let Some(ready) = ready {
+                queue.enqueue(ready);
+            }
+            if batch.is_full() {
+                if let Some(ready) = batch.take() {
+                    queue.enqueue(ready);
+                }
+            }
+        }
+        Err(_) => {
+            stats.span_size.fetch_add(1, Ordering::Relaxed);
         }
     }
 }

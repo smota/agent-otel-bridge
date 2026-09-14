@@ -65,10 +65,17 @@ impl SeededWorkspace {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
+        Self::create_with_stamp(stamp)
+    }
+
+    fn create_with_stamp(stamp: u128) -> std::io::Result<Self> {
+        static NEXT_WORKSPACE: AtomicUsize = AtomicUsize::new(0);
+        let sequence = NEXT_WORKSPACE.fetch_add(1, Ordering::Relaxed);
         let root = std::env::temp_dir().join(format!(
-            "agent-otel-fleet-fixture-{}-{}",
+            "agent-otel-fleet-fixture-{}-{}-{}",
             std::process::id(),
-            stamp
+            stamp,
+            sequence
         ));
         fs::create_dir(&root)?;
         let result = (|| {
@@ -215,10 +222,29 @@ impl ScriptedHttpService {
 }
 
 fn serve_one(mut stream: TcpStream, fault: &HttpFault, counters: &HttpCounters, stop: &AtomicBool) {
+    // Accepted sockets can inherit the listener's nonblocking mode on some
+    // platforms; this worker uses bounded blocking reads instead.
+    if stream.set_nonblocking(false).is_err() {
+        return;
+    }
     let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(100)));
     let mut request = [0; 512];
-    let _ = stream.read(&mut request);
+    let mut received = 0;
+    // TCP reads may split even tiny requests. Closing with unread header bytes
+    // can reset the peer instead of delivering the scripted HTTP response.
+    while !request[..received]
+        .windows(4)
+        .any(|part| part == b"\r\n\r\n")
+    {
+        if received == request.len() || stop.load(Ordering::Acquire) {
+            return;
+        }
+        match stream.read(&mut request[received..]) {
+            Ok(0) | Err(_) => return,
+            Ok(count) => received += count,
+        }
+    }
     match fault {
         HttpFault::Delay(duration) => {
             let started = std::time::Instant::now();
@@ -276,8 +302,6 @@ fn serve_one(mut stream: TcpStream, fault: &HttpFault, counters: &HttpCounters, 
 impl Drop for ScriptedHttpService {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        // Wake a nonblocking accept loop without depending on a platform-specific API.
-        let _ = TcpStream::connect(self.address);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -299,6 +323,20 @@ pub const MCP_TOOLS_CALL_RESPONSE: &str =
 mod tests {
     use super::*;
     use std::net::TcpStream;
+
+    #[test]
+    fn same_clock_tick_workspaces_remain_isolated() {
+        let first = SeededWorkspace::create_with_stamp(0).unwrap();
+        let second = SeededWorkspace::create_with_stamp(0).unwrap();
+        assert_ne!(first.root(), second.root());
+        fs::write(first.root().join("event.json"), "first only").unwrap();
+        assert_ne!(
+            first.read("event.json").unwrap(),
+            second.read("event.json").unwrap()
+        );
+        first.cleanup().unwrap();
+        assert!(second.root().is_dir());
+    }
 
     #[test]
     fn workspace_is_seeded_and_cleaned() {
@@ -371,6 +409,47 @@ mod tests {
             ScriptedHttpService::start(vec![HttpFault::Delay(Duration::from_secs(5))]).unwrap();
         let mut stream = TcpStream::connect(service.address()).unwrap();
         stream.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+        let started = std::time::Instant::now();
+        drop(service);
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn http_fragmented_header_is_fully_read_before_response() {
+        let service = ScriptedHttpService::start(vec![HttpFault::Success]).unwrap();
+        let mut stream = TcpStream::connect(service.address()).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        stream.write_all(b"GET / HTTP/1.1\r\n").unwrap();
+        let mut byte = [0];
+        let error = stream.read(&mut byte).unwrap_err();
+        assert!(matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ));
+        stream.write_all(b"Connection: close\r\n\r\n").unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert_eq!(service.evidence().completed, 1);
+    }
+
+    #[test]
+    fn http_drop_after_worker_exit_is_bounded() {
+        let service = ScriptedHttpService::start(vec![]).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while !service.worker.as_ref().unwrap().is_finished()
+            && std::time::Instant::now() < deadline
+        {
+            thread::yield_now();
+        }
+        assert!(service.worker.as_ref().unwrap().is_finished());
+
         let started = std::time::Instant::now();
         drop(service);
         assert!(started.elapsed() < Duration::from_secs(1));

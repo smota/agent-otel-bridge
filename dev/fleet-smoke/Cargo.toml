@@ -16,4 +16,9 @@ time = { version = "0.3", features = ["formatting"] }
 ctrlc = "3.5"
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio-util = { workspace = true }
+agent-otel-core = { path = "../../crates/agent-otel-core" }
+agent-otel-ipc = { path = "../../crates/agent-otel-ipc" }
+tempfile = "3"
 jsonschema = { version = "0.33", default-features = false }

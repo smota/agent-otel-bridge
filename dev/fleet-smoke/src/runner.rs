@@ -23,6 +23,37 @@ static RUN_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 const MAX_CONCURRENT_TASKS: usize = 3;
 const MAX_PROGRESS_SPANS: usize = 240;
 
+/// Projects every span from one observed wall-clock anchor plus monotonic elapsed time.
+/// This avoids independently sampled wall clocks creating impossible parent/child ordering.
+#[derive(Clone, Copy)]
+struct RunClock {
+    wall_start_unix_nanos: u128,
+    monotonic_start: Instant,
+}
+
+impl RunClock {
+    fn new() -> Self {
+        Self {
+            wall_start_unix_nanos: unix_nanos(),
+            monotonic_start: Instant::now(),
+        }
+    }
+
+    fn now_unix_nanos(self) -> u128 {
+        project_unix_nanos(self.wall_start_unix_nanos, self.monotonic_start.elapsed())
+    }
+}
+
+fn project_unix_nanos(wall_start_unix_nanos: u128, elapsed: Duration) -> u128 {
+    wall_start_unix_nanos.saturating_add(elapsed.as_nanos())
+}
+
+fn elapsed_micros(start_unix_nanos: u128, end_unix_nanos: u128) -> u64 {
+    u64::try_from(end_unix_nanos.saturating_sub(start_unix_nanos) / 1_000)
+        .unwrap_or(u64::MAX)
+        .max(1)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunMode {
     Synthetic,
@@ -173,8 +204,7 @@ impl Runner {
         let run_id = next_run_id(mode_name, unix_nanos());
         let trace_id = hash128(&format!("{run_id}:{}", self.seed));
         let root_id = hash64(&format!("{run_id}:lab-root"));
-        let wall = unix_nanos();
-        let clock = Instant::now();
+        let clock = RunClock::new();
         let origin = if mode == RunMode::Live {
             "fleet-smoke-lab.live-orchestration"
         } else {
@@ -191,7 +221,7 @@ impl Runner {
                 &trace_id,
                 &root_id,
                 origin,
-                wall,
+                clock.wall_start_unix_nanos,
                 false,
             )],
             artifact_path: PathBuf::new(),
@@ -207,6 +237,7 @@ impl Runner {
             Arc::clone(&active),
             Arc::clone(&stop),
             self.progress_interval,
+            clock,
         );
         let mut remaining: BTreeMap<String, PlanTask> = plan
             .tasks
@@ -268,6 +299,7 @@ impl Runner {
                                         trace: &task_trace_id,
                                         root: &task_root_id,
                                         origin,
+                                        clock,
                                     },
                                     &self.native_programs,
                                 )
@@ -280,6 +312,7 @@ impl Runner {
                                     &task_trace_id,
                                     &task_root_id,
                                     origin,
+                                    clock,
                                 )
                             })
                         })
@@ -289,7 +322,7 @@ impl Runner {
                     .into_iter()
                     .map(|h| {
                         h.join().unwrap_or_else(|_| {
-                            TaskResult::panic_unknown(&trace_id, &root_id, origin)
+                            TaskResult::panic_unknown(&trace_id, &root_id, origin, clock)
                         })
                     })
                     .collect()
@@ -321,7 +354,8 @@ impl Runner {
             let _ = worker.join();
         }
         let mut final_artifact = artifact.lock().unwrap().clone();
-        let duration = clock.elapsed().as_micros().max(1) as u64;
+        let root_end_unix_nanos = clock.now_unix_nanos();
+        let duration = elapsed_micros(clock.wall_start_unix_nanos, root_end_unix_nanos);
         let no_errors = errors.lock().unwrap().is_empty();
         if let Some(root) = final_artifact
             .spans
@@ -330,7 +364,7 @@ impl Runner {
         {
             root.phase = "root-end".into();
             root.duration_micros = duration;
-            root.end_unix_nanos = wall + u128::from(duration) * 1_000;
+            root.end_unix_nanos = root_end_unix_nanos;
             root.status = if no_errors { "OK" } else { "ERROR" }.into();
         }
         if let Some(observer) = &self.observer {
@@ -426,8 +460,8 @@ struct TaskResult {
     error: Option<String>,
 }
 impl TaskResult {
-    fn panic_unknown(trace: &str, root: &str, origin: &str) -> Self {
-        let now = unix_nanos();
+    fn panic_unknown(trace: &str, root: &str, origin: &str, clock: RunClock) -> Self {
+        let now = clock.now_unix_nanos();
         Self {
             task_id: "thread-panic".into(),
             span: error_span(
@@ -449,8 +483,9 @@ impl TaskResult {
         trace: &str,
         root: &str,
         origin: &str,
+        clock: RunClock,
     ) -> Self {
-        let now = unix_nanos();
+        let now = clock.now_unix_nanos();
         let mut span = error_span(
             &task.id,
             &task.platform,
@@ -478,6 +513,7 @@ struct TaskContext<'a> {
     trace: &'a str,
     root: &'a str,
     origin: &'a str,
+    clock: RunClock,
 }
 fn execute_task(
     mode: RunMode,
@@ -491,12 +527,13 @@ fn execute_task(
         trace,
         root,
         origin,
+        clock,
     } = context;
-    let wall = unix_nanos();
-    let started = Instant::now();
+    let start_unix_nanos = clock.now_unix_nanos();
     let span_id = hash64(&format!("{run}:{}", task.id));
     let finish = |observed: Option<String>, error: Option<String>| {
-        let duration = started.elapsed().as_micros().max(1) as u64;
+        let end_unix_nanos = clock.now_unix_nanos();
+        let duration = elapsed_micros(start_unix_nanos, end_unix_nanos);
         TaskResult {
             task_id: task.id.clone(),
             span: SpanRecord {
@@ -523,8 +560,8 @@ fn execute_task(
                 phase: "progress-child".into(),
                 expected_fault: task.expected_fault.clone(),
                 observed_fault: observed,
-                start_unix_nanos: wall,
-                end_unix_nanos: wall + u128::from(duration) * 1_000,
+                start_unix_nanos,
+                end_unix_nanos,
             },
             error,
         }
@@ -589,6 +626,7 @@ fn start_progress_worker(
     active: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     interval: Duration,
+    clock: RunClock,
 ) -> Option<thread::JoinHandle<()>> {
     observer.map(|observer| {
         thread::spawn(move || {
@@ -615,7 +653,7 @@ fn start_progress_worker(
                     break;
                 }
                 seq += 1;
-                let now = unix_nanos();
+                let now = clock.now_unix_nanos();
                 let span = SpanRecord {
                     span_id: hash64(&format!("{run}:progress:{seq}")),
                     trace_id: trace.clone(),
@@ -630,7 +668,7 @@ fn start_progress_worker(
                     expected_fault: None,
                     observed_fault: None,
                     start_unix_nanos: now,
-                    end_unix_nanos: now + 1_000,
+                    end_unix_nanos: now,
                 };
                 let snapshot = {
                     let mut a = artifact.lock().unwrap();
@@ -669,7 +707,7 @@ fn root_span(
         expected_fault: None,
         observed_fault: None,
         start_unix_nanos: now,
-        end_unix_nanos: now + 1,
+        end_unix_nanos: now,
     }
 }
 fn error_span(
@@ -695,7 +733,7 @@ fn error_span(
         expected_fault: None,
         observed_fault: Some(fault.into()),
         start_unix_nanos: now,
-        end_unix_nanos: now + 1_000,
+        end_unix_nanos: now,
     }
 }
 /// Explicit retention boundary: `run_outcome` does not write a report by default.
@@ -782,4 +820,24 @@ fn unix_nanos() -> u128 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos()
+}
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::*;
+
+    #[test]
+    fn one_wall_anchor_projects_children_inside_the_root() {
+        let wall_anchor = 8_000_000_000_000_000_000u128;
+        let root_start = project_unix_nanos(wall_anchor, Duration::ZERO);
+        let child_start = project_unix_nanos(wall_anchor, Duration::from_nanos(2_001));
+        let child_end = project_unix_nanos(wall_anchor, Duration::from_nanos(8_999));
+        let terminal = error_span("terminal", "lab", "1", "2", "fixture", child_end, "failure");
+        let root_end = project_unix_nanos(wall_anchor, Duration::from_nanos(9_000));
+
+        assert!(root_start <= child_start);
+        assert!(root_end >= child_end);
+        assert_eq!(terminal.start_unix_nanos, terminal.end_unix_nanos);
+        assert!(root_end >= terminal.end_unix_nanos);
+    }
 }

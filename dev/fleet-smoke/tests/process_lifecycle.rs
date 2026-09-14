@@ -5,7 +5,7 @@ use std::{
     fs,
     path::PathBuf,
     process::Command,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 const HELPER: &str = r#"
@@ -24,12 +24,11 @@ fn main() {
 "#;
 
 fn helper() -> PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    let dir = tempfile::Builder::new()
+        .prefix("agent-otel-adapter-test-")
+        .tempdir()
         .unwrap()
-        .as_nanos();
-    let dir = std::env::temp_dir().join(format!("agent-otel-adapter-test-{stamp}"));
-    fs::create_dir(&dir).unwrap();
+        .keep();
     let source = dir.join("helper.rs");
     let binary = dir.join(if cfg!(windows) {
         "helper.exe"

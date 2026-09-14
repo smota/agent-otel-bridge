@@ -5,6 +5,15 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Largest hook JSON accepted by the core parser. The IPC envelope has its own
+/// limit; this protects callers which use [`AgentHookInput::parse_slice`]
+/// directly.
+pub const MAX_HOOK_INPUT_BYTES: usize = 16 * 1024 * 1024;
+
+/// Maximum number of dynamically allocated JSON values accepted in a hook.
+/// The preflight scan runs before serde allocates `tool_input`/`arguments`.
+pub const MAX_DYNAMIC_JSON_NODES: usize = 65_536;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum HookEvent {
@@ -482,7 +491,46 @@ impl AgentHookInput {
         if bytes.is_empty() {
             return Ok(Self::default());
         }
+        validate_json_complexity(bytes)?;
         serde_json::from_slice(bytes)
+    }
+
+    /// Fills missing workspace fields and performs deterministic enrichment.
+    ///
+    /// This method never reads the process environment, filesystem, or clock.
+    /// Values supplied by the hook remain authoritative field by field.
+    pub fn normalize_with_context(&mut self, workspace: Option<&crate::context::WorkspaceContext>) {
+        if let Some(ctx) = workspace {
+            if self.workspace_path.is_none() {
+                self.workspace_path = Some(ctx.current_dir.clone());
+            }
+            if self.project_name.is_none() {
+                self.project_name.clone_from(&ctx.project_name);
+            }
+            if self.project_root.is_none() {
+                self.project_root.clone_from(&ctx.project_root);
+            }
+            if self.project_type.is_none() {
+                self.project_type.clone_from(&ctx.project_type);
+            }
+            if self.vcs_system.is_none() {
+                self.vcs_system.clone_from(&ctx.vcs_system);
+            }
+            if self.vcs_repository.is_none() {
+                self.vcs_repository.clone_from(&ctx.vcs_repository);
+            }
+            if self.vcs_branch.is_none() {
+                self.vcs_branch.clone_from(&ctx.vcs_branch);
+            }
+            if self.vcs_commit.is_none() {
+                self.vcs_commit.clone_from(&ctx.vcs_commit);
+            }
+            if self.vcs_worktree.is_none() {
+                self.vcs_worktree = ctx.vcs_worktree;
+            }
+        }
+
+        self.normalize_classification_and_errors();
     }
 
     /// Auto-enriches the input with execution context, tool archetypes,
@@ -534,7 +582,26 @@ impl AgentHookInput {
             }
         }
 
-        // 2. Capabilities (MCP, Skills, Subagents)
+        self.normalize_classification_and_errors();
+
+        // Preserve historical environment-based lineage only for the legacy
+        // entrypoint. IPC consumers resolve tracing before normalization.
+        if infer_legacy_lineage && self.agent_depth.is_none() {
+            let has_parent = self.traceparent.is_some()
+                || self.agent_parent_name.is_some()
+                || std::env::var("TRACEPARENT").is_ok();
+            if has_parent {
+                self.agent_depth = Some(1);
+                self.agent_is_root = Some(false);
+            } else {
+                self.agent_depth = Some(0);
+                self.agent_is_root = Some(true);
+            }
+        }
+    }
+
+    fn normalize_classification_and_errors(&mut self) {
+        // Capabilities (MCP, Skills, Subagents)
         let tool_opt = self.resolved_tool_name().map(|s| s.to_string());
         let cmd_str_opt = self.resolved_tool_arguments().and_then(|args| {
             args.get("command")
@@ -552,7 +619,7 @@ impl AgentHookInput {
                 self.capability_name = Some(cap.operation);
             }
 
-            // 3. Tool Archetypes
+            // Tool Archetypes
             if self.tool_archetype.is_none() {
                 let cmd_to_classify = cmd_str_opt.as_deref().unwrap_or(tool);
                 let classified = crate::archetype::ClassifiedCommand::classify(cmd_to_classify);
@@ -563,21 +630,7 @@ impl AgentHookInput {
             }
         }
 
-        // 4. Lineage and Hierarchy
-        if infer_legacy_lineage && self.agent_depth.is_none() {
-            let has_parent = self.traceparent.is_some()
-                || self.agent_parent_name.is_some()
-                || std::env::var("TRACEPARENT").is_ok();
-            if has_parent {
-                self.agent_depth = Some(1);
-                self.agent_is_root = Some(false);
-            } else {
-                self.agent_depth = Some(0);
-                self.agent_is_root = Some(true);
-            }
-        }
-
-        // 5. Multi-layer Error Categorization
+        // Multi-layer Error Categorization
         if self.error.is_some() && self.error_category.is_none() {
             let err_msg = self.error.as_deref().unwrap_or("").to_ascii_lowercase();
             if err_msg.contains("rate limit")
@@ -600,4 +653,64 @@ impl AgentHookInput {
             }
         }
     }
+}
+
+fn invalid_json_input(message: &'static str) -> serde_json::Error {
+    serde_json::Error::io(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        message,
+    ))
+}
+
+/// Performs a conservative allocation-complexity scan before serde builds any
+/// owned `Value` trees. It deliberately counts object keys as nodes because
+/// they allocate too. JSON syntax remains serde_json's responsibility.
+fn validate_json_complexity(bytes: &[u8]) -> Result<(), serde_json::Error> {
+    if bytes.len() > MAX_HOOK_INPUT_BYTES {
+        return Err(invalid_json_input("hook JSON exceeds 16 MiB"));
+    }
+
+    let mut nodes = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut in_primitive = false;
+
+    for &byte in bytes {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        match byte {
+            b'"' => {
+                in_string = true;
+                in_primitive = false;
+                nodes = nodes.saturating_add(1);
+            }
+            b'{' | b'[' => {
+                in_primitive = false;
+                nodes = nodes.saturating_add(1);
+            }
+            b'}' | b']' | b',' | b':' | b' ' | b'\t' | b'\r' | b'\n' => {
+                in_primitive = false;
+            }
+            _ if !in_primitive => {
+                in_primitive = true;
+                nodes = nodes.saturating_add(1);
+            }
+            _ => {}
+        }
+
+        if nodes > MAX_DYNAMIC_JSON_NODES {
+            return Err(invalid_json_input("hook JSON exceeds dynamic node budget"));
+        }
+    }
+
+    Ok(())
 }

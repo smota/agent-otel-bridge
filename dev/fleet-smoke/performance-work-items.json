@@ -1,0 +1,492 @@
+{
+  "schema_version": 1,
+  "spec_version": 1,
+  "status": "candidate_implemented_not_approved",
+  "spec": "performance-implementation-spec.md",
+  "plan": "performance-implementation-plan.md",
+  "max_worker_agents": 3,
+  "cargo_owner": "root",
+  "shared_file_owner": "root",
+  "shared_files": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "crates/agent-otel-ipc/src/lib.rs",
+    "crates/agent-otel-daemon/src/lib.rs",
+    "crates/agent-otel-core/src/lib.rs",
+    "crates/agent-otel-client/Cargo.toml",
+    "crates/agent-otel-daemon/Cargo.toml",
+    "dev/fleet-smoke/Cargo.toml"
+  ],
+  "performance_campaign": {
+    "max_attempts": 5,
+    "max_attempt_seconds": 900,
+    "max_total_attempt_seconds": 4500,
+    "measurement_repetitions": 3,
+    "persist_runtime_data": false,
+    "auto_start_fleet": false
+  },
+  "tasks": [
+    {
+      "id": "T01",
+      "status": "reference_baseline_recorded",
+      "depends_on": [],
+      "model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "owned_files": [
+        "dev/fleet-smoke/performance-implementation-spec.md",
+        "dev/fleet-smoke/performance-implementation-plan.md",
+        "dev/fleet-smoke/performance-work-items.json"
+      ],
+      "requirements": [
+        "R08",
+        "R09",
+        "R10"
+      ],
+      "acceptance": [
+        "A10",
+        "A11"
+      ],
+      "deliverable": "Freeze contracts, current source provenance and sanitized baseline corpus; document implemented versus planned commands.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ],
+      "limitation": "Historical baseline retained; no fresh original-revision baseline build was measured before candidate edits."
+    },
+    {
+      "id": "T02",
+      "status": "implemented_tested",
+      "depends_on": [
+        "T01"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "owned_files": [
+        "crates/agent-otel-ipc/src/client.rs",
+        "crates/agent-otel-ipc/src/pending_write.rs",
+        "crates/agent-otel-ipc/tests/ipc_tests.rs"
+      ],
+      "requirements": [
+        "R02"
+      ],
+      "acceptance": [
+        "A02"
+      ],
+      "deliverable": "Implement stable pending operation ownership, finite resource admission and correct deadline conversion; preserve public wrappers.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T03",
+      "status": "implemented_tested_native_harness_pending",
+      "depends_on": [
+        "T02"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "owned_files": [
+        "crates/agent-otel-client/src/main.rs",
+        "crates/agent-otel-client/tests/hook_contract.rs",
+        "dev/fleet-smoke/hook_timing_probe.py",
+        "crates/agent-otel-ipc/src/hook_observer.rs"
+      ],
+      "requirements": [
+        "R01",
+        "R11"
+      ],
+      "acceptance": [
+        "A01",
+        "A09"
+      ],
+      "deliverable": "Implement single terminal response and candidate internal timing with explicit provenance; verify active runtime untouched.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T04",
+      "status": "implemented_tested",
+      "depends_on": [
+        "T01"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "medium",
+      "owned_files": [
+        "crates/agent-otel-core/src/model.rs",
+        "crates/agent-otel-core/src/otlp.rs",
+        "crates/agent-otel-core/tests/resolved_builder.rs"
+      ],
+      "requirements": [
+        "R04",
+        "R05",
+        "R07"
+      ],
+      "acceptance": [
+        "A05",
+        "A08"
+      ],
+      "deliverable": "Add pure normalization and resolved span builder; retain legacy compatibility wrappers and semantic aliases.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T05",
+      "status": "implemented_tested",
+      "depends_on": [
+        "T04"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "medium",
+      "owned_files": [
+        "crates/agent-otel-daemon/src/context_cache.rs",
+        "crates/agent-otel-core/src/context.rs",
+        "crates/agent-otel-daemon/tests/context_cache.rs"
+      ],
+      "requirements": [
+        "R04",
+        "R05"
+      ],
+      "acceptance": [
+        "A04",
+        "A05"
+      ],
+      "deliverable": "Implement bounded context workers/cache, workspace identity, bounded reads and stale/missing policy.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T06",
+      "status": "implemented_tested",
+      "depends_on": [
+        "T01"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "medium",
+      "owned_files": [
+        "crates/agent-otel-daemon/src/exporter.rs",
+        "crates/agent-otel-daemon/tests/otlp_outcomes.rs"
+      ],
+      "requirements": [
+        "R06"
+      ],
+      "acceptance": [
+        "A06"
+      ],
+      "deliverable": "Implement bounded OTLP response parsing, outcome classification and deadline-aware retry policy.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T07",
+      "status": "implemented_tested",
+      "depends_on": [
+        "T02",
+        "T05",
+        "T06"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "owned_files": [
+        "crates/agent-otel-ipc/src/server.rs",
+        "crates/agent-otel-daemon/src/daemon.rs",
+        "crates/agent-otel-daemon/src/batch.rs",
+        "crates/agent-otel-daemon/src/config.rs",
+        "crates/agent-otel-daemon/src/pipeline.rs",
+        "crates/agent-otel-daemon/tests/pipeline_limits.rs"
+      ],
+      "requirements": [
+        "R03",
+        "R04",
+        "R06",
+        "R07"
+      ],
+      "acceptance": [
+        "A03",
+        "A04",
+        "A07",
+        "A08"
+      ],
+      "deliverable": "Integrate bounded ingress, independent export/quota tasks, pure transform, remove Stop git subprocess collection and drain shutdown.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T08",
+      "status": "implemented_tested",
+      "depends_on": [
+        "T07"
+      ],
+      "model": "gpt-5.6-sol",
+      "reasoning": "medium",
+      "owned_files": [
+        "crates/agent-otel-daemon/src/diagnostics.rs",
+        "docs/TELEMETRY_DICTIONARY.md",
+        "crates/agent-otel-daemon/tests/accounting.rs"
+      ],
+      "requirements": [
+        "R09"
+      ],
+      "acceptance": [
+        "A07",
+        "A10"
+      ],
+      "deliverable": "Add finite diagnostic counters and conservation checks without recursive telemetry or high-cardinality metric labels.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T09",
+      "status": "implemented_tested_probe_coverage_partial",
+      "depends_on": [
+        "T01"
+      ],
+      "model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "owned_files": [
+        "dev/fleet-smoke/performance-report-v1.schema.json",
+        "dev/fleet-smoke/perf_loop.py",
+        "dev/fleet-smoke/perf_campaign.py",
+        "dev/fleet-smoke/perf_driver.py",
+        "dev/fleet-smoke/perf_delivery.py",
+        "dev/fleet-smoke/tests/test_perf_loop.py",
+        "dev/fleet-smoke/tests/test_perf_campaign.py",
+        "dev/fleet-smoke/tests/test_perf_driver.py",
+        "dev/fleet-smoke/tests/test_perf_delivery.py"
+      ],
+      "requirements": [
+        "R08",
+        "R09",
+        "R10"
+      ],
+      "acceptance": [
+        "A10",
+        "A11"
+      ],
+      "deliverable": "Implement campaign/attempt schemas, strict verdict composition and bounded five-attempt controller; keep raw/fleet v2 compatibility.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T10",
+      "status": "implemented_measurement_coverage_partial",
+      "depends_on": [
+        "T03",
+        "T07",
+        "T08",
+        "T09"
+      ],
+      "model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "owned_files": [
+        "dev/fleet-smoke/examples/performance.rs",
+        "dev/fleet-smoke/examples/performance_ipc.rs",
+        "dev/fleet-smoke/examples/performance_faults.rs",
+        "dev/fleet-smoke/perf_delivery.py",
+        "dev/fleet-smoke/tests/performance_schema.rs",
+        "dev/fleet-smoke/tests/native_contract.rs",
+        "dev/fleet-smoke/README.md",
+        "dev/fleet-smoke/performance-validation.md"
+      ],
+      "requirements": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R10",
+        "R11"
+      ],
+      "acceptance": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A11",
+        "A12"
+      ],
+      "deliverable": "Wire real process/fault probes and independent negative oracles; separate measurement boundaries and local/backend evidence.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T11",
+      "status": "quality_checks_passed",
+      "depends_on": [
+        "T10"
+      ],
+      "model": "root",
+      "reasoning": "inherited",
+      "owned_files": [],
+      "requirements": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R10",
+        "R11"
+      ],
+      "acceptance": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A11",
+        "A12"
+      ],
+      "deliverable": "Review diffs, run final project checks serially, bind candidate hashes to source and freeze integrated candidate.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    },
+    {
+      "id": "T12",
+      "status": "evaluated_failed_with_unmeasured_requirements",
+      "depends_on": [
+        "T11"
+      ],
+      "model": "none",
+      "reasoning": "none",
+      "owned_files": [],
+      "requirements": [
+        "R08",
+        "R09",
+        "R10"
+      ],
+      "acceptance": [
+        "A09",
+        "A10",
+        "A11",
+        "A12"
+      ],
+      "deliverable": "Run deterministic candidate campaign with at most five attempts; root QA, Antigravity only for separately selected native fleet campaign.",
+      "completion_requires": [
+        "reviewed_diff",
+        "acceptance_evidence",
+        "limitations_recorded"
+      ],
+      "forbidden": [
+        "active_runtime_mutation",
+        "global_hook_edits",
+        "unapproved_scope_expansion",
+        "concurrent_cargo"
+      ]
+    }
+  ],
+  "acceptance_coverage": "performance-acceptance-coverage.md"
+}

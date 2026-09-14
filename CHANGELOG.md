@@ -7,12 +7,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-- Always double-quote executable paths in generated hook commands, including paths without spaces; preserve already quoted paths and client arguments. This installer correction is intended for the next release and does not require reactivating the current local build.
+## [0.5.2] - 2026-09-14
+
+### Bounded Telemetry Pipeline, Workspace Isolation & Verifiable Long Traces
+
+See the [user-focused release notes](docs/releases/v0.5.2.md) for capabilities, upgrade instructions and explicit validation limits.
+
+- Separate cached context enrichment, span processing, export and quota work; bound pipeline memory and concurrency and expose delivery outcomes.
+- Correct Windows pending-I/O cancellation/lifetime handling and concurrent pipe acceptance; keep hook responses fail-open.
+- Isolate context-cache entries by workspace lookup identity to prevent sibling workspace branch collisions.
+- Add repeatable source-only load, architecture, internal-hook and long-trace probes, with exact SigNoz evidence validation and a three-attempt controller.
+- Fix development HTTP fixture shutdown and bounded long-trace cleanup and timing checks.
+- Full performance acceptance remains open: the last Windows candidate campaign missed four of 635 admitted events at concurrency 16; historical parser and direct-context targets also failed. The controlled 60-second trace passed with 31/31 spans verified through SigNoz MCP. These are pre-release candidate measurements, not certification of all workloads or platforms.
+- GitHub tag releases build downloadable artifacts and publish the five runtime crates in dependency order when registry credentials are configured.
+
+- Always double-quote executable paths in generated hook commands, including paths without spaces; preserve already quoted paths and client arguments.
 - Carry bounded hook-origin trace context over IPC message 0x04 without rewriting stdin. Resolve valid payload context before origin context and conversation fallback; preserve trace flags and reject malformed IDs safely.
 - Keep legacy messages supported by the new daemon. Upgrade hook and daemon together: new hooks require the new receiver. IPC events no longer inherit the daemon's ambient TRACEPARENT or invent agent depth from a parent span.
 - Align Unix daemon socket selection with the client and improve doctor endpoint diagnostics and credential sanitization.
 - Add the source-only, non-distributed fleet smoke laboratory with seeded scenarios, failure injection, report contracts and native context probes. Runtime evidence remains transient; recoverable queues and optional messaging integration remain backlog.
-- Windows release process validation, workspace guardrails and SigNoz MCP evidence passed before publication. Full performance acceptance and native Linux/macOS validation remain open; see [the session plan](docs/native-context-session-plan.md). The next test campaign is deferred to a separate user-requested thread.
+- Windows process validation, workspace guardrails and controlled SigNoz MCP evidence passed. Full performance acceptance and native Linux/macOS performance validation remain open; see the release notes and [the session plan](docs/native-context-session-plan.md).
 
 ## [0.5.0] - 2026-09-13
 
