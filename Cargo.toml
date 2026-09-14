@@ -6,6 +6,7 @@ members = [
     "crates/agent-otel-daemon",
     "crates/agent-otel-cli",
     "crates/agent-otel-bench",
+    "dev/fleet-smoke",
 ]
 resolver = "2"
 

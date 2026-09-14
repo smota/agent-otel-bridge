@@ -12,7 +12,9 @@ use opentelemetry_proto::tonic::{
 
 use crate::model::{AgentHookInput, HookEvent};
 use crate::semconv::*;
-use crate::trace_id::{derive_span_id, resolve_trace_and_parent_id};
+use crate::trace_id::{
+    derive_span_id, resolve_trace_context_with_environment, ResolvedTraceContext,
+};
 
 pub fn kv_string(key: &str, value: &str) -> KeyValue {
     KeyValue {
@@ -96,13 +98,39 @@ pub fn build_span_from_hook_opts(
     salt: u32,
     emit_legacy_aliases: bool,
 ) -> Span {
+    let context = resolve_trace_context_with_environment(
+        input.traceparent.as_deref(),
+        input.conversation_id.as_deref(),
+    );
+    build_span_from_hook_with_context_opts(
+        event,
+        input,
+        start_time_unix_nano,
+        end_time_unix_nano,
+        salt,
+        context,
+        emit_legacy_aliases,
+    )
+}
+
+/// Builds a span using a context already resolved for this event. This keeps
+/// daemon IPC handling independent from the daemon process environment.
+pub fn build_span_from_hook_with_context_opts(
+    event: HookEvent,
+    input: &AgentHookInput,
+    start_time_unix_nano: u64,
+    end_time_unix_nano: u64,
+    salt: u32,
+    context: ResolvedTraceContext,
+    emit_legacy_aliases: bool,
+) -> Span {
     let tool_name = input.resolved_tool_name();
     let tool_call_id = input.resolved_tool_call_id();
     let conv_id = input.conversation_id.as_deref();
     let step_idx = input.step_idx;
 
-    let (trace_id, parent_span_id) =
-        resolve_trace_and_parent_id(input.traceparent.as_deref(), conv_id);
+    let trace_id = context.trace_id;
+    let parent_span_id = context.parent_span_id;
     let span_id = derive_span_id(conv_id, step_idx, event, tool_name, salt);
 
     let provider = input
@@ -366,6 +394,7 @@ pub fn build_span_from_hook_opts(
         trace_id: trace_id.to_vec(),
         span_id: span_id.to_vec(),
         parent_span_id: parent_span_id.map(|p| p.to_vec()).unwrap_or_default(),
+        flags: context.trace_flags as u32,
         name: span_name,
         kind: SpanKind::Internal as i32,
         start_time_unix_nano,

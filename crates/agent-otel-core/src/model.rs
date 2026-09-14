@@ -487,7 +487,21 @@ impl AgentHookInput {
 
     /// Auto-enriches the input with execution context, tool archetypes,
     /// capabilities, lineage, and error categories if not already specified.
+    ///
+    /// This compatibility entrypoint retains historical environment-based
+    /// lineage inference. IPC consumers should call
+    /// [`Self::auto_enrich_with_resolved_context`] instead.
     pub fn auto_enrich(&mut self) {
+        self.auto_enrich_impl(true);
+    }
+
+    /// Enriches an IPC event without reading ambient tracing state or deriving
+    /// agent hierarchy from a parent span. Explicit harness lineage is kept.
+    pub fn auto_enrich_with_resolved_context(&mut self) {
+        self.auto_enrich_impl(false);
+    }
+
+    fn auto_enrich_impl(&mut self, infer_legacy_lineage: bool) {
         // 1. Workspace and Project Context
         if self.workspace_path.is_none() || self.project_root.is_none() {
             let ctx = crate::context::WorkspaceContext::harvest_current();
@@ -550,7 +564,7 @@ impl AgentHookInput {
         }
 
         // 4. Lineage and Hierarchy
-        if self.agent_depth.is_none() {
+        if infer_legacy_lineage && self.agent_depth.is_none() {
             let has_parent = self.traceparent.is_some()
                 || self.agent_parent_name.is_some()
                 || std::env::var("TRACEPARENT").is_ok();

@@ -41,7 +41,7 @@ sequenceDiagram
     activate Hook
     Hook->>Watchdog: Spawns fail-open timer thread (3ms deadline)
     Hook->>Hook: Resolves 3-byte wire header: [event_id: u8 | client_id: u16]
-    Hook->>Pipe: Dispatches [header (3B) | raw_stdin] via Overlapped Non-Blocking I/O
+    Hook->>Pipe: Dispatches context envelope [header (3B) | version | context_len | TRACEPARENT | raw_stdin]
     Hook->>Watchdog: Sets atomic done flag
     Hook->>Harness: Flushes stdout {"decision":"allow"} and exits code 0
     deactivate Hook
@@ -86,7 +86,14 @@ To eliminate serialization and JSON deserialization overhead on the client hot p
 | `5` | **Pi (`pi.dev`)** | `~/.pi/hooks.json` |
 | `6..=65535` | Available Platform Headroom | Community & Enterprise Additions (e.g. Hermes) |
 
-The client simply allocates a vector with `WireHeader::LEN + stdin.len()`, writes the 3-byte header at position 0..3, appends the raw stdin bytes, and writes to the IPC channel. **Zero JSON parsing is performed on the synchronous path.**
+The client performs no JSON parsing on the synchronous path. New clients send message type `0x04` (`HookPayloadWithContext`) with this body:
+
+```
+WireHeader[3] | envelope_version:u8=1 | context_len:u16 LE |
+context_bytes[context_len] | stdin_bytes
+```
+
+`context_bytes` contains only the `TRACEPARENT` value, capped at 512 UTF-8 bytes. An absent, non-UTF-8-encodable, or oversized value is represented by `context_len = 0`; it is never truncated. W3C syntax is validated by the daemon, not the client. The 256 KiB stdin cap remains in force. The legacy message type `0x01` (`HookPayload`) retains its existing `WireHeader | stdin` body and is not reinterpreted.
 
 ---
 
@@ -130,9 +137,9 @@ Communication between `agent-hook` and the background daemon uses native operati
 Wire framing is compact and platform-independent:
 ```
 +---------------+----------------+--------------------+------------------+
-| Magic (4B)    | MsgType (1B)   | Payload Length(4B) | Payload (NB)     |
-| [0x41, 0x47,  | 0x01 = Hook    | Big-Endian u32     | Tag (1B) + stdin |
-|  0x30, 0x31]  | 0x02 = Ping    |                    |                  |
+| Magic (2B)    | Version (1B)   | MsgType (1B)       | Length (4B)       |
+| [0x41, 0x47]  | 0x01           | 0x01 legacy Hook   | Payload (NB)      |
+|                |                | 0x04 context Hook  |                  |
 +---------------+----------------+--------------------+------------------+
 ```
 
@@ -142,11 +149,14 @@ Wire framing is compact and platform-independent:
 Traditional agent tracing often instructs the model to append tracing parameters or CLI flags (e.g. `--traceparent`). This pollutes model system prompts, wastes context tokens, and degrades model reasoning.
 
 `agent-otel-bridge` enforces **Zero LLM Prompt Pollution**:
-1. Trace context propagates strictly through process environment variables:
+1. Trace context originates in the hook process environment and is captured into the IPC envelope:
    - **PowerShell**: `$env:TRACEPARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"`
    - **Bash/Zsh**: `export TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"`
 2. When a lead agent (e.g. Google Antigravity) invokes a subagent (e.g. Claude Code or OpenAI Codex), the child process inherits `$env:TRACEPARENT`.
-3. The background daemon extracts the W3C traceparent and links spans into a continuous distributed trace DAG in SigNoz.
+3. The daemon resolves the context carried by each new envelope. It does not use its own `TRACEPARENT` environment as a fallback for hook events, so one daemon cannot accidentally become the parent of unrelated events.
+4. Existing W3C trace flags are preserved. Hooks never add `--traceparent` (or any other tracing flag) to agent commands.
+
+During rollout, a new hook paired with an old daemon cannot decode message type `0x04`; the event is dropped while the hook still fails open with exit code 0. Upgrade the hook and daemon as a pair before activation. A legacy `0x01` sender remains readable by a new daemon.
 
 ---
 

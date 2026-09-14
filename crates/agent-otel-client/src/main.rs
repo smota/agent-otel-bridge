@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use agent_otel_ipc::client::send_fire_and_forget;
-use agent_otel_ipc::frame::{MsgType, WireHeader};
+use agent_otel_ipc::client::{read_traceparent, send_fire_and_forget};
+use agent_otel_ipc::frame::{encode_context_payload, MsgType, WireHeader};
 
 const MAX_STDIN_BYTES: usize = 256 * 1024;
 const DEFAULT_WATCHDOG_MS: u64 = 3;
@@ -22,12 +22,12 @@ fn main() {
     spawn_watchdog(Arc::clone(&done), header);
 
     let stdin_bytes = read_stdin_capped(MAX_STDIN_BYTES);
+    // The hook only reads its inherited environment; no thread mutates it.
+    let traceparent = unsafe { read_traceparent() };
 
-    let mut payload = Vec::with_capacity(WireHeader::LEN + stdin_bytes.len());
-    payload.extend_from_slice(&header.encode());
-    payload.extend_from_slice(&stdin_bytes);
+    let payload = encode_context_payload(header, traceparent.as_deref(), &stdin_bytes);
 
-    send_fire_and_forget(MsgType::HookPayload, &payload);
+    send_fire_and_forget(MsgType::HookPayloadWithContext, &payload);
 
     done.store(true, Ordering::Release);
     finish_ok(header);

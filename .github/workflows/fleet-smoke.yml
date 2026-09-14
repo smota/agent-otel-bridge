@@ -1,0 +1,33 @@
+name: Fleet smoke laboratory
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    name: Offline contracts (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check laboratory formatting
+        run: cargo fmt -p agent-otel-fleet-smoke -- --check
+      - name: Lint laboratory
+        run: cargo clippy -p agent-otel-fleet-smoke --all-targets -- -D warnings
+      - name: Test contracts without provider credentials
+        run: cargo test -p agent-otel-fleet-smoke

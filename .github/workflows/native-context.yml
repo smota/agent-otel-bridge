@@ -1,0 +1,37 @@
+name: Native context propagation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-context:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            suffix: .exe
+          - os: ubuntu-latest
+            suffix: ''
+          - os: macos-latest
+            suffix: ''
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test context resolution
+        run: cargo test -p agent-otel-core --test context_resolution
+      - name: Test context envelope
+        run: cargo test -p agent-otel-ipc --test context_frame
+      - name: Build isolated candidates
+        run: cargo build --release -p agent-otel-client -p agent-otel-bridge
+      - name: Test real processes with a local collector
+        env:
+          AGENT_OTEL_TEST_HOOK: ${{ github.workspace }}/target/release/agent-hook${{ matrix.suffix }}
+        run: cargo test --release -p agent-otel-bridge --test native_context_process -- --ignored --nocapture

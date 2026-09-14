@@ -52,9 +52,15 @@ impl DaemonConfig {
 
         let service_version = env!("CARGO_PKG_VERSION").to_string();
 
+        #[cfg(not(unix))]
         let pipe_name = std::env::var("AGENT_OTEL_PIPE")
             .or_else(|_| std::env::var("AGY_OTEL_PIPE"))
             .unwrap_or_else(|_| r"\\.\pipe\agent-otel".to_string());
+        // The server receives an explicit endpoint, so resolve the same Unix
+        // socket setting used by the client instead of passing a Windows name.
+        #[cfg(unix)]
+        let pipe_name = std::env::var("AGENT_OTEL_SOCKET")
+            .unwrap_or_else(|_| "/tmp/agent_otel_bridge.sock".to_string());
 
         let batch_size = std::env::var("AGENT_OTEL_BATCH_SIZE")
             .ok()

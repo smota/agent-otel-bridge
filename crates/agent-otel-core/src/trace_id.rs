@@ -66,33 +66,115 @@ pub fn derive_span_id(
     span_id
 }
 
+/// A validated trace context carried by a hook event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedTraceContext {
+    pub trace_id: [u8; 16],
+    pub parent_span_id: Option<[u8; 8]>,
+    /// The W3C trace-flags byte. Bit 0 is the sampled flag.
+    pub trace_flags: u8,
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        _ => None,
+    }
+}
+
+fn parse_hex<const N: usize>(bytes: &[u8]) -> Option<[u8; N]> {
+    if bytes.len() != N * 2 {
+        return None;
+    }
+    let mut parsed = [0u8; N];
+    for (index, output) in parsed.iter_mut().enumerate() {
+        *output = (hex_nibble(bytes[index * 2])? << 4) | hex_nibble(bytes[index * 2 + 1])?;
+    }
+    Some(parsed)
+}
+
+/// Parses a W3C traceparent header without indexing UTF-8 string boundaries.
+///
+/// Version `00` has the exact four-field form. Future non-`ff` versions may
+/// carry extension fields after the required fields, as permitted by W3C.
+pub fn parse_w3c_traceparent_with_flags(raw: &str) -> Option<ResolvedTraceContext> {
+    let bytes = raw.as_bytes();
+    if bytes.len() < 55 || bytes.len() > 512 {
+        return None;
+    }
+    if bytes.get(2) != Some(&b'-') || bytes.get(35) != Some(&b'-') || bytes.get(52) != Some(&b'-') {
+        return None;
+    }
+
+    let version = parse_hex::<1>(&bytes[..2])?[0];
+    if version == 0xff {
+        return None;
+    }
+    if version == 0 && bytes.len() != 55 {
+        return None;
+    }
+    if version != 0 && bytes.len() > 55 {
+        // Future-version extensions must be explicitly separated and ASCII.
+        if bytes[55] != b'-' || bytes[56..].is_empty() || !bytes[56..].iter().all(u8::is_ascii) {
+            return None;
+        }
+    }
+
+    let trace_id = parse_hex::<16>(&bytes[3..35])?;
+    let parent_span_id = parse_hex::<8>(&bytes[36..52])?;
+    let trace_flags = parse_hex::<1>(&bytes[53..55])?[0];
+    if trace_id == [0u8; 16] || parent_span_id == [0u8; 8] {
+        return None;
+    }
+    Some(ResolvedTraceContext {
+        trace_id,
+        parent_span_id: Some(parent_span_id),
+        trace_flags,
+    })
+}
+
 /// Parses a W3C Traceparent header string into (trace_id, parent_span_id).
-/// Format: {version:2}-{trace_id:32}-{parent_id:16}-{trace_flags:2}
-/// Example: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+/// This compatibility wrapper omits the trace-flags byte.
 pub fn parse_w3c_traceparent(raw: &str) -> Option<([u8; 16], [u8; 8])> {
-    let parts: Vec<&str> = raw.trim().split('-').collect();
-    if parts.len() != 4 {
-        return None;
+    let context = parse_w3c_traceparent_with_flags(raw)?;
+    Some((context.trace_id, context.parent_span_id?))
+}
+
+/// Resolves context without consulting process environment. The precedence is
+/// payload JSON, then the transported hook-origin context, then conversation.
+pub fn resolve_trace_context(
+    payload_traceparent: Option<&str>,
+    origin_traceparent: Option<&str>,
+    conversation_id: Option<&str>,
+) -> ResolvedTraceContext {
+    for candidate in [payload_traceparent, origin_traceparent]
+        .into_iter()
+        .flatten()
+    {
+        if let Some(context) = parse_w3c_traceparent_with_flags(candidate) {
+            return context;
+        }
     }
-    let (version, trace_hex, parent_hex, _flags) = (parts[0], parts[1], parts[2], parts[3]);
-    if version.len() != 2 {
-        return None;
+    ResolvedTraceContext {
+        trace_id: derive_trace_id(conversation_id),
+        parent_span_id: None,
+        trace_flags: 1,
     }
-    if trace_hex.len() != 32 || parent_hex.len() != 16 {
-        return None;
-    }
-    let mut trace_id = [0u8; 16];
-    for i in 0..16 {
-        trace_id[i] = u8::from_str_radix(&trace_hex[i * 2..i * 2 + 2], 16).ok()?;
-    }
-    let mut parent_id = [0u8; 8];
-    for i in 0..8 {
-        parent_id[i] = u8::from_str_radix(&parent_hex[i * 2..i * 2 + 2], 16).ok()?;
-    }
-    if trace_id == [0u8; 16] || parent_id == [0u8; 8] {
-        return None;
-    }
-    Some((trace_id, parent_id))
+}
+
+/// Compatibility resolver that retains the historical environment fallback.
+/// Daemon IPC handling must use [`resolve_trace_context`] directly.
+pub fn resolve_trace_context_with_environment(
+    explicit_traceparent: Option<&str>,
+    conversation_id: Option<&str>,
+) -> ResolvedTraceContext {
+    let environment = std::env::var("TRACEPARENT").ok();
+    resolve_trace_context(
+        explicit_traceparent,
+        environment.as_deref(),
+        conversation_id,
+    )
 }
 
 /// Resolves trace_id and optional parent_span_id by prioritizing:
@@ -103,17 +185,8 @@ pub fn resolve_trace_and_parent_id(
     explicit_traceparent: Option<&str>,
     conversation_id: Option<&str>,
 ) -> ([u8; 16], Option<[u8; 8]>) {
-    if let Some(tp) = explicit_traceparent {
-        if let Some((t, p)) = parse_w3c_traceparent(tp) {
-            return (t, Some(p));
-        }
-    }
-    if let Ok(env_tp) = std::env::var("TRACEPARENT") {
-        if let Some((t, p)) = parse_w3c_traceparent(&env_tp) {
-            return (t, Some(p));
-        }
-    }
-    (derive_trace_id(conversation_id), None)
+    let context = resolve_trace_context_with_environment(explicit_traceparent, conversation_id);
+    (context.trace_id, context.parent_span_id)
 }
 
 /// Formats a trace_id and span_id into a W3C traceparent header string.
