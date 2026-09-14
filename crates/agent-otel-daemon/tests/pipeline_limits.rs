@@ -26,6 +26,7 @@ struct CollectorStats {
     metric_requests: AtomicU64,
     parsed_spans: AtomicU64,
     parse_failures: AtomicU64,
+    transport_aborts: AtomicU64,
     unique_spans: Mutex<HashSet<(Vec<u8>, Vec<u8>)>>,
 }
 
@@ -295,7 +296,14 @@ async fn handle_collector_request(
     stats: Arc<CollectorStats>,
     release_traces: CancellationToken,
 ) -> io::Result<()> {
-    let (path, body) = read_http_request(&mut stream).await?;
+    let (path, body) = match read_http_request(&mut stream).await {
+        Ok(request) => request,
+        Err(error) if is_peer_transport_abort(&error) => {
+            stats.transport_aborts.fetch_add(1, Ordering::Relaxed);
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
     match path.as_str() {
         "/v1/traces" => {
             match ExportTraceServiceRequest::decode(body.as_slice()) {
@@ -337,11 +345,29 @@ async fn handle_collector_request(
             stats.parse_failures.fetch_add(1, Ordering::Relaxed);
         }
     }
-    stream
+    match stream
         .write_all(
             b"HTTP/1.1 200 OK\r\ncontent-type: application/x-protobuf\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
         )
         .await
+    {
+        Ok(()) => Ok(()),
+        Err(error) if is_peer_transport_abort(&error) => {
+            stats.transport_aborts.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn is_peer_transport_abort(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::UnexpectedEof
+            | io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::BrokenPipe
+    )
 }
 
 async fn read_http_request(stream: &mut TcpStream) -> io::Result<(String, Vec<u8>)> {
@@ -444,6 +470,71 @@ fn unique_test_workspace() -> std::path::PathBuf {
     ));
     std::fs::create_dir_all(&path).expect("create owned test workspace");
     path
+}
+
+#[tokio::test]
+async fn truncated_header_is_an_aborted_attempt_not_a_parsed_request() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let client = tokio::spawn(async move {
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"POST /v1/traces HTTP/1.1\r\n")
+            .await
+            .unwrap();
+        stream.shutdown().await.unwrap();
+    });
+    let (stream, _) = listener.accept().await.unwrap();
+    client.await.unwrap();
+    let stats = Arc::new(CollectorStats::default());
+
+    handle_collector_request(stream, Arc::clone(&stats), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(stats.transport_aborts.load(Ordering::Relaxed), 1);
+    assert_eq!(stats.trace_requests.load(Ordering::Relaxed), 0);
+    assert_eq!(stats.parsed_spans.load(Ordering::Relaxed), 0);
+    assert!(stats
+        .unique_spans
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .is_empty());
+}
+
+#[tokio::test]
+async fn complete_malformed_http_remains_a_fatal_collector_error() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let client = tokio::spawn(async move {
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream
+            .write_all(b"POST /v1/traces HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        stream.shutdown().await.unwrap();
+    });
+    let (mut stream, _) = listener.accept().await.unwrap();
+    client.await.unwrap();
+
+    let error = read_http_request(&mut stream).await.unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(error.to_string(), "missing content length");
+}
+
+#[test]
+fn only_expected_peer_disconnects_are_transport_aborts() {
+    for kind in [
+        io::ErrorKind::UnexpectedEof,
+        io::ErrorKind::ConnectionAborted,
+        io::ErrorKind::ConnectionReset,
+        io::ErrorKind::BrokenPipe,
+    ] {
+        assert!(is_peer_transport_abort(&io::Error::from(kind)));
+    }
+    assert!(!is_peer_transport_abort(&io::Error::from(
+        io::ErrorKind::InvalidData
+    )));
 }
 
 #[cfg(windows)]
