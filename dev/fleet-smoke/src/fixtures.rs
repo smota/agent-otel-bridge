@@ -222,10 +222,29 @@ impl ScriptedHttpService {
 }
 
 fn serve_one(mut stream: TcpStream, fault: &HttpFault, counters: &HttpCounters, stop: &AtomicBool) {
+    // Accepted sockets can inherit the listener's nonblocking mode on some
+    // platforms; this worker uses bounded blocking reads instead.
+    if stream.set_nonblocking(false).is_err() {
+        return;
+    }
     let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(100)));
     let mut request = [0; 512];
-    let _ = stream.read(&mut request);
+    let mut received = 0;
+    // TCP reads may split even tiny requests. Closing with unread header bytes
+    // can reset the peer instead of delivering the scripted HTTP response.
+    while !request[..received]
+        .windows(4)
+        .any(|part| part == b"\r\n\r\n")
+    {
+        if received == request.len() || stop.load(Ordering::Acquire) {
+            return;
+        }
+        match stream.read(&mut request[received..]) {
+            Ok(0) | Err(_) => return,
+            Ok(count) => received += count,
+        }
+    }
     match fault {
         HttpFault::Delay(duration) => {
             let started = std::time::Instant::now();
@@ -393,6 +412,31 @@ mod tests {
         let started = std::time::Instant::now();
         drop(service);
         assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn http_fragmented_header_is_fully_read_before_response() {
+        let service = ScriptedHttpService::start(vec![HttpFault::Success]).unwrap();
+        let mut stream = TcpStream::connect(service.address()).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        stream.write_all(b"GET / HTTP/1.1\r\n").unwrap();
+        let mut byte = [0];
+        let error = stream.read(&mut byte).unwrap_err();
+        assert!(matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ));
+        stream.write_all(b"Connection: close\r\n\r\n").unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert_eq!(service.evidence().completed, 1);
     }
 
     #[test]
