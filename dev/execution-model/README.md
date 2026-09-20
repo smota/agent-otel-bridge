@@ -2,6 +2,8 @@
 
 Estado: generalização de uma prática já existente no repositório. Substitui, como referência ativa, as atribuições ad-hoc de [`dev/fleet-smoke/performance-coordination.md`](../fleet-smoke/performance-coordination.md), que permanece como registro histórico daquela campanha.
 
+Para adotar este modelo em outro projeto, use [`portable-template.md`](portable-template.md) — versão genérica, sem referências a este repositório, com as lacunas de adaptação marcadas.
+
 Este documento define **como** o trabalho é distribuído entre harnesses e modelos. Não define *o que* será construído — isso vive nos planos de cada frente, como [`dev/instrumentation-layers/`](../instrumentation-layers/).
 
 ---
