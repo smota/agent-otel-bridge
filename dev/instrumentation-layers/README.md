@@ -8,6 +8,7 @@ Escopo do documento: por que evoluir, o que exatamente se ganha, o que fica expl
 
 - [`decisions.md`](decisions.md) — decisões tomadas, com alternativas descartadas e justificativa.
 - [`breakdown.md`](breakdown.md) — quebra por camada: entregável, arquivos, testes, gates, riscos.
+- [`execution-plan.md`](execution-plan.md) — quem executa cada item: papel, tier de modelo e modo (cross-harness ou cross-model), aplicando o [modelo de execução](../execution-model/README.md).
 
 ---
 
@@ -244,7 +245,7 @@ Nenhum destes bloqueia o L1. Registrados para decisão no momento certo.
 | A2 | Política de desligamento do proxy quando harnesses passarem a injetar `_meta` nativamente | Quando o primeiro harness suportar |
 | A3 | Versionamento do contrato de wire (L2): SemVer próprio ou acoplado à versão do produto | No desenho do L2 |
 | A4 | `derive_trace_id(conversation_id)` → renomear parâmetro para `correlation_id`. Dívida de nomenclatura, sem mudança de wire format | Oportunisticamente, com alias |
-| A5 | Paridade de features entre clientes Python e TypeScript a cada mudança de protocolo — como garantir por teste e não por disciplina | No desenho do L3 |
+| A5 | ~~Paridade de features entre clientes Python e TypeScript a cada mudança de protocolo~~ — **resolvido**: fixture de conformidade compartilhada executada pelos três clientes no CI. Paridade é gate determinístico, não vigilância. Ver [`execution-plan.md`](execution-plan.md) § L3 | fechado |
 | A6 | Se `mcp.*` mudar de forma incompatível enquanto está em Development, qual o procedimento de migração dado o invariante de retrocompat | Antes do primeiro release que emita `mcp.*` |
 
 ---
