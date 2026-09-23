@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AOB Handoff Schema v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "task_id",
+    "attempt",
+    "operation",
+    "dependencies",
+    "inputs",
+    "output_schema",
+    "deadline_ms",
+    "allowed_tools",
+    "max_tool_calls"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "aob-handoff/v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 8
+    },
+    "task_id": {
+      "type": "string",
+      "enum": ["F1", "F2", "F3"]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["select_active_records", "run_fixture_assertion", "invoke_mcp_echo"]
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "receipt_sha256"],
+        "properties": {
+          "task_id": { "type": "string" },
+          "receipt_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" }
+        }
+      }
+    },
+    "output_schema": {
+      "type": "string"
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 1000
+    },
+    "allowed_tools": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "max_tool_calls": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}
