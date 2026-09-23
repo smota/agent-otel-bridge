@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AOB Benchmark Report Schema v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "campaign",
+    "environment",
+    "build",
+    "workload",
+    "providers",
+    "budgets",
+    "attempts",
+    "assertions",
+    "delivery",
+    "telemetry",
+    "comparison",
+    "cleanup",
+    "privacy",
+    "improvement"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "aob-repeatable-benchmark/v1"
+    },
+    "campaign": {
+      "type": "object",
+      "required": ["campaign_id", "run_id", "attempt_id", "status", "started_at_utc", "ended_at_utc", "duration_sec", "seed", "plan_hash", "corpus_hash"],
+      "properties": {
+        "campaign_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "attempt_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed", "failed", "incomplete", "cancelled"] },
+        "started_at_utc": { "type": "string" },
+        "ended_at_utc": { "type": "string" },
+        "duration_sec": { "type": "number" },
+        "seed": { "type": "integer" },
+        "plan_hash": { "type": "string" },
+        "corpus_hash": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "cpu_model": { "type": "string" },
+        "cpu_cores_physical": { "type": ["integer", "null"] },
+        "cpu_cores_logical": { "type": ["integer", "null"] },
+        "ram_bytes": { "type": ["integer", "null"] },
+        "rust_version": { "type": "string" },
+        "python_version": { "type": "string" },
+        "timezone": { "type": "string" },
+        "host_pseudonym": { "type": "string" }
+      }
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "git_commit": { "type": "string" },
+        "git_dirty": { "type": "boolean" },
+        "bridge_version": { "type": "string" },
+        "client_binary_sha256": { "type": ["string", "null"] },
+        "daemon_binary_sha256": { "type": ["string", "null"] }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "properties": {
+        "profile": { "type": "string" },
+        "pacing_ms": { "type": "integer" }
+      }
+    },
+    "providers": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "max_inferences": { "type": "integer" },
+        "inferences_used": { "type": "integer" },
+        "timeout_sec": { "type": "integer" },
+        "elapsed_sec": { "type": "number" }
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "spec_ref", "verdict", "expectation", "observation"],
+        "properties": {
+          "id": { "type": "string" },
+          "spec_ref": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["passed", "failed", "not_measured", "inconclusive"] },
+          "expectation": { "type": "string" },
+          "observation": { "type": "string" },
+          "known_issue_id": { "type": ["string", "null"] },
+          "evidence": { "type": "object" }
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "trace_id": { "type": ["string", "null"] },
+        "root_span_id": { "type": ["string", "null"] },
+        "storage_visibility": { "type": "string", "enum": ["visible_complete", "visible_partial", "not_found", "query_failed", "unsupported_schema", "not_measured"] },
+        "signoz_api_visibility": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "summary_exported": { "type": "boolean" },
+        "summary_trace_id": { "type": ["string", "null"] }
+      }
+    },
+    "comparison": {
+      "type": "object"
+    },
+    "cleanup": {
+      "type": "object",
+      "properties": {
+        "temp_dirs_removed": { "type": "boolean" },
+        "processes_terminated": { "type": "boolean" }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "properties": {
+        "redacted_fields": { "type": "array", "items": { "type": "string" } },
+        "shareable": { "type": "boolean" }
+      }
+    },
+    "improvement": {
+      "type": "object",
+      "properties": {
+        "observed_issue": { "type": ["string", "null"] },
+        "hypotheses": { "type": "array", "items": { "type": "string" } },
+        "suggested_patch": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "additionalProperties": false
+}

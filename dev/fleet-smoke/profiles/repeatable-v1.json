@@ -1,0 +1,32 @@
+{
+  "schema": "aob-benchmark-profiles/v1",
+  "profiles": {
+    "quick": {
+      "description": "Deterministic probes, parser, transformation, context, hook timing, and IPC baseline",
+      "max_inferences": 0,
+      "global_timeout_sec": 900,
+      "pacing_ms": 100,
+      "run_probes": ["production_round", "architecture_suite"],
+      "live_fleet": false,
+      "backend_query": false
+    },
+    "fleet": {
+      "description": "Quick baseline + deterministic 3-client live chain (Codex F1, Grok F2, Antigravity F3) + direct ClickHouse query",
+      "max_inferences": 3,
+      "global_timeout_sec": 1200,
+      "pacing_ms": 500,
+      "run_probes": ["production_round"],
+      "live_fleet": true,
+      "backend_query": true
+    },
+    "stress": {
+      "description": "Native load stress (1000 offers/s, 15s, concurrencies 1/4/8/16, 10 reps) + real hook rate matrix",
+      "max_inferences": 0,
+      "global_timeout_sec": 1800,
+      "pacing_ms": 0,
+      "run_probes": ["stall_round", "load_probe"],
+      "live_fleet": false,
+      "backend_query": false
+    }
+  }
+}

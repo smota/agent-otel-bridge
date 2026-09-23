@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AOB Benchmark Config Schema v1",
+  "type": "object",
+  "required": ["schema_version", "profile", "seed", "limits", "backend"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "aob-benchmark-config/v1"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["quick", "fleet", "stress"]
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidate_paths": {
+      "type": "object",
+      "properties": {
+        "client": { "type": "string" },
+        "daemon": { "type": "string" },
+        "cli": { "type": "string" }
+      }
+    },
+    "provider_programs": {
+      "type": "object",
+      "properties": {
+        "codex": { "type": "string" },
+        "grok": { "type": "string" },
+        "antigravity": { "type": "string" }
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "codex": { "type": "string" },
+        "grok": { "type": "string" },
+        "antigravity": { "type": "string" }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": ["global_timeout_sec", "max_inferences"],
+      "properties": {
+        "global_timeout_sec": { "type": "integer", "minimum": 1 },
+        "max_inferences": { "type": "integer", "minimum": 0 },
+        "per_call_timeout_sec": { "type": "integer", "minimum": 1 },
+        "max_output_tokens": { "type": "integer", "minimum": 1 },
+        "max_artifacts_bytes": { "type": "integer", "minimum": 1024 }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["clickhouse_direct", "mock", "none"] },
+        "endpoint": { "type": ["string", "null"] },
+        "database": { "type": "string" },
+        "table": { "type": "string" },
+        "schema_version": { "type": "string", "enum": ["v3", "v2", "auto"] },
+        "tenant_id": { "type": ["string", "null"] },
+        "credentials_env_var": { "type": ["string", "null"] },
+        "trace_url_template": { "type": ["string", "null"] }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "otlp_endpoint": { "type": "string" },
+        "capture_intermediate": { "type": "boolean" },
+        "publish_summary": { "type": "boolean" }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "properties": {
+        "retain_report_path": { "type": ["string", "null"] },
+        "clean_temp": { "type": "boolean" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

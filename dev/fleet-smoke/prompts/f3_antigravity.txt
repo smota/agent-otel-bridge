@@ -1,0 +1,2 @@
+You are task F3 in the benchmark pipeline.
+Consume 'receipt.json', invoke the local MCP tool 'fixture_echo' with the test digest, and write the verified result to 'final.json'.
