@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+use base64::Engine;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -215,10 +216,10 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         install_fn: |path, binary, _tag| install_claude_hooks(path, binary),
         uninstall_fn: uninstall_claude_hooks,
         is_registered_fn: |path| {
-            path.exists()
-                && fs::read_to_string(path)
-                    .map(|s| s.contains("agent-hook"))
-                    .unwrap_or(false)
+            fs::read_to_string(path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                .is_some_and(|value| has_bridge_command(&value))
         },
     },
     ClientAdapter {
@@ -267,19 +268,66 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         global_config_fn: || get_pi_config_path(false),
         project_config_fn: get_pi_project_path,
         install_fn: install_pi_hooks,
-        uninstall_fn: |path, _bin| uninstall_antigravity_hooks(path),
+        uninstall_fn: uninstall_pi_hooks,
         is_registered_fn: |path| {
-            path.exists()
-                && fs::read_to_string(path)
-                    .map(|s| s.contains("agent-otel-bridge") || s.contains("agent-hook"))
-                    .unwrap_or(false)
+            pi_extension_path(path)
+                .ok()
+                .and_then(|extension| fs::read_to_string(extension).ok())
+                .is_some_and(|s| s.starts_with("// Managed by agent-otel-bridge."))
         },
     },
 ];
 
 pub fn is_bridge_command(cmd: &str) -> bool {
     let lower = cmd.to_ascii_lowercase();
+    if let Some((_, encoded)) = cmd.split_once("-EncodedCommand ") {
+        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded.trim()) {
+            if bytes.len() % 2 == 0 {
+                let words: Vec<u16> = bytes
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                    .collect();
+                if let Ok(script) = String::from_utf16(&words) {
+                    return script.to_ascii_lowercase().contains("agent-hook");
+                }
+            }
+        }
+    }
     lower.contains("agent-hook") || lower.contains("agent-otel-bridge hook")
+}
+
+fn has_bridge_command(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            object
+                .get("command")
+                .and_then(Value::as_str)
+                .is_some_and(is_bridge_command)
+                || object.values().any(has_bridge_command)
+        }
+        Value::Array(array) => array.iter().any(has_bridge_command),
+        _ => false,
+    }
+}
+
+pub fn format_claude_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
+    if !cfg!(windows) {
+        return format_hook_command(binary, event, client_tag);
+    }
+    // Grok imports Claude settings but supplies its own native bridge hooks.
+    // Avoid both PowerShell parsing errors and duplicate/misattributed spans,
+    // without disabling imported third-party hooks.
+    let invocation = format_powershell_hook_command(binary, event, Some("claude"));
+    let script = format!("if ($env:GROK_WORKSPACE_ROOT) {{ '{{}}' }} else {{ {invocation} }}");
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let system_root = std::env::var("SystemRoot")
+        .unwrap_or_else(|_| "C:\\Windows".to_string())
+        .replace('\\', "/");
+    // Forward slashes survive Claude's Git Bash as well as Grok's PowerShell.
+    format!("{system_root}/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -EncodedCommand {encoded}")
 }
 
 pub fn format_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
@@ -322,6 +370,7 @@ pub fn format_powershell_hook_command(
 /// Render the nested quoting required by `cmd.exe /c` when the executable
 /// path contains spaces. This is useful for adapters that expose a CMD shell
 /// contract; it remains opt-in so existing adapter semantics stay unchanged.
+#[allow(dead_code)] // Public compatibility renderer; AGY now needs encoded PowerShell.
 pub fn format_cmd_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
     let path = binary.trim_matches('"');
     let client_arg = client_tag
@@ -344,7 +393,14 @@ pub fn format_antigravity_hook_command(
     client_tag: Option<&str>,
 ) -> String {
     if cfg!(windows) {
-        format_cmd_hook_command(binary, event, client_tag)
+        // AGY passes the command through Windows argv escaping before cmd /c.
+        // Embedded quotes become literal backslash-quotes. Keep the outer
+        // command quote-free; decode the quoted absolute hook path in PowerShell.
+        // Resolve PowerShell through the OS directory, never the user's PATH.
+        let script = format_powershell_hook_command(binary, event, client_tag);
+        let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+        format!("%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -EncodedCommand {encoded}")
     } else {
         format_hook_command(binary, event, client_tag)
     }
@@ -531,7 +587,7 @@ fn install_hooks_with_command_formatter(
     for event in events {
         let target_cmd = formatter(binary, event, client_tag);
 
-        let entry = json!({
+        let mut entry = json!({
             "matcher": ".*",
             "hooks": [
                 {
@@ -542,6 +598,9 @@ fn install_hooks_with_command_formatter(
             ]
         });
 
+        if event == "Stop" {
+            entry.as_object_mut().unwrap().remove("matcher");
+        }
         if let Some(arr) = hooks_obj.get_mut(event).and_then(|v| v.as_array_mut()) {
             let mut updated = false;
             for item in arr.iter_mut() {
@@ -562,6 +621,26 @@ fn install_hooks_with_command_formatter(
 
             if !updated {
                 arr.push(entry);
+            }
+            if event == "Stop" {
+                for group in arr.iter_mut() {
+                    let owned = group
+                        .get("hooks")
+                        .and_then(Value::as_array)
+                        .is_some_and(|hooks| {
+                            !hooks.is_empty()
+                                && hooks.iter().all(|hook| {
+                                    hook.get("command")
+                                        .and_then(Value::as_str)
+                                        .is_some_and(is_bridge_command)
+                                })
+                        });
+                    if owned {
+                        if let Some(object) = group.as_object_mut() {
+                            object.remove("matcher");
+                        }
+                    }
+                }
             }
         } else {
             hooks_obj.insert(event.to_string(), json!([entry]));
@@ -589,7 +668,38 @@ pub fn install_pi_hooks(
     binary: &str,
     client_tag: Option<&str>,
 ) -> Result<bool, Box<dyn std::error::Error>> {
+    let extension = pi_extension_path(path)?;
+    if extension.exists()
+        && !fs::read_to_string(&extension)?.starts_with("// Managed by agent-otel-bridge.")
+    {
+        return Err("Refusing to replace an unowned Pi extension".into());
+    }
+    fs::create_dir_all(extension.parent().ok_or("Missing Pi extension directory")?)?;
+    let content = include_str!("pi-extension.ts").replace(
+        "__AGENT_OTEL_HOOK_PATH__",
+        &serde_json::to_string(binary.trim_matches('"'))?,
+    );
+    fs::write(extension, content)?;
     install_hooks_with_command_formatter(path, binary, client_tag, format_hook_command)
+}
+
+fn pi_extension_path(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(path
+        .parent()
+        .ok_or("Missing Pi config directory")?
+        .join("agent/extensions/agent-otel-bridge.ts"))
+}
+
+pub fn uninstall_pi_hooks(path: &Path, binary: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    let mut changed = uninstall_standard_hooks(path, binary)?;
+    let extension = pi_extension_path(path)?;
+    if extension.exists()
+        && fs::read_to_string(&extension)?.starts_with("// Managed by agent-otel-bridge.")
+    {
+        fs::remove_file(extension)?;
+        changed = true;
+    }
+    Ok(changed)
 }
 
 pub fn uninstall_standard_hooks(
@@ -643,7 +753,7 @@ pub fn uninstall_standard_hooks(
 }
 
 pub fn install_claude_hooks(path: &Path, binary: &str) -> Result<bool, Box<dyn std::error::Error>> {
-    install_standard_hooks(path, binary, None)
+    install_hooks_with_command_formatter(path, binary, None, format_claude_hook_command)
 }
 
 pub fn uninstall_claude_hooks(
@@ -1073,7 +1183,11 @@ mod tests {
             .as_str()
             .unwrap();
         if cfg!(windows) {
-            assert_eq!(command, "call \"C:\\Bridge\\agent-hook.exe\" PreToolUse");
+            assert_eq!(
+                command,
+                format_antigravity_hook_command("C:\\Bridge\\agent-hook.exe", "PreToolUse", None)
+            );
+            assert!(!command.contains('"'));
         } else {
             assert_eq!(command, "\"C:\\Bridge\\agent-hook.exe\" PreToolUse");
         }
@@ -1125,7 +1239,7 @@ mod tests {
         assert_eq!(pre_tool[0]["hooks"][0]["command"], "rtk hook claude");
         assert_eq!(
             pre_tool[1]["hooks"][0]["command"],
-            "\"C:\\Bridge\\agent-hook.exe\" PreToolUse"
+            format_claude_hook_command("C:\\Bridge\\agent-hook.exe", "PreToolUse", None)
         );
 
         // Re-install (idempotent update check)
@@ -1139,7 +1253,7 @@ mod tests {
         assert_eq!(pre_tool2[0]["hooks"][0]["command"], "rtk hook claude");
         assert_eq!(
             pre_tool2[1]["hooks"][0]["command"],
-            "\"C:\\NewPath\\agent-hook.exe\" PreToolUse"
+            format_claude_hook_command("C:\\NewPath\\agent-hook.exe", "PreToolUse", None)
         );
 
         // Uninstall
@@ -1248,7 +1362,7 @@ mod tests {
         assert_eq!(pre_tool[0]["hooks"][0]["command"], "my-check.sh");
         assert_eq!(
             pre_tool[1]["hooks"][0]["command"],
-            "\"C:\\Tools\\agent-hook.exe\" PreToolUse"
+            format_claude_hook_command("C:\\Tools\\agent-hook.exe", "PreToolUse", None)
         );
 
         // Running sync a second time is idempotent

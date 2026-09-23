@@ -428,8 +428,8 @@ pub fn build_span_from_resolved(
     }
 
     let (status_code, status_msg) = match &input.error {
-        Some(err) => (StatusCode::Error as i32, err.clone()),
-        None => (StatusCode::Ok as i32, String::new()),
+        Some(err) if !err.trim().is_empty() => (StatusCode::Error as i32, err.clone()),
+        _ => (StatusCode::Ok as i32, String::new()),
     };
 
     Span {
