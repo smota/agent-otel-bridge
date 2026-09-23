@@ -22,9 +22,12 @@ Any failure, unhandled crash, or unresolved path directly degrades or breaks the
    ```json
    "command": "\"C:\\Users\\Username\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse"
    ```
-   Adapters whose contract evaluates commands through `cmd.exe` use the
-   equivalent `call "<absolute path>" <event>` form so quoted paths with
-   spaces remain executable when arguments are present.
+   Antigravity on Windows applies generic argv escaping before `cmd.exe`.
+   Its adapter therefore uses OS-resolved PowerShell with `-EncodedCommand`:
+   the UTF-16LE script contains `& "<absolute path>" <event>`, while the outer
+   command has no quotes for the runner to corrupt. This adds PowerShell
+   startup overhead outside the native client's execution budget. Other CMD
+   consumers can use `call "<absolute path>" <event>` when they preserve quoting.
 4. **Preservation of Third-Party Tools**: Installing or updating bridge hooks MUST NEVER erase, duplicate, or alter third-party hooks (such as `herdr`, `rtk`, custom scripts). Bridge hook registrations are updated in-place by matching the executable name (`agent-hook.exe`).
 5. **Atomic Deployment & Instant Rollback**: Active binaries MUST be staged in immutable version directories and copied to the canonical runtime path. Locked Windows binaries must be replaced using atomic rename-on-replace semantics. A full backup of the previous runtime is preserved for single-command rollback.
 6. **Strict Separation of Candidate vs Active Testing**: `cargo test` and local development builds MUST NEVER modify or lock the host's active installation in `%LOCALAPPDATA%`. Verification of candidate builds occurs strictly within `target/`, and promotion to active is a deliberate action via `agent-otel-bridge local install`.
@@ -91,9 +94,14 @@ The local bridge manager (`agent-otel-bridge local`) automatically configures an
 | **Claude Code CLI / Desktop** | `~/.claude/settings.json` | CLI, Desktop App | `commands.PreToolUse`, `commands.PostToolUse` |
 | **OpenAI Codex CLI / Desktop** | `~/.codex/hooks.json` | CLI, Desktop App | `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd` |
 | **xAI Grok CLI** | `~/.grok/hooks/agent-otel.json` | CLI | Standalone bridge config (cleans legacy duplicate in `hooks.json`) |
-| **Pi CLI** | `~/.pi/hooks.json` | CLI | `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd` |
+| **Pi CLI** | `~/.pi/agent/extensions/agent-otel-bridge.ts` | CLI | Native `tool_call`, `tool_result`, session and agent events; legacy `~/.pi/hooks.json` retained for compatibility |
 
 ### Third-Party Coexistence Rules
+- On Windows, Claude bridge commands use encoded PowerShell and return `{}`
+  when imported by Grok (`GROK_WORKSPACE_ROOT` is present). Grok's dedicated
+  bridge hooks emit its telemetry; imported third-party hooks remain enabled.
+- Pi uses a managed native extension. The installer refuses to overwrite an
+  unowned extension at that path, and uninstall removes only its owned file.
 - Existing hooks such as `powershell -ExecutionPolicy Bypass -File ... herdr-agent-state.ps1` or `rtk hook claude` MUST be preserved verbatim.
 - The installer detects existing bridge hooks via executable filename matching (`agent-hook.exe`). If found, it updates the command path in-place. If absent, it appends the bridge entry.
 

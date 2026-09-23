@@ -18,7 +18,7 @@ Every AI harness has a distinct configuration resolution model when resolving us
 | **Claude Code / Desktop** | `ProjectShadowsGlobal` | `~/.claude/settings.json` | `.claude/settings.json` | **Array Override**: If a project defines `"hooks"`, it **completely shadows** user global hooks. Requires project synchronization. |
 | **OpenAI Codex CLI** | `GlobalOnly` | `~/.codex/hooks.json` | N/A (Global-first) | **Purely Global**: Always evaluates global hooks. Projects do not shadow telemetry. |
 | **xAI Grok CLI** | `GlobalOnly` | `~/.grok/hooks/agent-otel.json` | N/A (Dedicated) | **Isolated File**: Dedicated to the bridge. Completely global. |
-| **Pi CLI (`pi.dev`)** | `GlobalOnly` | `~/.pi/hooks.json` | N/A (Dedicated) | **Isolated File**: Dedicated to the bridge. Completely global. |
+| **Pi CLI (`pi.dev`)** | `GlobalOnly` | `~/.pi/agent/extensions/agent-otel-bridge.ts` | N/A (Dedicated) | Native event extension; legacy JSON retained for compatibility. |
 | **Custom Agent Harness** | Custom | Environment / Custom Config | Custom Config | Direct Process Execution (`agent-hook.exe`). |
 
 ---
@@ -301,7 +301,12 @@ Spans emitted from Grok sessions automatically receive:
 
 ### 3.5 Pi CLI (pi.dev)
 
-[Pi CLI](https://pi.dev/) hooks are configured via `~/.pi/hooks.json`.
+[Pi CLI](https://pi.dev/) loads the managed native extension at
+`~/.pi/agent/extensions/agent-otel-bridge.ts`. It forwards `tool_call`,
+`tool_result`, `session_start`, `session_shutdown`, and `agent_end` to the
+canonical hook executable with client tag `pi`. It returns no tool decisions
+or model-visible content. The installer retains `~/.pi/hooks.json` for older
+consumers, but that JSON file alone does not activate telemetry in Pi 0.85.1.
 
 ```json
 {

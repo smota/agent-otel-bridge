@@ -23,6 +23,7 @@ dependencies = [
  "agent-otel-core",
  "agent-otel-daemon",
  "agent-otel-ipc",
+ "base64",
  "clap",
  "opentelemetry-proto",
  "prost",

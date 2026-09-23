@@ -19,6 +19,7 @@ name = "agent-otel-bridge"
 path = "src/main.rs"
 
 [dependencies]
+base64 = "0.22"
 agent-otel-core = { workspace = true }
 agent-otel-ipc = { workspace = true, default-features = true }
 agent-otel-daemon = { workspace = true }

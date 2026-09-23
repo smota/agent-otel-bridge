@@ -14,6 +14,31 @@ use serde_json::{json, Value};
 use std::fs;
 
 #[test]
+fn pi_extension_install_is_owned_idempotent_and_reversible() {
+    let dir = std::env::temp_dir().join(format!("pi_bridge_install_{}", std::process::id()));
+    let path = dir.join("hooks.json");
+    let extension = dir.join("agent/extensions/agent-otel-bridge.ts");
+    fs::create_dir_all(extension.parent().unwrap()).unwrap();
+    let third_party = extension.with_file_name("third-party.ts");
+    fs::write(&third_party, "// retain me").unwrap();
+    let binary = r"C:\Program Files\Bridge\agent-hook.exe";
+    agent_otel_bridge::hooks::install_pi_hooks(&path, binary, Some("pi")).unwrap();
+    let first = fs::read(&extension).unwrap();
+    agent_otel_bridge::hooks::install_pi_hooks(&path, binary, Some("pi")).unwrap();
+    assert_eq!(first, fs::read(&extension).unwrap());
+    assert!(!String::from_utf8(first)
+        .unwrap()
+        .contains("__AGENT_OTEL_HOOK_PATH__"));
+    agent_otel_bridge::hooks::uninstall_pi_hooks(&path, binary).unwrap();
+    assert!(!extension.exists());
+    assert_eq!(fs::read_to_string(&third_party).unwrap(), "// retain me");
+    fs::write(&extension, "// user owned").unwrap();
+    assert!(agent_otel_bridge::hooks::install_pi_hooks(&path, binary, Some("pi")).is_err());
+    assert_eq!(fs::read_to_string(&extension).unwrap(), "// user owned");
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn test_safe_copy_or_replace_and_sha256() {
     let temp_dir = std::env::temp_dir().join(format!("safe_copy_test_{}", std::process::id()));
     fs::create_dir_all(&temp_dir).unwrap();
@@ -182,6 +207,12 @@ fn test_claude_hooks_upgrade_from_relative_to_absolute_without_duplication() {
     // Upgrade to canonical absolute path
     let abs_bin = "C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe";
     install_claude_hooks(&settings_json, abs_bin).unwrap();
+    install_claude_hooks(&settings_json, abs_bin).unwrap();
+    let adapter = agent_otel_bridge::hooks::CLIENT_ADAPTERS
+        .iter()
+        .find(|adapter| adapter.id == "claude")
+        .unwrap();
+    assert!((adapter.is_registered_fn)(&settings_json));
 
     let updated: Value =
         serde_json::from_str(&fs::read_to_string(&settings_json).unwrap()).unwrap();
@@ -191,7 +222,7 @@ fn test_claude_hooks_upgrade_from_relative_to_absolute_without_duplication() {
     assert_eq!(pre_tool[0]["hooks"][0]["command"], "rtk hook claude");
     assert_eq!(
         pre_tool[1]["hooks"][0]["command"],
-        format!("\"{abs_bin}\" PreToolUse")
+        agent_otel_bridge::hooks::format_claude_hook_command(abs_bin, "PreToolUse", None)
     );
 
     // Uninstall

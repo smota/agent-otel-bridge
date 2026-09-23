@@ -492,7 +492,78 @@ impl AgentHookInput {
             return Ok(Self::default());
         }
         validate_json_complexity(bytes)?;
-        serde_json::from_slice(bytes)
+        match serde_json::from_slice(bytes) {
+            Ok(input) => Ok(input),
+            Err(error) if error.to_string().starts_with("duplicate field") => {
+                // Some harnesses emit both snake_case and camelCase aliases.
+                // Keep the normal zero-intermediate-Value path unchanged; only
+                // retry this compatibility shape, rejecting conflicting values.
+                struct UniqueObject;
+                impl<'de> serde::de::Visitor<'de> for UniqueObject {
+                    type Value = serde_json::Map<String, serde_json::Value>;
+                    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        f.write_str("an object without repeated keys")
+                    }
+                    fn visit_map<M: serde::de::MapAccess<'de>>(
+                        self,
+                        mut map: M,
+                    ) -> Result<Self::Value, M::Error> {
+                        let mut result = serde_json::Map::new();
+                        while let Some((key, value)) =
+                            map.next_entry::<String, serde_json::Value>()?
+                        {
+                            if result.insert(key, value).is_some() {
+                                return Err(serde::de::Error::custom("repeated JSON key"));
+                            }
+                        }
+                        Ok(result)
+                    }
+                }
+                let mut decoder = serde_json::Deserializer::from_slice(bytes);
+                let mut object = serde::Deserializer::deserialize_map(&mut decoder, UniqueObject)?;
+                decoder.end()?;
+                let keys: Vec<String> = object
+                    .keys()
+                    .filter(|key| key.contains('_'))
+                    .cloned()
+                    .collect();
+                let mut removed = false;
+                for key in keys {
+                    let mut camel = String::new();
+                    let mut uppercase = false;
+                    for ch in key.chars() {
+                        if ch == '_' {
+                            uppercase = true;
+                        } else if uppercase {
+                            camel.extend(ch.to_uppercase());
+                            uppercase = false;
+                        } else {
+                            camel.push(ch);
+                        }
+                    }
+                    if let Some(value) = object.get(&camel) {
+                        let equivalent_event = key == "hook_event_name"
+                            && value
+                                .as_str()
+                                .zip(object.get(&key).and_then(serde_json::Value::as_str))
+                                .is_some_and(|(a, b)| {
+                                    let a = HookEvent::from_str_name(a);
+                                    a != HookEvent::Unknown && a == HookEvent::from_str_name(b)
+                                });
+                        if Some(value) != object.get(&key) && !equivalent_event {
+                            return Err(error);
+                        }
+                        object.remove(&key);
+                        removed = true;
+                    }
+                }
+                if !removed {
+                    return Err(error);
+                }
+                serde_json::from_value(serde_json::Value::Object(object))
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Fills missing workspace fields and performs deterministic enrichment.
@@ -631,7 +702,9 @@ impl AgentHookInput {
         }
 
         // Multi-layer Error Categorization
-        if self.error.is_some() && self.error_category.is_none() {
+        if self.error.as_ref().is_some_and(|e| !e.trim().is_empty())
+            && self.error_category.is_none()
+        {
             let err_msg = self.error.as_deref().unwrap_or("").to_ascii_lowercase();
             if err_msg.contains("rate limit")
                 || err_msg.contains("429")
