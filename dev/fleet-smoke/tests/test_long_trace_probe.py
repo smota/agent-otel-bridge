@@ -46,6 +46,12 @@ def native_span(trace_id, span_id, parent_span_id):
 
 
 class LongTraceProbeTests(unittest.TestCase):
+    def setUp(self):
+        # Resolve the real platform before subprocess mocks intercept detection.
+        platform_patch = mock.patch.object(probe.platform, "system", return_value=probe.platform.system())
+        platform_patch.start()
+        self.addCleanup(platform_patch.stop)
+
     def test_malformed_protobuf_request_and_response_are_rejected(self):
         with self.assertRaises(ValueError):
             probe.decode_export_trace_request(b"\x0a\x05\x12")

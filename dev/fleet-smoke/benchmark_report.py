@@ -98,7 +98,7 @@ def render_markdown(report: Dict[str, Any]) -> str:
         f"| Início / fim UTC / duração | {c.get('started_at_utc')} / {c.get('ended_at_utc')} / {c.get('duration_sec', 0):.2f}s |",
         f"| Perfil / seed / plan hash / corpus hash | {w.get('profile')} / {c.get('seed')} / {c.get('plan_hash', '')[:16]}... / {c.get('corpus_hash', '')[:16]}... |",
         f"| Repo / commit / dirty / diff hash | {b.get('git_commit', '')[:8]} / dirty={b.get('git_dirty')} |",
-        f"| Bridge / SHA-256 dos binários | v{b.get('bridge_version', '0.5.2')} / client={b.get('client_binary_sha256', 'none')[:12]}... |",
+        f"| Bridge / SHA-256 dos binários | v{b.get('bridge_version', '0.6.0')} / client={(b.get('client_binary_sha256') or 'none')[:12]}... |",
         f"| Pré-requisitos e reprodução | Reprodução completa com seed determinística |",
         "",
         "## Ambiente",

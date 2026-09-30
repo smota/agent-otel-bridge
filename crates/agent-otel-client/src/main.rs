@@ -200,7 +200,19 @@ fn write_response(header: WireHeader) -> bool {
         .unwrap_or(true);
 
     let write_result = if header.event_id == 3 && allow_pre_tool {
-        stdout.write_all(b"{\"decision\":\"allow\"}")
+        if let Some(tp) = unsafe { read_traceparent() }.filter(|value| {
+            value
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+        }) {
+            let resp = format!(
+                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{}\"}}}}}}",
+                tp
+            );
+            stdout.write_all(resp.as_bytes())
+        } else {
+            stdout.write_all(b"{\"decision\":\"allow\"}")
+        }
     } else {
         stdout.write_all(b"{}")
     };

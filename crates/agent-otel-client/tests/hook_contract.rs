@@ -22,6 +22,7 @@ fn spawn_hook(event: &str, client: &str, watchdog_ms: u64) -> Child {
         .arg(client)
         .env("AGENT_OTEL_PIPE", pipe_name)
         .env("AGENT_OTEL_WATCHDOG_MS", watchdog_ms.to_string())
+        .env_remove("TRACEPARENT")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -38,6 +39,27 @@ fn read_exact_response(child: &mut Child, expected: &[u8]) {
         .read_exact(&mut actual)
         .expect("response must be available while stdin remains open");
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn traceparent_response_is_safe_and_preserves_context() {
+    let traceparent = "00-11111111111111111111111111111111-2222222222222222-01";
+    for (client, value, expected) in [
+        ("claude", traceparent, format!("{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{traceparent}\"}}}}}}")),
+        ("claude", "bad\"value\n", "{\"decision\":\"allow\"}".to_string()),
+        ("codex", traceparent, "{}".to_string()),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_agent-hook"))
+            .args(["PreToolUse", "--client", client])
+            .env("TRACEPARENT", value)
+            .env("AGENT_OTEL_WATCHDOG_MS", "500")
+            .env("AGENT_OTEL_PIPE", format!(r"\\.\pipe\aob-response-test-{}", std::process::id()))
+            .stdin(Stdio::null())
+            .output()
+            .expect("run candidate hook");
+        assert!(output.status.success());
+        assert_eq!(output.stdout, expected.as_bytes());
+    }
 }
 
 #[test]
