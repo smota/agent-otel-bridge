@@ -121,7 +121,7 @@ def probe_build_state(candidate_paths: Dict[str, str]) -> Dict[str, Any]:
     return {
         "git_commit": git_commit,
         "git_dirty": git_dirty,
-        "bridge_version": "0.5.2",
+        "bridge_version": "0.6.0",
         "client_binary_sha256": sha256_file(client_path) if client_path.exists() else None,
         "daemon_binary_sha256": sha256_file(daemon_path) if daemon_path.exists() else None,
     }

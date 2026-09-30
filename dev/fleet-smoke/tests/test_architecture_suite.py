@@ -24,6 +24,12 @@ def span(trace_id="1" * 32, span_id="3" * 16, parent_span_id="2" * 16):
 
 
 class ArchitectureSuiteTests(unittest.TestCase):
+    def setUp(self):
+        # Resolve the real platform before subprocess mocks intercept detection.
+        platform_patch = mock.patch.object(suite.platform, "system", return_value=suite.platform.system())
+        platform_patch.start()
+        self.addCleanup(platform_patch.stop)
+
     def test_extract_span_attributes_rejects_empty_and_malformed_payloads(self):
         for payload in (b"", bytes([0xFF, 0xFF]), b"\x0a\x00"):
             with self.subTest(payload=payload), self.assertRaises(ValueError):

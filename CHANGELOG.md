@@ -7,6 +7,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-30
+
+See the [release notes](docs/releases/v0.6.0.md) for upgrade instructions and validation limits.
+
+### Added
+
+- Forward inherited TRACEPARENT in supported PreToolUse hook environment responses, preserving valid JSON and the Codex response contract.
+- Managed Pi native extension and more detailed station diagnostics.
+- Repeatable benchmark laboratory with seeded profiles, ClickHouse reading, report schemas and offline verification.
+- Separate production parser, transformation, context and hook timing measurements.
+
+### Changed
+
+- Bound concurrent Windows IPC listener acceptance and test shutdown and duplicate ownership.
+- Accept camelCase and snake_case event fields; improve Windows hook quoting and Grok/Claude hook coexistence.
+- Bump workspace packages and development benchmark version labels to 0.6.0.
+
+### Known limitations
+
+- IPC admission loss under sustained stress remains open; source checks do not establish live harness acceptance or cross-platform performance certification.
+
+### Fixed
+
+- Render benchmark reports when candidate binary hashes are unavailable, and isolate subprocess mocks from Windows platform detection in laboratory tests.
+
 ## [0.5.2] - 2026-09-14
 
 ### Bounded Telemetry Pipeline, Workspace Isolation & Verifiable Long Traces
