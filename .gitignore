@@ -5,3 +5,17 @@
 .DS_Store
 Thumbs.db
 benchmarks/reports/
+
+# Local editor and agent integrations
+.pi/
+.pi-subagents/
+.obsidian/
+.pair/
+.agents/
+.agy/
+.grok/
+.claude/
+.codex/
+.copilot/
+.gemini/
+.kimi-code/
