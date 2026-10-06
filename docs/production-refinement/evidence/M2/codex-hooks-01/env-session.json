@@ -1,0 +1,28 @@
+{
+  "thread_id": "01a10ed2-c48a-7633-a64d-97eb8cf2b046",
+  "requested_model": "gpt-5.6-luna",
+  "observed_rollout_model": "gpt-5.6-luna",
+  "effort": "medium",
+  "sandbox": "read-only",
+  "approval": "never",
+  "command_count": 1,
+  "command_exit_codes": [
+    0
+  ],
+  "output_matches_marker": true,
+  "response_matches_marker": true,
+  "usage": {
+    "input_tokens": 47640,
+    "cached_input_tokens": 29184,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 196,
+    "reasoning_output_tokens": 48
+  },
+  "stream_sha256": "3b022f676439db3cb79989b0099b90bc838ab7555f55a9a59b6fd3d686c08eb0",
+  "hook_log_query": {
+    "thread_id": "01a10ed2-c48a-7633-a64d-97eb8cf2b046",
+    "limit": 20,
+    "rows": 0
+  },
+  "raw_retention": "selected projection saved; task raw stream and receiver payloads removed after hashing"
+}

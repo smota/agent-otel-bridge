@@ -1,0 +1,10 @@
+{
+  "cargo_guardrails": "passed",
+  "elapsed_seconds": 46.3,
+  "native_client_bytes": 152576,
+  "python_ast": "passed",
+  "evidence_hashes": "passed",
+  "local_markdown_links": "passed",
+  "product_code_changed": false,
+  "active_install_changed": false
+}

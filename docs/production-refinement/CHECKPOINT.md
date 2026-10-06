@@ -1,6 +1,6 @@
 # Checkpoint — refinamento de produção
 
-Atualizado: 2026-10-06 (M2: sessões CLI reais executadas; lacuna Codex delimitada). Fonte do plano: [PLAN.md](PLAN.md).
+Atualizado: 2026-10-06 (M2: trust efetiva consultada e contraste de ambiente Codex concluído). Fonte do plano: [PLAN.md](PLAN.md).
 
 ## Posição atual
 
@@ -9,7 +9,7 @@ Atualizado: 2026-10-06 (M2: sessões CLI reais executadas; lacuna Codex delimita
 - Próximos fechamentos: M2 diagnóstico dos hooks Codex e lifecycle Grok; M3 runbook da estação.
 - Branch: docs/production-refinement-milestones.
 - Base observada: a47a9ab (merge da release v0.6.0).
-- Persistência: base ddf1f1a confirmada na entrega anterior. Evidências e checkpoint das sessões CLI reais preparados para commit/push nesta rodada; reconciliar HEAD com origin/docs/production-refinement-milestones na retomada. A intenção de entrega não substitui verificação remota.
+- Persistência: 69acfe4 confirmado no remoto na abertura desta rodada; nova evidência de hooks Codex preparada para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
 - Operação externa pendente: nenhuma. Cinco sessões supervisionadas (AGY, Grok, Claude e duas tentativas Codex) foram encerradas e reconciliadas; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
 - Registro de encerramento da rodada anterior (2026-09-30; revalidar processos antes de executar): todos os executores encerrados. M1: Luna medium. M2: Sol high. M3: Flash medium via AGY não aceito ([recibo](evidence/M3/research-attempt-01.md)); fallback Sol medium concluiu pesquisa de código ([resultado](evidence/M3/source-research-02.md)). IDs são modelos solicitados; não inferir versão observada quando executor não a expõe.
 - Resultado CLI real: [real-cli-01.md](evidence/M2/real-cli-01.md), [contrato](evidence/M2/agy-real-01-contract.md).
@@ -51,10 +51,17 @@ Não repetir inventário inteiro na retomada: revalidar somente estado volátil 
 - Provider Google indevido confirmado em sessões Grok/Claude. Tool-call IDs ausentes dos spans; correspondência desta amostra por sessão/ferramenta, não aceite de correlação geral.
 - Todos os processos de teste encerrados, pipes removidos e hashes de hooks preservados. Receptor privado: SigNoz/Desktop/IDE não certificados.
 
+## Nova unidade Codex (2026-10-06)
+
+- App-server privado: três hooks bridge habilitados/trusted, sem erro de descoberta. Consulta sem turno de modelo.
+- Nova leitura real Luna medium, retirando seis variáveis de identidade do coordenador: leitura correta, zero frames de hooks; daemon/harness encerrados, configuração preservada. Não equivale a terminal independente.
+- Parser PowerShell rejeita comando sem `&`; shell efetivo do hook ainda desconhecido. Causa permanece aberta.
+- Evidência e próximos testes: [codex-hooks-01](evidence/M2/codex-hooks-01.md). Nenhum teste ativo ou efeito pendente.
+
 ## Próxima tarefa concreta
 
-1. AGY Flash low prepara observação limitada do caminho Codex (trust efetiva, shell/quoting e env do hook). Usar dados locais/diagnóstico antes de nova inferência; não repetir a unidade já encerrada de duas tentativas.
-2. Grok Build Fast low revisa a receita. Comparar lançamento independente do ambiente coordenador com gpt-5.6-luna medium; sem remover sandbox, ignorar trust ou alterar hooks globais para forçar sucesso.
+1. Identificar shell/argv e resultado de execução dos hooks Codex 0.154.0. AGY Flash medium prepara fixture limitada; Grok Build Fast low revisa. Definir observação discriminante antes de nova inferência.
+2. Trust efetiva e contraste de seis variáveis do coordenador já observados: [codex-hooks-01](evidence/M2/codex-hooks-01.md). Não repetir para confirmar configuração. A string atual falha no parser PowerShell; comprovar shell real antes de corrigir candidato. Sem remover sandbox, ignorar trust ou alterar hooks globais para forçar sucesso.
 3. Grok: localizar os dois Stop da mesma sessão e provar supressão do hook Claude importado. Capturar somente IDs/tipos/flags necessários, sem conteúdo de prompts.
 4. M4/M6: corrigir semântica de provider desconhecido e mapear tool IDs após verificar payloads reais; nenhuma correção de produto implementada ainda.
 5. Investigar persistência normal do daemon e, depois dos contratos/correções, validar até SigNoz e superfícies Desktop/IDE. M3 runbook WSL continua independente.

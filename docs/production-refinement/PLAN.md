@@ -121,3 +121,7 @@ O registro desta campanha não altera a política de retenção do laboratório 
 Cumprir fmt, Clippy, testes, docs e guardrails conforme AGENTS.md. Preservar cliente <1ms, watchdog 3ms e zero disco/processos externos no hot path. Aplicar contratos atuais de context lookup e carga; não reviver gates históricos. Validar fail-open, concorrência, identidade, inicialização e recuperação. Não certificar ausência universal de perdas; declarar workload e resolver ou delimitar RES-004.
 
 Dashboards não inferem produtividade de churn, sucesso de exit 0 ou encerramento de silêncio. Separar assinatura, rate limit e custo estimado. Ausência de sinal não é zero. Demonstrar exportação para receptor OTLP independente do SigNoz.
+
+### Atualização M2 — 2026-10-06, hooks Codex
+
+[Unidade concluída](evidence/M2/codex-hooks-01.md): descoberta efetiva trusted e contraste limitado de ambiente não restauraram entrega. Próximo diagnóstico deve observar o executor de hooks (shell/argv/status/pipe); parser PowerShell isolado não basta para corrigir o adaptador. AGY Flash medium prepara fixture, Grok Build Fast low revisa, Codex CLI gpt-5.6-luna medium somente se houver hipótese discriminante que exija inferência. M2 permanece in_progress.

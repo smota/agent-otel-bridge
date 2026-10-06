@@ -1,0 +1,61 @@
+{
+  "started_utc": "2026-10-06T01:27:35Z",
+  "exe": "C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-otel-bridge.exe",
+  "sha256": "24c73837129c674d80df727b85d04915952fc9c73b9bffb451e6a531497c6e9d",
+  "supervisor_pid": 10316,
+  "pipe": "\\\\.\\pipe\\agent-otel-m2-c4bc5245c4974543996e549991237055",
+  "endpoint": "http://127.0.0.1:52549",
+  "env": {
+    "SystemRoot": "C:\\Windows",
+    "WINDIR": "C:\\Windows",
+    "PATH": "C:\\Windows\\System32",
+    "USERPROFILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\USERPROFILE",
+    "HOME": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\HOME",
+    "LOCALAPPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\LOCALAPPDATA",
+    "APPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\APPDATA",
+    "TEMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\TEMP",
+    "TMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\TMP",
+    "AGENT_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-c4bc5245c4974543996e549991237055",
+    "AGY_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-c4bc5245c4974543996e549991237055",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:52549",
+    "OTEL_SERVICE_NAME": "agent-otel-m2-isolated",
+    "AGENT_OTEL_IDLE_TIMEOUT_SECS": "180",
+    "AGENT_OTEL_QUOTA_INTERVAL_SECS": "60",
+    "AGENT_OTEL_QUOTA_FILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\absent-quota.json"
+  },
+  "run": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81",
+  "stage": "exited",
+  "hook_config_sha256_before": "0a9cc7b86c46c5bb32116fc973b85bc4e84587aea96d795c410e8c2622fad48c",
+  "pid": 57620,
+  "pipes_after_start": [
+    "agent-otel-m2-c4bc5245c4974543996e549991237055"
+  ],
+  "pipe_owner_pid": 57620,
+  "removed_coordinator_env_names": [
+    "CODEX_THREAD_ID",
+    "CODEX_SESSION_ID",
+    "CODEX_CI",
+    "CODEX_INTERNAL_ORIGINATOR_OVERRIDE",
+    "CODEX_APP_TOOLS_PIPE_PATH",
+    "CODEX_TASK_WORKSPACE_VERIFYING_IDENTITY"
+  ],
+  "comparison": "coordinator identity variables removed; sandbox/dependency/home variables preserved",
+  "marker_file": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\codex-04f76cbd81\\marker.txt",
+  "marker_sha256": "e29c2111d05fe3a7b41a1ed3103b9d2be5d51a6b674a5d3b3e421363ce455dd9",
+  "requested_model": "gpt-5.6-luna",
+  "harness_exe": "C:\\Users\\samue\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe",
+  "harness_pid": 58664,
+  "harness_exit_code": 0,
+  "hook_config_sha256_after": "0a9cc7b86c46c5bb32116fc973b85bc4e84587aea96d795c410e8c2622fad48c",
+  "hook_config_unchanged": true,
+  "claude_config_unchanged": true,
+  "shutdown_sent": true,
+  "exit_code": 0,
+  "harness_alive_after_cleanup": false,
+  "daemon_alive_after_cleanup": false,
+  "pipes_after_cleanup": [],
+  "source_receipt_sha256": "57e1b8f7b45eb2cb1332c95849d10c9a4cd5cb4ab6bb66f938fd802101c58ed6",
+  "request_counts": {
+    "/v1/metrics": 20
+  }
+}
