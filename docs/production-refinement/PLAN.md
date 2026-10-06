@@ -1,6 +1,6 @@
 # Refinamento de produção — milestones e continuidade
 
-Data: 2026-09-30. Estado: planejamento salvo; execução técnica ainda não iniciada.
+Criado: 2026-09-30. Revisado: 2026-10-06. Execução em andamento; posição e evidências em [CHECKPOINT.md](CHECKPOINT.md).
 
 ## Objetivo e escopo
 
@@ -28,17 +28,17 @@ Cada milestone pode ser concluído e retomado independentemente, respeitando sua
 
 | ID | Entrega e tarefas | Dependências | Modelo principal / executor | Conclusão verificável |
 |---|---|---|---|---|
-| M0 | Plano, checkpoint e regras de continuidade | Nenhuma | Coordenador atual | Arquivos salvos, coerentes e próximos passos explícitos |
-| M1 | Linha de base: hashes reais, manifestos, processos, inicialização, hooks; Collector Windows; distro, serviços, versões e volumes WSL; dashboards publicados e geradores | M0 | gpt-6-luna medium / Codex | Inventário com caminhos, horários e diferenças; estado preservado antes de reiniciar ou instalar |
-| M2 | Diagnóstico por cliente e por fronteira; atividade nativa versus bridge; duplicação, correlação, entrega e consultas | M1 | gpt-6.1-sol high / Codex; coleta delimitada com gemini-3.8-flash-medium / AGY | Quatro fichas de cobertura; hipóteses confirmadas/refutadas ou lacunas explícitas; causas suficientes para delimitar correções |
-| M3 | Pesquisa upstream SigNoz e preparação do upgrade WSL: código, templates, convenções, migrações e backup/restauração | M1 | Pesquisa: gemini-3.8-flash-medium / AGY; migração: gpt-6.1-sol high / Codex | Relatório com commits/fontes, matriz adotar/adaptar/descartar e runbook com versão alvo fixada |
-| M4 | Contratos de sinais e ADRs: independência OTLP, origem, deduplicação, correlação, dados ausentes, assinatura versus custo e rate limit | M2, M3 | grok-4.7 / Grok; síntese gpt-6.1-sol medium / Codex | Parecer Grok, revisão independente e objeções resolvidas; contratos aceitos pelo coordenador |
-| M5 | Jornadas do operador; inventário de todos os painéis; manter/corrigir/mover/fundir/retirar; esboços e consultas propostas | M4 | claude-sonnet-4-6 / AGY | Mapa pergunta -> decisão -> sinal -> próximo passo e revisão com Samuel; principal com até seis painéis essenciais |
-| M6 | Correções do bridge em candidato isolado, uma fatia por defeito; fixtures e regressões; contratos de runtime preservados | M4 | Adaptadores: gemini-3.8-flash-medium / AGY; instalação, IPC, watchdog e OTLP: gpt-6.1-sol high / Codex | Fatias revisadas; checks obrigatórios aprovados; evidência do candidato separada da instalação ativa |
-| M7 | Ensaio de atualização SigNoz em cópia isolada e ensaio de restauração; executar atualização ativa após ensaio aprovado | M3, M4 | gpt-6.1-sol high / Codex | Identidade/versionamento, ingestão e consultas comparadas; recuperação exercitada; operação ativa reconciliada |
-| M8 | Implementar dashboards e separação de assinaturas; validar consultas, dados ausentes e navegação | M5, M6, M7 | gemini-3.8-flash-medium / AGY | Evidência por painel, inspeção visual e jornada do operador validada |
-| M9 | Instalação atômica do candidato; validação real dos quatro clientes; concorrência, reinício Windows/WSL e recuperação | M6, M7, M8 | gpt-6.1-sol high / Codex; revisão independente Sonnet | Matriz de aceite completa; hashes corretos; carga e limites declarados; receptor OTLP independente verificado |
-| M10 | Fechar release: notas, limitações, runbook e índice final de evidências | M9 | gpt-6-luna medium / Codex; aceite gpt-6.1-sol medium | Pacote de lançamento pronto; publicação e implantação identificadas separadamente, sem inferir que ocorreram |
+| M0 | Plano, checkpoint e regras de continuidade | Nenhuma | Coordenador atual; manutenção futura: gemini-3.8-flash-low / AGY | Arquivos salvos, coerentes e próximos passos explícitos |
+| M1 | Linha de base: hashes reais, manifestos, processos, inicialização, hooks; Collector Windows; distro, serviços, versões e volumes WSL; dashboards publicados e geradores | M0 | Concluído; revalidação delimitada: gemini-3.8-flash-low / AGY | Inventário com caminhos, horários e diferenças; estado preservado antes de reiniciar ou instalar |
+| M2 | Diagnóstico por cliente e por fronteira; atividade nativa versus bridge; duplicação, correlação, entrega e consultas | M1 | Coleta: gemini-3.8-flash-low / AGY; diagnóstico: grok-4.7-build-fast / Grok; receita isolada: gemini-3.8-flash-medium / AGY | Quatro fichas de cobertura; hipóteses confirmadas/refutadas ou lacunas explícitas; causas suficientes para delimitar correções |
+| M3 | Pesquisa upstream SigNoz e preparação do upgrade WSL: código, templates, convenções, migrações e backup/restauração | M1 | Fontes e runbook: gemini-3.8-flash-medium / AGY; revisão: grok-4.7-build-fast / Grok; riscos de migração: grok-4.7 / Grok | Relatório com commits/fontes, matriz adotar/adaptar/descartar e runbook com versão alvo fixada |
+| M4 | Contratos de sinais e ADRs: independência OTLP, origem, deduplicação, correlação, dados ausentes, assinatura versus custo e rate limit | M2, M3 | Extração e redação: gemini-3.8-flash-medium / AGY; decisão arquitetural: grok-4.7 / Grok; revisão: gpt-6.1-sol medium / Codex | Parecer Grok, revisão independente e objeções resolvidas; contratos aceitos pelo coordenador |
+| M5 | Jornadas do operador; inventário de todos os painéis; manter/corrigir/mover/fundir/retirar; esboços e consultas propostas | M4 | Inventário: gemini-3.8-flash-low / AGY; jornadas e consultas: gemini-3.8-flash-medium / AGY; revisão: grok-4.7-build-fast / Grok | Mapa pergunta -> decisão -> sinal -> próximo passo e revisão com Samuel; principal com até seis painéis essenciais |
+| M6 | Correções do bridge em candidato isolado, uma fatia por defeito; fixtures e regressões; contratos de runtime preservados | M4 | Implementação: gemini-3.8-flash-medium / AGY; revisão comum: grok-4.7-build-fast / Grok; IPC/unsafe/watchdog: gpt-6.1-sol medium / Codex + revisão crítica independente | Fatias revisadas; checks obrigatórios aprovados; evidência do candidato separada da instalação ativa |
+| M7 | Ensaio de atualização SigNoz em cópia isolada e ensaio de restauração; executar atualização ativa após ensaio aprovado | M3, M4 | Runbook e execução da receita ensaiada: gemini-3.8-flash-medium / AGY; parecer de recuperação: grok-4.7 / Grok; revisão crítica independente antes da operação ativa | Identidade/versionamento, ingestão e consultas comparadas; recuperação exercitada; operação ativa reconciliada |
+| M8 | Implementar dashboards e separação de assinaturas; validar consultas, dados ausentes e navegação | M5, M6, M7 | Implementação: gemini-3.8-flash-medium / AGY; revisão de consultas e narrativa: grok-4.7-build-fast / Grok | Evidência por painel, inspeção visual e jornada do operador validada |
+| M9 | Instalação atômica do candidato; validação real dos quatro clientes; concorrência, reinício Windows/WSL e recuperação | M6, M7, M8 | Coleta e receita de instalação aprovada: gemini-3.8-flash-medium / AGY; análise de cobertura: grok-4.7-build-fast / Grok; aceite crítico: gpt-6.1-sol medium / Codex | Matriz de aceite completa; hashes corretos; carga e limites declarados; receptor OTLP independente verificado |
+| M10 | Fechar release: notas, limitações, runbook e índice final de evidências | M9 | Notas e índice: gemini-3.8-flash-low / AGY; revisão de evidências: grok-4.7-build-fast / Grok; aceite final pelo coordenador | Pacote de lançamento pronto; publicação e implantação identificadas separadamente, sem inferir que ocorreram |
 
 M6 e M7 são mudanças separadas: nunca atualizar bridge e backend no mesmo passo operacional. Com um auxiliar por vez, executar a ordem numérica; dependências permitem retomar frentes independentes quando uma subscrição estiver indisponível.
 
@@ -55,20 +55,26 @@ Etiquetar as sessões de investigação para distingui-las da atividade observad
 
 ## Modelos, fallback e revisão
 
-| Principal | Fallback autorizado para a mesma tarefa |
-|---|---|
-| gpt-6-luna medium | gemini-3.8-flash-low via AGY |
-| gemini-3.8-flash-medium | gpt-6-luna medium para tarefas delimitadas; gpt-6.1-sol medium para pesquisa com síntese |
-| gpt-6.1-sol medium | gemini-3.1-pro-high via AGY |
-| gpt-6.1-sol high | claude-sonnet-4-6 via AGY; gemini-3.1-pro-high para IPC/concorrência |
-| claude-sonnet-4-6 via AGY | gpt-6.1-sol medium para narrativa; high para revisão crítica |
-| grok-4.7 | gpt-6.1-sol high produz parecer provisório; fechamento de M4 ainda requer Grok |
+Política revisada em 2026-10-06: priorizar AGY Flash e Grok Build Fast. Esta é uma alocação para economizar capacidade de subscrição, não uma comparação comprovada de preço ou consumo por chamada. Medir tentativas, tempo e aceite; consumo não exposto permanece unknown. A orientação de selecionar modelos conforme a tarefa está na [documentação oficial OpenAI](https://developers.openai.com/api/docs/guides/model-selection); os IDs desta matriz dependem dos catálogos disponíveis na estação.
 
-Modelo e cliente são campos separados. Sonnet via Claude direto pode substituir o transporte AGY após resolver e registrar o ID exato disponível; não tratar o alias sonnet como prova de uma versão específica.
+| Operação | Principal | Fallback da mesma faixa | Quando escalar |
+|---|---|---|---|
+| Inventário, extração, índice, formatação | gemini-3.8-flash-low / AGY | gpt-6-luna medium / Codex | Extração ambígua: Flash medium, com exemplos concretos |
+| Diagnóstico delimitado e revisão comum | grok-4.7-build-fast / Grok | gemini-3.8-flash-medium / AGY; Luna medium se autor for Flash | Hipótese não resolvida com evidências: Grok 4.7 em parecer curto |
+| Pesquisa de código, fixtures, adaptadores e dashboards | gemini-3.8-flash-medium / AGY | grok-4.7-build-fast / Grok | Falha reproduzível persistente: gpt-6.1-sol medium / Codex |
+| Arquitetura, contratos e recuperação de migração | grok-4.7 / Grok, somente parecer delimitado | gpt-6.1-sol medium / Codex, parecer provisório | Fechar M4 requer parecer Grok; executar outra tarefa se indisponível |
+| Implementação crítica em IPC/unsafe/watchdog | gpt-6.1-sol medium / Codex | gemini-3.1-pro-high / AGY | Sol high somente com falha concreta ou risco não resolvido documentado |
+| Revisão crítica de instalação, migração, OTLP ou concorrência | gpt-6.1-sol medium / Codex | claude-sonnet-5-5-medium / AGY | Se Sol for autor, usar Sonnet; aprofundar apenas o ponto sem evidência |
 
-O modelo revisor deve ser diferente do autor. Alterações de Sol são revisadas por Sonnet; alterações de Flash/Sonnet por Sol. Para mudança crítica, quem fez o diagnóstico não pode ser o único revisor. Registrar independência real; outra sessão no mesmo modelo não satisfaz essa regra.
+Catálogos consultados: agy models e grok models em 2026-10-06. AGY lista Flash 3.8 low/medium, Gemini 3.1 Pro high e Sonnet 5.5 medium; o antigo claude-sonnet-4-6 não foi listado e saiu do roteamento. Grok lista grok-4.7-build-fast e grok-4.7; uma segunda consulta confirmou login grok.com após resposta transitória de autenticação. Catálogo/login não comprovam execução de inferência nem capacidade disponível. Revalidar no despacho; nunca substituir silenciosamente o ID solicitado.
 
-gpt-6-astra high é escalada excepcional após duas tentativas com defeito concreto em unsafe/concorrência, latência ou semântica OTLP. Não usar para inventário, redação ou formatação. Falha de quota não justifica escalada de capacidade.
+Modelo e cliente são campos separados. Sonnet via Claude direto pode substituir o transporte AGY após resolver e registrar o ID exato disponível. Não tratar o alias sonnet como prova de versão.
+
+Revisão comum usa modelos diferentes: Flash -> Grok Build Fast; Grok Build Fast -> Flash medium. Revisão crítica usa Sol medium ou Sonnet 5.5 medium, diferente do autor. Quem diagnosticou o defeito não pode ser o único revisor crítico. O coordenador registra aceite e objeções; outra sessão no mesmo modelo não cria independência.
+
+Não despachar Sol high, Astra ou Opus por padrão de milestone. Antes de escalar, corrigir escopo, ferramentas e contrato de evidência; pesquisa baseada apenas em buscas não passa. Exigir arquivos/diffs upstream com commit e caminhos. Reutilizar pesquisa aceita de M3; atualizar somente fontes ou versões que mudaram. Falha de quota troca a subscrição disponível ou suspende a tarefa, sem justificar modelo mais exigente. Após duas tentativas, salvar diagnóstico e criar tarefa menor de escalada; não reiniciar a mesma tarefa em loop.
+
+A revisão documental atual é feita por um escritor, sem novas consultas LLM externas. Os comandos AgentFlow collaboration classify/plan foram consultados sem parâmetros de risco e retornaram bilateral/advisory com defaults; isso não reclassifica a campanha crítica nem certifica autenticação. Antes de cada mudança técnica, classificar com risco e superfície explícitos e aplicar o contrato de revisão acima. O binding automático de cliente não substitui a preferência por AGY/Grok desta matriz.
 
 ## Subscrições e limites de trabalho
 
