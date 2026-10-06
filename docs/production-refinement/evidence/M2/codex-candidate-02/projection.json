@@ -1,0 +1,13 @@
+{
+  "active_sha256": "0a9cc7b86c46c5bb32116fc973b85bc4e84587aea96d795c410e8c2622fad48c",
+  "candidate_sha256": "f15b55003f78f6b67ff9c4efc253e4860183cc72a7b4ade64d7c378bd57f27b9",
+  "candidate_path": "C:\\Users\\samue\\code\\agent-otel-bridge\\target\\codex-projection-6577xi6_\\.codex\\hooks.json",
+  "policy_path": "C:\\Users\\samue\\code\\agent-otel-bridge\\target\\codex-projection-6577xi6_\\.codex\\agent-otel-bridge-policy.json",
+  "changed_json_paths": [
+    "/hooks/PostToolUse/0/hooks/0/command",
+    "/hooks/PreToolUse/0/hooks/0/command",
+    "/hooks/Stop/0/hooks/0/command"
+  ],
+  "active_unchanged": true,
+  "scope": "preview only; three bridge command strings changed; no trust changes"
+}

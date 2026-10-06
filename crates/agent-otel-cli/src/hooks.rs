@@ -4,6 +4,7 @@
  */
 
 use base64::Engine;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -403,6 +404,58 @@ pub fn format_codex_hook_command(
     format_codex_windows_command(&root, binary, event, client_tag)
 }
 
+/// Installer policy, never inferred from the shell running this installer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CodexHookShell {
+    Portable,
+    Powershell,
+}
+
+impl CodexHookShell {
+    pub fn render(
+        self,
+        binary: &str,
+        event: &str,
+        tag: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        if cfg!(windows) && self == Self::Powershell {
+            Ok(format_powershell_hook_command(binary, event, tag))
+        } else {
+            format_codex_hook_command(binary, event, tag)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CodexHookPolicy {
+    version: u32,
+    windows_hook_shell: CodexHookShell,
+}
+
+/// Read bridge-owned metadata only during installation. Codex's configuration
+/// schema and native hook execution need no new fields or file reads.
+pub fn load_codex_hook_shell(
+    policy_path: &Path,
+) -> Result<CodexHookShell, Box<dyn std::error::Error>> {
+    match fs::read_to_string(policy_path) {
+        Ok(raw) => {
+            let policy: CodexHookPolicy = serde_json::from_str(&raw)?;
+            if policy.version != 1 {
+                return Err(format!(
+                    "Unsupported Codex bridge policy version: {}",
+                    policy.version
+                )
+                .into());
+            }
+            Ok(policy.windows_hook_shell)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(CodexHookShell::Portable),
+        Err(err) => Err(err.into()),
+    }
+}
+
 fn format_codex_windows_command(
     system_root: &str,
     binary: &str,
@@ -641,10 +694,15 @@ pub fn install_codex_hooks(
             }
         }
     }
-    // Validate before touching the file. The root is checked once; no shared
-    // process environment mutation is needed to render or test the commands.
+    // A saved choice survives all installer callers, including local install.
+    // Non-Windows rendering ignores this Windows-only station policy.
+    let shell = if cfg!(windows) {
+        load_codex_hook_shell(&path.with_file_name("agent-otel-bridge-policy.json"))?
+    } else {
+        CodexHookShell::Portable
+    };
     let commands = ["PreToolUse", "PostToolUse", "Stop"]
-        .map(|event| format_codex_hook_command(binary, event, client_tag))
+        .map(|event| shell.render(binary, event, client_tag))
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     install_formatted_hooks(
@@ -900,6 +958,7 @@ pub fn run_install(
     println!("Target binary: {}", binary);
 
     let mut installed_any = false;
+    let mut failures = Vec::new();
 
     for adapter in CLIENT_ADAPTERS {
         if !target.matches_adapter(adapter) {
@@ -950,12 +1009,20 @@ pub fn run_install(
                     println!(
                         "  [fail] Failed to install {} hooks: {}",
                         adapter.display_name, e
-                    )
+                    );
+                    failures.push(format!("{}: {e}", adapter.id));
                 }
             }
         }
     }
 
+    if !failures.is_empty() {
+        return Err(format!(
+            "Hook installation incomplete (successful registrations remain applied): {}",
+            failures.join("; ")
+        )
+        .into());
+    }
     if installed_any {
         println!("\nHooks installation complete!");
     } else {
@@ -1201,6 +1268,58 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_policy_is_explicit_and_strict() {
+        let dir = std::env::temp_dir().join(format!("codex_policy_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let policy = dir.join("agent-otel-bridge-policy.json");
+        let hooks = dir.join("hooks.json");
+        assert_eq!(
+            load_codex_hook_shell(&policy).unwrap(),
+            CodexHookShell::Portable
+        );
+        let third = json!({"type":"command","command":"herdr status","timeout":17});
+        fs::write(
+            &hooks,
+            serde_json::to_vec(&json!({"hooks":{"PreToolUse":[{"hooks":[third]}]}})).unwrap(),
+        )
+        .unwrap();
+        let selected = r#"{"version":1,"windows_hook_shell":"powershell"}"#;
+        fs::write(&policy, selected).unwrap();
+        install_codex_hooks(&hooks, "C:/space $&`/agent-hook.exe", Some("codex")).unwrap();
+        let first = fs::read(&hooks).unwrap();
+        install_codex_hooks(&hooks, "C:/space $&`/agent-hook.exe", Some("codex")).unwrap();
+        assert_eq!(first, fs::read(&hooks).unwrap());
+        assert_eq!(fs::read_to_string(&policy).unwrap(), selected);
+        let value: Value = serde_json::from_slice(&first).unwrap();
+        assert_eq!(value["hooks"]["PreToolUse"][0]["hooks"][0], third);
+        let stop = value["hooks"]["Stop"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert_eq!(stop.starts_with("& \""), cfg!(windows));
+        assert!(!stop.contains("EncodedCommand"));
+        for invalid in [
+            "{",
+            r#"{"version":2,"windows_hook_shell":"powershell"}"#,
+            r#"{"version":1,"windows_hook_shell":"cmd"}"#,
+            r#"{"version":1,"windows_hook_shell":"powershell","typo":true}"#,
+            r#"{"version":1}"#,
+        ] {
+            fs::write(&policy, invalid).unwrap();
+            assert!(load_codex_hook_shell(&policy).is_err());
+            if cfg!(windows) {
+                assert!(install_codex_hooks(&hooks, "C:/agent-hook.exe", Some("codex")).is_err());
+                assert_eq!(fs::read(&hooks).unwrap(), first);
+            }
+        }
+        fs::remove_file(&policy).unwrap();
+        fs::create_dir(&policy).unwrap();
+        assert!(load_codex_hook_shell(&policy).is_err());
+        fs::remove_dir(policy).unwrap();
+        fs::remove_file(hooks).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
 
     #[test]
     fn codex_launcher_rejects_unsafe_system_root() {

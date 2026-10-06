@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PostToolUse --client codex",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ".*"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse --client codex",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ".*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" Stop --client codex",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -6,7 +6,7 @@ use agent_otel_bridge::hooks::{
 #[cfg(windows)]
 #[test]
 fn codex_launcher_forwards_stdin_through_cmd_and_powershell() {
-    use agent_otel_bridge::hooks::format_codex_hook_command;
+    use agent_otel_bridge::hooks::CodexHookShell;
     use std::io::Write;
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
@@ -27,11 +27,15 @@ fn codex_launcher_forwards_stdin_through_cmd_and_powershell() {
         .unwrap()
         .success());
     let root = std::env::var("SystemRoot").unwrap();
-    for shell in ["cmd", "powershell"] {
+    for (shell, mode) in [
+        ("cmd", CodexHookShell::Portable),
+        ("powershell", CodexHookShell::Portable),
+        ("powershell", CodexHookShell::Powershell),
+    ] {
         for event in ["PreToolUse", "PostToolUse", "Stop"] {
-            let command =
-                format_codex_hook_command(&fixture.to_string_lossy(), event, Some("codex"))
-                    .unwrap();
+            let command = mode
+                .render(&fixture.to_string_lossy(), event, Some("codex"))
+                .unwrap();
             let mut process = if shell == "cmd" {
                 let mut p = Command::new(format!("{root}\\System32\\cmd.exe"));
                 p.raw_arg(format!("/d /s /c \"{command}\""));
@@ -70,7 +74,7 @@ fn codex_launcher_forwards_stdin_through_cmd_and_powershell() {
             }
             let output = child.wait_with_output().unwrap();
             eprintln!(
-                "Codex launcher {shell}/{event}: {} ms (includes shell startup)",
+                "Codex launcher {shell}/{mode:?}/{event}: {} ms (includes shell startup)",
                 started.elapsed().as_millis()
             );
             assert!(

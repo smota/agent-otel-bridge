@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "windows_hook_shell": "powershell"
+}

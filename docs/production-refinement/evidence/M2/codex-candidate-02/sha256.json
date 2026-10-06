@@ -1,0 +1,34 @@
+[
+  {
+    "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+    "file": ".gitattributes"
+  },
+  {
+    "sha256": "027ca68a44f5b6f08517270303faf35a13e413e8add5f0d3ccefd0ddfdcbf3b4",
+    "file": "agent-otel-bridge-policy.json"
+  },
+  {
+    "sha256": "3beb3982b55e9ea24d8bc2106ccdec815add0f815f4af21697125b5345f08365",
+    "file": "compare.py"
+  },
+  {
+    "sha256": "2af078e66350aeccb84527e67eb7784ed18d413d1d210f2af9e0a6f87e96c8fa",
+    "file": "comparison.json"
+  },
+  {
+    "sha256": "a2bc22ed34a2e54b326bba671b313988ba0375e6dc8e3c2830f80be6e797148d",
+    "file": "preview-portable.json"
+  },
+  {
+    "sha256": "0c51ad84745ff58942e32460ecfba02f624b51c09daf6b442f3ccb63a88b7bae",
+    "file": "preview-powershell.json"
+  },
+  {
+    "sha256": "a6f83d10c89af8ce93abad72645094228fc417890db42a62aa8c169ac48ad1d5",
+    "file": "preview.py"
+  },
+  {
+    "sha256": "e5fa7b936f2c26f3969ac65fbf7220347f429a048765500a3d0845afb336a561",
+    "file": "projection.json"
+  }
+]

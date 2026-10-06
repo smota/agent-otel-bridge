@@ -179,8 +179,19 @@ Follow this strict cycle:
 
 This workflow guarantees that experimental code never breaks background agent daemons until full verification is complete.
 
-## 6. Codex Windows candidate launcher
+## 6. Codex Windows shell policy
 
-Codex can evaluate hooks through its session shell or a CMD fallback. The candidate adapter uses an absolute Windows PowerShell launcher and an encoded script containing the double-quoted canonical native path. It validates SystemRoot as an absolute shell-safe token before writing. Spaced or special-character SystemRoot paths are rejected; CMD and PowerShell are the tested outer shells. Non-Windows rendering remains unchanged. This adds shell startup overhead outside the native client's execution budget; the production-refinement candidate is not approved for station promotion until that overhead is resolved (see docs/production-refinement/evidence/M2/codex-candidate-01.md).
+Codex evaluates hook commands through the session shell, or a CMD fallback. The installer reads a bridge-owned file beside Codex's hooks.json: `agent-otel-bridge-policy.json`. It is not a Codex configuration key and the native client never reads it. The installer preserves this file across updates.
 
-Codex projection decodes owned bridge registrations, updates owned commandWindows overrides, and refuses ambiguous override ownership or malformed configuration without replacing the file. Changed hook definitions require the harness's normal trust review; installers must not write trust approval. Test previews are generated in an isolated home, never over the user's global configuration.
+```json
+{"version": 1, "windows_hook_shell": "powershell"}
+```
+
+- `powershell`: direct call operator and double-quoted canonical executable, using the existing PowerShell escaping. Choose only for Codex sessions whose hook runner uses PowerShell (Windows PowerShell or pwsh). This command is not compatible with a CMD fallback. It adds no nested shell process.
+- `portable`: encoded Windows PowerShell launcher, compatible with the tested CMD and PowerShell outer shells. Also used when the policy file is absent. Its extra shell startup cost is unsuitable for the station's preferred hot path. The absolute SystemRoot must be a safe unquoted token; roots with spaces or metacharacters are rejected before writing.
+
+Unknown versions, modes, fields, malformed JSON and read errors are rejected. The installer does not infer shell policy from its own environment or old command text. Non-Windows projection ignores this Windows-only policy. Changing the Codex session shell requires reviewing this choice; neither mode forces Codex to use a particular interpreter.
+
+Codex projection detects encoded bridge registrations, updates owned commandWindows overrides, and refuses ambiguous ownership or malformed hooks without replacing the file. Failed hook registrations produce a nonzero CLI result; successful registrations for other clients remain applied and are reported as partial work. Changed definitions require Codex's normal trust review; installers must not write trust approval.
+
+[Candidate measurements](production-refinement/evidence/M2/codex-candidate-02.md) separate shell startup from native runtime. Generate previews in an isolated home, review the diff against the active file, and use a scoped projection that preserves third-party hooks. Never replace the global file with a bridge-only sample. Active station validation and Desktop/IDE coverage remain separate acceptance steps.

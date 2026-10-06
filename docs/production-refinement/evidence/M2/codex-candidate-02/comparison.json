@@ -1,0 +1,404 @@
+{
+  "scope": "paired disconnected shell comparison; whole invocation including process startup, not native SLA or Codex E2E",
+  "binary_sha256": "54eeb1f06a1f4cc45cdace664cd86563733b83474fb2e172abccbafaae4097f0",
+  "private_home": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-codex-policy-x0dzttto",
+  "pipe": "\\\\.\\pipe\\aob-policy-absent-9a0f5e0afe934933b048ca9f1aa13ca5",
+  "shells": {
+    "windows-powershell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "codex-pwsh": "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe"
+  },
+  "summary": {
+    "windows-powershell": {
+      "portable": {
+        "n": 9,
+        "min_ms": 2226.79,
+        "median_ms": 2272.55,
+        "max_ms": 2664.88
+      },
+      "powershell": {
+        "n": 9,
+        "min_ms": 954.6,
+        "median_ms": 960.93,
+        "max_ms": 999.66
+      },
+      "median_reduction_percent": 57.7
+    },
+    "codex-pwsh": {
+      "portable": {
+        "n": 9,
+        "min_ms": 1180.01,
+        "median_ms": 1198.78,
+        "max_ms": 1882.42
+      },
+      "powershell": {
+        "n": 9,
+        "min_ms": 193.27,
+        "median_ms": 203.65,
+        "max_ms": 542.6
+      },
+      "median_reduction_percent": 83.0
+    }
+  },
+  "results": [
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "PreToolUse",
+      "repeat": 0,
+      "elapsed_ms": 2664.88,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "PreToolUse",
+      "repeat": 0,
+      "elapsed_ms": 982.27,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "PostToolUse",
+      "repeat": 0,
+      "elapsed_ms": 2544.57,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "PostToolUse",
+      "repeat": 0,
+      "elapsed_ms": 999.66,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "Stop",
+      "repeat": 0,
+      "elapsed_ms": 2600.21,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "Stop",
+      "repeat": 0,
+      "elapsed_ms": 993.54,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "PreToolUse",
+      "repeat": 1,
+      "elapsed_ms": 960.93,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "PreToolUse",
+      "repeat": 1,
+      "elapsed_ms": 2226.79,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "PostToolUse",
+      "repeat": 1,
+      "elapsed_ms": 957.57,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "PostToolUse",
+      "repeat": 1,
+      "elapsed_ms": 2257.52,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "Stop",
+      "repeat": 1,
+      "elapsed_ms": 958.62,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "Stop",
+      "repeat": 1,
+      "elapsed_ms": 2272.55,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "PreToolUse",
+      "repeat": 2,
+      "elapsed_ms": 2275.15,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "PreToolUse",
+      "repeat": 2,
+      "elapsed_ms": 960.75,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "PostToolUse",
+      "repeat": 2,
+      "elapsed_ms": 2237.94,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "PostToolUse",
+      "repeat": 2,
+      "elapsed_ms": 963.63,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "portable",
+      "event": "Stop",
+      "repeat": 2,
+      "elapsed_ms": 2257.11,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "windows-powershell",
+      "mode": "powershell",
+      "event": "Stop",
+      "repeat": 2,
+      "elapsed_ms": 954.6,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "PreToolUse",
+      "repeat": 0,
+      "elapsed_ms": 1882.42,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "PreToolUse",
+      "repeat": 0,
+      "elapsed_ms": 542.6,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "PostToolUse",
+      "repeat": 0,
+      "elapsed_ms": 1565.99,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "PostToolUse",
+      "repeat": 0,
+      "elapsed_ms": 526.63,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "Stop",
+      "repeat": 0,
+      "elapsed_ms": 1575.64,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "Stop",
+      "repeat": 0,
+      "elapsed_ms": 519.95,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "PreToolUse",
+      "repeat": 1,
+      "elapsed_ms": 203.65,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "PreToolUse",
+      "repeat": 1,
+      "elapsed_ms": 1203.02,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "PostToolUse",
+      "repeat": 1,
+      "elapsed_ms": 199.47,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "PostToolUse",
+      "repeat": 1,
+      "elapsed_ms": 1180.01,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "Stop",
+      "repeat": 1,
+      "elapsed_ms": 197.68,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "Stop",
+      "repeat": 1,
+      "elapsed_ms": 1189.33,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "PreToolUse",
+      "repeat": 2,
+      "elapsed_ms": 1180.65,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "PreToolUse",
+      "repeat": 2,
+      "elapsed_ms": 200.12,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "PostToolUse",
+      "repeat": 2,
+      "elapsed_ms": 1198.78,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "PostToolUse",
+      "repeat": 2,
+      "elapsed_ms": 208.96,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "portable",
+      "event": "Stop",
+      "repeat": 2,
+      "elapsed_ms": 1185.83,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    },
+    {
+      "shell": "codex-pwsh",
+      "mode": "powershell",
+      "event": "Stop",
+      "repeat": 2,
+      "elapsed_ms": 193.27,
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true
+    }
+  ]
+}

@@ -133,3 +133,7 @@ Dashboards não inferem produtividade de churn, sucesso de exit 0 ou encerrament
 ### Atualização M2 — candidato e custo de shell
 
 [Candidato01](evidence/M2/codex-candidate-01.md) implementado pelo coordenador após timeout AGY e revisado por Grok. Provas de shells passaram; custo de 1,5–2,6s por hook impede promoção nesta unidade. Próximo passo: reduzir esse custo e definir contrato de shell antes da revisão normal de trust e da sessão real. M2 permanece in_progress. Nenhuma instalação alterada.
+
+### Atualização M2 — política explícita validada
+
+[Candidato02](evidence/M2/codex-candidate-02.md): AGY contribuiu código, Grok orientou desenho; coordenador integrou. Mediana no pwsh caiu de 1199 para 204ms em nove amostras por modo. O modo direto exige PowerShell e remove o shell aninhado. Próxima unidade: projeção escopada, confiança legítima e sessão CLI real com Luna medium. M2 segue aberto; Desktop/IDE e SigNoz não certificados.
