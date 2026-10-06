@@ -1,0 +1,18 @@
+{
+  ".gitattributes": "f3e39ad4a10894c0ca6372268d0ff0803dcdc1c67cd774fdfd638903700a7c38",
+  "agent-receipts.json": "c0ad568d7d00cffd69e896deba4ff9dff63f1a844807489c861db8dcea164cbb",
+  "grok-results.md": "400712627b8eb7a17645fbae0fe977a457398e9d779404487f5b198324d524ae",
+  "grok-review.md": "ca03fb8f5cf67aee6036b5f71c2b800a69d730319d3990060ff63179c32bd1cf",
+  "launcher-probe.py": "8585e6aec33e5c9966ca312ad571a42eb5bcde33854f4be59a35c81ee6e337bd",
+  "probe.py": "d54f52c50561bdfc16da402683c4c2fb2584f351d48ad7a97428b5f66f0512b0",
+  "foreground/decoded-spans.json": "5c419939729db1947f18641bd168dd60a2e2c11fd248390fc36b78bdf657b7e6",
+  "foreground/receipt.json": "2f4283151d45079d7e3f3a350f5d1e4cf83a7839934e52922dcc7fd881267ae8",
+  "foreground/request-02.bin": "1eba08b199af5d7cfb73ae146f89fde7b70b213911ff90b4c3bd6eaf60165b1b",
+  "foreground/stderr.txt": "3b38051fe5dc5dfb3f904bfc28cf183f3e7c5fc320b2cd7a253c71323dd614b2",
+  "foreground/stdout.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "launcher-hook/decoded-spans.json": "5c419939729db1947f18641bd168dd60a2e2c11fd248390fc36b78bdf657b7e6",
+  "launcher-hook/receipt.json": "e3db3890c0c71056fc1bce470c65d3b646080a00434808cbe626b63ab9ecf290",
+  "launcher-hook/request-02.bin": "603cdef30f30e04717c2f84a5439ecbe899d2d4cfafe4be65503780db5520815",
+  "launcher-hook/stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "launcher-hook/stdout.txt": "1ea57a74cab2d8299587cb0ad288b181097afcdeaa65584a86d9f8df377365ac"
+}

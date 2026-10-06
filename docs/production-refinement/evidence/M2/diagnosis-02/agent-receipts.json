@@ -1,0 +1,107 @@
+[
+  {
+    "artifact": "agy-prep",
+    "conversation_id": "81bc5042-2f33-4968-9386-fe031fb0d97b",
+    "status": "SUCCESS",
+    "usage": {
+      "input_tokens": 37368,
+      "output_tokens": 259,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 0,
+      "total_tokens": 37627
+    },
+    "denied_actions": [
+      {
+        "action": "command",
+        "display_name": "RunCommand"
+      }
+    ]
+  },
+  {
+    "artifact": "agy-prep2",
+    "conversation_id": "c94c2bd7-6b6c-4fbf-821f-ba4ee25b114e",
+    "status": "SUCCESS",
+    "usage": {
+      "input_tokens": 15936,
+      "output_tokens": 997,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 0,
+      "total_tokens": 16933
+    },
+    "denied_actions": []
+  },
+  {
+    "artifact": "agy-exec",
+    "conversation_id": "b8b37cd4-d408-47ca-9613-d052caf37b89",
+    "status": "SUCCESS",
+    "usage": {
+      "input_tokens": 37512,
+      "output_tokens": 2327,
+      "thinking_tokens": 1660,
+      "cache_read_tokens": 16431,
+      "total_tokens": 39839
+    },
+    "denied_actions": []
+  },
+  {
+    "artifact": "agy-launcher",
+    "conversation_id": "65664546-80bd-41d8-a1ed-e9393bc15364",
+    "status": "SUCCESS",
+    "usage": {
+      "input_tokens": 31785,
+      "output_tokens": 1085,
+      "thinking_tokens": 673,
+      "cache_read_tokens": 0,
+      "total_tokens": 32870
+    },
+    "denied_actions": []
+  },
+  {
+    "artifact": "grok-review",
+    "session_id": "01a10e9c-cf16-7360-be66-27fac35ff772",
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 16723,
+      "cache_read_input_tokens": 1536,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 5922,
+      "reasoning_tokens": 5210,
+      "total_tokens": 24181
+    },
+    "model_usage": {
+      "grok-4.7-build-fast": {
+        "inputTokens": 16723,
+        "outputTokens": 5922,
+        "cacheReadInputTokens": 1536,
+        "cacheCreationInputTokens": 0,
+        "modelCalls": 1,
+        "costUSD": 0.04742728
+      }
+    },
+    "billing_note": "USD fields are client estimates, not confirmed subscription charges"
+  },
+  {
+    "artifact": "grok-results",
+    "session_id": "01a10ea1-fe77-74f3-879d-055a9e1bef41",
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 15410,
+      "cache_read_input_tokens": 1536,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 3977,
+      "reasoning_tokens": 3349,
+      "total_tokens": 20923
+    },
+    "model_usage": {
+      "grok-4.7-build-fast": {
+        "inputTokens": 15410,
+        "outputTokens": 3977,
+        "cacheReadInputTokens": 1536,
+        "cacheCreationInputTokens": 0,
+        "modelCalls": 1,
+        "costUSD": 0.037706
+      }
+    },
+    "billing_note": "USD fields are client estimates, not confirmed subscription charges"
+  }
+]

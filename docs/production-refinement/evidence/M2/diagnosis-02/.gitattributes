@@ -1,0 +1,2 @@
+# Preserve hashed diagnostic artifacts byte-for-byte across checkouts.
+* -text

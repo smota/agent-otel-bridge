@@ -1,18 +1,18 @@
 # Checkpoint — refinamento de produção
 
-Atualizado: 2026-10-06 (revisão do plano e verificação Git; runtime não revalidado). Fonte do plano: [PLAN.md](PLAN.md).
+Atualizado: 2026-10-06 (M2: duas sondagens isoladas concluídas; estação ativa preservada). Fonte do plano: [PLAN.md](PLAN.md).
 
 ## Posição atual
 
-- Milestones: M0/M1 done; M2 in_progress (tentativa 01 encerrada); M3 in_progress (pesquisa fonte concluída, runbook pendente); M4–M10 pending.
+- Milestones: M0/M1 done; M2 in_progress (tentativa 02 encerrada; integração real pendente); M3 in_progress (pesquisa fonte concluída, runbook pendente); M4–M10 pending.
 - Evidência M1: [inventory-01.md](evidence/M1/inventory-01.md), [aceite](evidence/M1/acceptance.md).
 - Próximos fechamentos: M2 diagnóstico controlado; M3 runbook específico da estação.
 - Branch: docs/production-refinement-milestones.
 - Base observada: a47a9ab (merge da release v0.6.0).
-- Persistência: antes da entrega de 2026-10-06, HEAD 68418c3b5f0aeb5a2797265c15741512176949b6 continha plano e evidências anteriores; a branch ainda não existia em origin e não tinha upstream. Samuel autorizou commit e push da revisão de PLAN.md/CHECKPOINT.md para origin/docs/production-refinement-milestones. Este registro acompanha o commit de entrega; na retomada, comparar git rev-parse HEAD com git ls-remote --heads origin refs/heads/docs/production-refinement-milestones para confirmar o estado remoto, sem inferir sucesso apenas da intenção.
-- Operação externa pendente: nenhuma; nenhum restart, upgrade ou instalação executado. Só leituras/API GET/SELECT, consultas a modelos e arquivos de documentação.
+- Persistência: plano-base 67ef649 confirmado no remoto na entrega anterior. Evidências e checkpoint da tentativa02 preparados para commit/push nesta rodada; reconciliar HEAD com origin/docs/production-refinement-milestones na retomada. A intenção de entrega não substitui verificação remota.
+- Operação externa pendente: nenhuma. Dois processos de teste em ambiente privado foram encerrados e reconciliados; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
 - Registro de encerramento da rodada anterior (2026-09-30; revalidar processos antes de executar): todos os executores encerrados. M1: Luna medium. M2: Sol high. M3: Flash medium via AGY não aceito ([recibo](evidence/M3/research-attempt-01.md)); fallback Sol medium concluiu pesquisa de código ([resultado](evidence/M3/source-research-02.md)). IDs são modelos solicitados; não inferir versão observada quando executor não a expõe.
-- Resultado M2: [diagnosis-01.md](evidence/M2/diagnosis-01.md).
+- Resultado M2: [diagnosis-01.md](evidence/M2/diagnosis-01.md), [tentativa02](evidence/M2/diagnosis-02.md), [contrato](evidence/M2/diagnosis-02-contract.md).
 - Upgrade verificado e lacunas do runbook: [upgrade-path-01.md](evidence/M3/upgrade-path-01.md).
 
 ## Decisões confirmadas com Samuel
@@ -34,14 +34,22 @@ Atualizado: 2026-10-06 (revisão do plano e verificação Git; runtime não reva
 
 Não repetir inventário inteiro na retomada: revalidar somente estado volátil e identidades relevantes à próxima ação.
 
+## Resultado novo de M2 (2026-10-06)
+
+- Sem daemon/pipes na estação; Collector ativo e backend com Codex nativo na última hora. Hashes ativos continuam divergentes do manifesto.
+- Mesmo binário ativo funcionou em foreground e via start isolado. Hook nativo enviou quatro eventos sintéticos; quatro spans decodificados em cada teste, um por cliente. Job/pipe limpos; não comprova integração real dos harnesses.
+- Defeito reproduzido: modelo ausente resulta em provider Google para todos os clientes. Agente correto, provedor fictício; encaminhado a M4/M6.
+- Causa da ausência do daemon normal permanece desconhecida. Não inferir falha de startup, desativação pelo Windows ou correção a partir desses testes.
+
 ## Próxima tarefa concreta
 
-1. AGY / gemini-3.8-flash-low: preparar M2 tentativa02. Revalidar somente hash/build, processos/pipes e variáveis de isolamento suportadas. Salvar comandos propostos, resultado esperado, stdout/stderr previstos e limpeza. Ler docs/local-runtime-contract.md. Nenhum restart, alteração de hook ou instalação nesta preparação.
-2. Grok / grok-4.7-build-fast: revisar em leitura o contrato de isolamento e as hipóteses. Havendo risco não resolvido, obter parecer delimitado grok-4.7; revisão crítica conforme PLAN.md. Não presumir que variável desconhecida isola o binário.
-3. AGY / gemini-3.8-flash-medium: executar somente a receita isolada verificada, registrando intenção, hash, PID/identidade, término, stdout/stderr e limpeza. Se isolamento não for demonstrável, salvar lacuna e avançar M3; não usar a instalação ativa como fallback.
-4. Alternativa independente M3: AGY / gemini-3.8-flash-medium completa runbook da estação (gerador/customizações do Compose, pareamento de imagens, backup consistente, restauração e comandos). Grok Build Fast confere fontes; Grok 4.7 revisa riscos da migração. Reutilizar a pesquisa aceita, revalidando versões voláteis.
+1. AGY / gemini-3.8-flash-low: desenhar teste de uma sessão AGY real com daemon privado supervisionado, herança de pipe e evento marcado inofensivo. Preservar hooks e autenticação; não copiar credenciais para evidência. Separar superfície CLI de IDE/Desktop.
+2. Grok / grok-4.7-build-fast revisa a receita; AGY / gemini-3.8-flash-medium executa somente com isolamento verificável. Salvar contrato, resultado e cleanup antes de avançar aos demais clientes.
+3. Repetir por Grok (guarda Claude/importação), Claude e Codex com modelos econômicos disponíveis. Medir eventos reais e atribuição; não usar exit0 do hook como prova de entrega.
+4. Investigar lifecycle no ambiente normal como unidade separada: stdout/stderr e ambiente efetivo no login, sem remover isolamento ou reinstalar por tentativa. O teste com home vazio não cobre providers/configurações reais.
+5. M3 independente: completar runbook WSL com Flash medium; Grok revisa fontes e riscos. Reutilizar pesquisa aceita e revalidar versão alvo antes do ensaio.
 
-Antes de cada despacho, salvar contrato e modelo; uma tarefa e um auxiliar por vez, até duas tentativas. Falha de subscrição usa fallback da matriz ou waiting_capacity. Não iniciar implementação com base apenas nesta revisão documental.
+Uma tarefa e um auxiliar por vez; no máximo duas tentativas por unidade. Não fechar M2 antes da matriz real. Nenhuma correção de produto foi implementada nesta rodada.
 
 ## Revisão econômica de 2026-10-06
 

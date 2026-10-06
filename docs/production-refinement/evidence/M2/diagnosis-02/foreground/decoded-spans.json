@@ -1,0 +1,94 @@
+[
+  {
+    "trace_id": "99af4fc4013f19b37b2d8f238b1bc3a9",
+    "span_id": "b8074ba39ed80959",
+    "name": "execute_tool read_file",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "m2-synthetic-antigravity",
+      "gen_ai.tool.name": "read_file",
+      "gen_ai.tool.call.id": "m2-antigravity",
+      "agent.execution.mode": "interactive",
+      "agent.tool.archetype": "generic_exec",
+      "agent.tool.binary": "read_file",
+      "capability.kind": "native",
+      "capability.namespace": "core",
+      "capability.name": "read_file",
+      "agent.context.state": "missing",
+      "agent.context.source": "none"
+    }
+  },
+  {
+    "trace_id": "dcbe8d3801a4af362eaf393aa882dafc",
+    "span_id": "fd7c87835860d2ac",
+    "name": "execute_tool read_file",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "claude-code",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "m2-synthetic-claude",
+      "gen_ai.tool.name": "read_file",
+      "gen_ai.tool.call.id": "m2-claude",
+      "agent.execution.mode": "interactive",
+      "agent.tool.archetype": "generic_exec",
+      "agent.tool.binary": "read_file",
+      "capability.kind": "native",
+      "capability.namespace": "core",
+      "capability.name": "read_file",
+      "agent.context.state": "missing",
+      "agent.context.source": "none"
+    }
+  },
+  {
+    "trace_id": "662aa170916499e9e4340dd05335a84e",
+    "span_id": "eb8beb25daf2bc9f",
+    "name": "execute_tool read_file",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "m2-synthetic-codex",
+      "gen_ai.tool.name": "read_file",
+      "gen_ai.tool.call.id": "m2-codex",
+      "agent.execution.mode": "interactive",
+      "agent.tool.archetype": "generic_exec",
+      "agent.tool.binary": "read_file",
+      "capability.kind": "native",
+      "capability.namespace": "core",
+      "capability.name": "read_file",
+      "agent.context.state": "missing",
+      "agent.context.source": "none"
+    }
+  },
+  {
+    "trace_id": "821df0a9b883310408830d27899c087a",
+    "span_id": "121d62e0abe8aa13",
+    "name": "execute_tool read_file",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "grok",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "m2-synthetic-grok",
+      "gen_ai.tool.name": "read_file",
+      "gen_ai.tool.call.id": "m2-grok",
+      "agent.execution.mode": "interactive",
+      "agent.tool.archetype": "generic_exec",
+      "agent.tool.binary": "read_file",
+      "capability.kind": "native",
+      "capability.namespace": "core",
+      "capability.name": "read_file",
+      "agent.context.state": "missing",
+      "agent.context.source": "none"
+    }
+  }
+]

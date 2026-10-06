@@ -1,0 +1,69 @@
+{
+  "started_utc": "2026-10-06T00:31:44Z",
+  "exe": "C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-otel-bridge.exe",
+  "sha256": "24c73837129c674d80df727b85d04915952fc9c73b9bffb451e6a531497c6e9d",
+  "supervisor_pid": 61084,
+  "pipe": "\\\\.\\pipe\\agent-otel-m2-d21273e7d277403a93f0d7a852da8e64",
+  "endpoint": "http://127.0.0.1:54461",
+  "env": {
+    "SystemRoot": "C:\\Windows",
+    "WINDIR": "C:\\Windows",
+    "PATH": "C:\\Windows\\System32",
+    "USERPROFILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\USERPROFILE",
+    "HOME": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\HOME",
+    "LOCALAPPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\LOCALAPPDATA",
+    "APPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\APPDATA",
+    "TEMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\TEMP",
+    "TMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\TMP",
+    "AGENT_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-d21273e7d277403a93f0d7a852da8e64",
+    "AGY_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-d21273e7d277403a93f0d7a852da8e64",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:54461",
+    "OTEL_SERVICE_NAME": "agent-otel-m2-isolated",
+    "AGENT_OTEL_IDLE_TIMEOUT_SECS": "120",
+    "AGENT_OTEL_QUOTA_INTERVAL_SECS": "60",
+    "AGENT_OTEL_QUOTA_FILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab\\absent-quota.json"
+  },
+  "run": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-20261006\\probe-4c4cd8e3ab",
+  "requests": [
+    {
+      "path": "/v1/metrics",
+      "bytes": 2895,
+      "sha256": "8ea993a9442bd72eafe82f988c8433119cb3ac2a9b8a715834aef96c9397631e",
+      "file": "request-00.bin"
+    },
+    {
+      "path": "/v1/metrics",
+      "bytes": 2895,
+      "sha256": "68508ee3269b49ade1cb76f2a0ffdb89ef2da19479b9cb48e3a3252257b7edb1",
+      "file": "request-01.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 3123,
+      "sha256": "1eba08b199af5d7cfb73ae146f89fde7b70b213911ff90b4c3bd6eaf60165b1b",
+      "file": "request-02.bin"
+    },
+    {
+      "path": "/v1/metrics",
+      "bytes": 2895,
+      "sha256": "70f26d8cae17f1a99ce9e263ed70fe2cd9b81e4b7dabaace4f4e69ec476eaabb",
+      "file": "request-03.bin"
+    }
+  ],
+  "stage": "exited",
+  "pid": 59136,
+  "pipes_after_start": [
+    "agent-otel-m2-d21273e7d277403a93f0d7a852da8e64"
+  ],
+  "pipe_owner_pid": 59136,
+  "sent_clients": [
+    "antigravity",
+    "claude",
+    "codex",
+    "grok"
+  ],
+  "tcp_sample": [],
+  "shutdown_sent": true,
+  "exit_code": 0,
+  "pipes_after_cleanup": []
+}
