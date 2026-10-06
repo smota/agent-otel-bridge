@@ -137,3 +137,7 @@ Dashboards não inferem produtividade de churn, sucesso de exit 0 ou encerrament
 ### Atualização M2 — política explícita validada
 
 [Candidato02](evidence/M2/codex-candidate-02.md): AGY contribuiu código, Grok orientou desenho; coordenador integrou. Mediana no pwsh caiu de 1199 para 204ms em nove amostras por modo. O modo direto exige PowerShell e remove o shell aninhado. Próxima unidade: projeção escopada, confiança legítima e sessão CLI real com Luna medium. M2 segue aberto; Desktop/IDE e SigNoz não certificados.
+
+### Atualização M2 — projeção aplicada
+
+[Aplicação escopada](evidence/M2/codex-activation-01.md) concluída com backup, preservação de terceiros e binários inalterados. Três hooks bridge agora modified no Codex; próxima ação externa é revisão humana em /hooks. Após confiança confirmada por consulta, executar uma sessão Luna medium com receptor privado. Não repetir consultas inferenciais de arquitetura ou implementação para esta aplicação já validada. M2 permanece aberto.

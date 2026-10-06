@@ -1,6 +1,6 @@
 # Checkpoint — refinamento de produção
 
-Atualizado: 2026-10-06 (M2: política explícita de shell; latência pwsh reduzida 83% na amostra). Fonte do plano: [PLAN.md](PLAN.md).
+Atualizado: 2026-10-06 (M2: três comandos Codex aplicados; revisão humana de confiança pendente). Fonte do plano: [PLAN.md](PLAN.md).
 
 ## Posição atual
 
@@ -9,8 +9,8 @@ Atualizado: 2026-10-06 (M2: política explícita de shell; latência pwsh reduzi
 - Próximos fechamentos: M2 diagnóstico dos hooks Codex e lifecycle Grok; M3 runbook da estação.
 - Branch: docs/production-refinement-milestones.
 - Base observada: a47a9ab (merge da release v0.6.0).
-- Persistência: 423d838 era a base desta rodada; candidato02, testes e evidências preparados para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
-- Operação externa pendente: nenhuma. Na unidade CLI anterior, cinco sessões supervisionadas (AGY, Grok, Claude e duas tentativas Codex) foram encerradas e reconciliadas; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
+- Persistência: 9044f1e confirmado no remoto antes da aplicação escopada. Recibos desta aplicação preparados para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
+- Operação externa pendente: Samuel revisar os três hooks bridge modificados em /hooks no Codex CLI. Comandos e política aplicados com backup; binários preservados. Consulta read-only encerrada; nenhum teste inferencial ou daemon de teste ativo.
 - Registro de encerramento da rodada anterior (2026-09-30; revalidar processos antes de executar): todos os executores encerrados. M1: Luna medium. M2: Sol high. M3: Flash medium via AGY não aceito ([recibo](evidence/M3/research-attempt-01.md)); fallback Sol medium concluiu pesquisa de código ([resultado](evidence/M3/source-research-02.md)). IDs são modelos solicitados; não inferir versão observada quando executor não a expõe.
 - Resultado CLI real: [real-cli-01.md](evidence/M2/real-cli-01.md), [contrato](evidence/M2/agy-real-01-contract.md).
 - Resultado M2: [diagnosis-01.md](evidence/M2/diagnosis-01.md), [tentativa02](evidence/M2/diagnosis-02.md), [contrato](evidence/M2/diagnosis-02-contract.md).
@@ -67,8 +67,8 @@ Não repetir inventário inteiro na retomada: revalidar somente estado volátil 
 
 ## Próxima tarefa concreta
 
-1. Preparar aplicação escopada do [candidato02](evidence/M2/codex-candidate-02.md): política powershell explícita, mediana pwsh 1199→204ms (-83%). Projeção completa em target altera somente três comandos e preserva terceiros. Revalidar shell da superfície CLI, backup/hashes e revisão normal de trust antes da sessão real. Grok Build Fast low para dúvida delimitada; Codex CLI gpt-5.6-luna medium para prova real. Sem trust automático.
-2. Sessão real: três hooks failed/exit1, ferramenta exit0. Reprodução PowerShell: strings atuais falham; prefixo & envia três spans. Fonte da versão usa shell do ambiente local. Notificação real não expõe stderr/argv: não confundir reprodução com captura interna. Após candidato, tratar mudança de hash via revisão normal de confiança e provar sessão real; sem bypass.
+1. [Projeção aplicada](evidence/M2/codex-activation-01.md): política powershell e três comandos, com backup e terceiros preservados. Codex reportou todos os três como modified. Aguardar Samuel revisar em /hooks; depois consultar hashes/trust novamente e executar uma sessão Codex CLI gpt-5.6-luna medium no receptor privado. Sem trust automático e sem repetir aplicação. Binários ativos continuam os anteriores; não usar instalador0.5.2 para reprojetar hooks.
+2. Evidência anterior à aplicação: três hooks failed/exit1, ferramenta exit0. Reprodução PowerShell: strings antigas falham; prefixo & envia três spans. Fonte da versão usa shell do ambiente local. Notificação real não expõe stderr/argv: não confundir reprodução com captura interna. Ainda falta provar sessão real com os comandos aplicados e confiança revisada.
 3. Grok: localizar os dois Stop da mesma sessão e provar supressão do hook Claude importado. Capturar somente IDs/tipos/flags necessários, sem conteúdo de prompts.
 4. M4/M6: corrigir semântica de provider desconhecido e mapear tool IDs após verificar payloads reais; sem correção semântica implementada ainda.
 5. Investigar persistência normal do daemon e, depois dos contratos/correções, validar até SigNoz e superfícies Desktop/IDE. M3 runbook WSL continua independente.
@@ -102,3 +102,10 @@ O commit 68418c3 já inclui BUG_REPORT_AGY_WEBCHANNEL.md e mudanças de .gitigno
 - AGY Flash medium entregou proposta de código; coordenador integrou e verificou. Grok Build Fast low orientou arquitetura. Duas consultas via subscrição, encerradas.
 - Política preservada em reinstalação, erros explícitos, sem leitura de disco no cliente nativo. 36 invocações sintéticas passaram; instalação e trust inalterados.
 - Cargo guardrails passou (64,0s após build): fmt, Clippy, workspace tests, conformance, docs e cliente 152576 bytes. Nenhum daemon ou harness inferencial iniciado nesta unidade.
+
+## Aplicação Codex — aguardando revisão humana
+
+- Base remota verificada: 9044f1e; esta unidade registra a aplicação e sua pendência. Reconciliar HEAD/remoto na retomada.
+- Três comandos globais e política explícita aplicados; configuração de confiança e binários preservados. Recibos e backup em [codex-activation-01](evidence/M2/codex-activation-01.md).
+- hooks/list exit0, quatro hooks encontrados, três bridge modified; nenhum processo de teste remanescente. Nenhum turno de modelo realizado nesta unidade.
+- A pendência externa agora é a revisão de Samuel em /hooks. Declarações de instalação totalmente preservada acima descrevem rodadas anteriores. Não atestam o estado após esta aplicação escopada.
