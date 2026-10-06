@@ -1,0 +1,46 @@
+[
+  {
+    "trace_id": "4d17f73e45eb48d234618113fd0ef4b1",
+    "span_id": "8811fae1975e55a2",
+    "name": "execute_tool Bash",
+    "attributes": {
+      "gen_ai.provider.name": "openai",
+      "gen_ai.system": "openai",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "01a10f85-7b17-7420-bcd5-be0301939051",
+      "gen_ai.request.model": "gpt-5.6-luna",
+      "gen_ai.tool.name": "Bash",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "4d17f73e45eb48d234618113fd0ef4b1",
+    "span_id": "6b329d39209d91fa",
+    "name": "execute_tool Bash",
+    "attributes": {
+      "gen_ai.provider.name": "openai",
+      "gen_ai.system": "openai",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "PostToolUse",
+      "gen_ai.conversation.id": "01a10f85-7b17-7420-bcd5-be0301939051",
+      "gen_ai.request.model": "gpt-5.6-luna",
+      "gen_ai.tool.name": "Bash",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "4d17f73e45eb48d234618113fd0ef4b1",
+    "span_id": "3889608cd8884b90",
+    "name": "agent.stop",
+    "attributes": {
+      "gen_ai.provider.name": "openai",
+      "gen_ai.system": "openai",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "Stop",
+      "gen_ai.conversation.id": "01a10f85-7b17-7420-bcd5-be0301939051",
+      "gen_ai.request.model": "gpt-5.6-luna",
+      "agent.context.state": "missing"
+    }
+  }
+]

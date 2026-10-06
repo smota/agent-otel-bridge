@@ -141,3 +141,9 @@ Dashboards não inferem produtividade de churn, sucesso de exit 0 ou encerrament
 ### Atualização M2 — projeção aplicada
 
 [Aplicação escopada](evidence/M2/codex-activation-01.md) concluída com backup, preservação de terceiros e binários inalterados. Três hooks bridge agora modified no Codex; próxima ação externa é revisão humana em /hooks. Após confiança confirmada por consulta, executar uma sessão Luna medium com receptor privado. Não repetir consultas inferenciais de arquitetura ou implementação para esta aplicação já validada. M2 permanece aberto.
+
+### Atualização M2 — Codex real aprovado e revisão de lifecycle
+
+[Prova real02](evidence/M2/codex-real-02.md): trust confirmado, três hooks concluídos e três spans na mesma sessão/trace. Uma chamada Luna medium no Codex0.160.1; receptor privado, sem aceite SigNoz/Desktop/IDE. Próxima unidade é lifecycle Grok e depois persistência do daemon.
+
+A [discussão de cobertura](LIFECYCLE-REVIEW.md) solicitada por Samuel é entrada obrigatória de M4: SubagentStart/SubagentStop, SessionStart/SessionEnd, Stop e interrupções. Coletar suporte e payloads em M2; Grok define contrato em M4; AGY implementa em M6; dashboards M5/M8 dependem da semântica e da prova de cobertura. A configuração não foi ampliada nesta rodada.

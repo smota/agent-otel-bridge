@@ -1,0 +1,69 @@
+{
+  "started_utc": "2026-10-06T04:42:40Z",
+  "exe_sha256": "9e7c59c05cc1ce5677b1f94e835b2ac038ca3be14504e78d558eacdb0ea3f55d",
+  "config_before": {
+    "hooks.json": "f15b55003f78f6b67ff9c4efc253e4860183cc72a7b4ade64d7c378bd57f27b9",
+    "config.toml": "e2cf213e2fbba9704048710e78b095cb602a24ec37588ee863adf5d00df954c8"
+  },
+  "mode": "inherited environment",
+  "methods": [
+    "initialize",
+    "initialized",
+    "hooks/list"
+  ],
+  "pid": 18100,
+  "initialized": true,
+  "entries": [
+    {
+      "cwd": "C:\\Users\\samue\\code\\agent-otel-bridge",
+      "errors": [],
+      "warnings": [],
+      "total_hook_count": 4,
+      "bridge_hooks": [
+        {
+          "eventName": "preToolUse",
+          "enabled": true,
+          "trustStatus": "trusted",
+          "currentHash": "sha256:fbedfbaa65849220515022c368346ee85fa03ff4e055738ac3aa6048ce822b90",
+          "key": "C:\\Users\\samue\\.codex\\hooks.json:pre_tool_use:0:0",
+          "source": "user",
+          "sourcePath": "C:\\Users\\samue\\.codex\\hooks.json",
+          "matcher": ".*",
+          "command": "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse --client codex",
+          "timeoutSec": 5
+        },
+        {
+          "eventName": "postToolUse",
+          "enabled": true,
+          "trustStatus": "trusted",
+          "currentHash": "sha256:85f2c214006823959bd5fd4b4a641097d7248d0312e4ca496dcc812e1e29a56a",
+          "key": "C:\\Users\\samue\\.codex\\hooks.json:post_tool_use:0:0",
+          "source": "user",
+          "sourcePath": "C:\\Users\\samue\\.codex\\hooks.json",
+          "matcher": ".*",
+          "command": "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PostToolUse --client codex",
+          "timeoutSec": 5
+        },
+        {
+          "eventName": "stop",
+          "enabled": true,
+          "trustStatus": "trusted",
+          "currentHash": "sha256:56aae8310c618ab1d852af10ff2ae7ef85618863f019dbc1ca9753096e62f3d2",
+          "key": "C:\\Users\\samue\\.codex\\hooks.json:stop:0:0",
+          "source": "user",
+          "sourcePath": "C:\\Users\\samue\\.codex\\hooks.json",
+          "matcher": null,
+          "command": "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" Stop --client codex",
+          "timeoutSec": 5
+        }
+      ]
+    }
+  ],
+  "exit_code": 0,
+  "alive_after": false,
+  "config_after": {
+    "hooks.json": "f15b55003f78f6b67ff9c4efc253e4860183cc72a7b4ade64d7c378bd57f27b9",
+    "config.toml": "e2cf213e2fbba9704048710e78b095cb602a24ec37588ee863adf5d00df954c8"
+  },
+  "config_unchanged": true
+}
