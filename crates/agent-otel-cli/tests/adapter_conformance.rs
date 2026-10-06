@@ -5,6 +5,94 @@ use agent_otel_bridge::hooks::{
 
 #[cfg(windows)]
 #[test]
+fn codex_launcher_forwards_stdin_through_cmd_and_powershell() {
+    use agent_otel_bridge::hooks::format_codex_hook_command;
+    use std::io::Write;
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let dir = std::env::temp_dir().join(format!("codex_shell_fixture_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = dir.join("fixture.rs");
+    let fixture = dir.join("agent-hook space $&`%!.exe");
+    // Assert the complete input, including newlines and Unicode, inside the
+    // native child. Only the hook JSON response is allowed on stdout.
+    std::fs::write(&source, r#"use std::io::{self,Read}; fn main(){let mut s=String::new();io::stdin().read_to_string(&mut s).unwrap();assert_eq!(s,"{\n\"marker\":\"ação\"\n}");let a:Vec<_>=std::env::args().skip(1).collect();assert_eq!(&a[1..], &["--client", "codex"]);assert!(["PreToolUse","PostToolUse","Stop"].contains(&a[0].as_str()));print!("{{}}");}"#).unwrap();
+    assert!(Command::new("rustc")
+        .arg(&source)
+        .arg("-o")
+        .arg(&fixture)
+        .status()
+        .unwrap()
+        .success());
+    let root = std::env::var("SystemRoot").unwrap();
+    for shell in ["cmd", "powershell"] {
+        for event in ["PreToolUse", "PostToolUse", "Stop"] {
+            let command =
+                format_codex_hook_command(&fixture.to_string_lossy(), event, Some("codex"))
+                    .unwrap();
+            let mut process = if shell == "cmd" {
+                let mut p = Command::new(format!("{root}\\System32\\cmd.exe"));
+                p.raw_arg(format!("/d /s /c \"{command}\""));
+                p
+            } else {
+                let mut p = Command::new(format!(
+                    "{root}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+                ));
+                p.args(["-NoProfile", "-NonInteractive", "-Command", &command]);
+                p
+            };
+            let started = Instant::now();
+            let mut child = process
+                .env("PATH", "")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all("{\n\"marker\":\"ação\"\n}".as_bytes())
+                .unwrap();
+            while child.try_wait().unwrap().is_none() {
+                if started.elapsed() > Duration::from_secs(5) {
+                    // Kill the owned process tree, including the nested launcher.
+                    let _ = Command::new(format!("{root}\\System32\\taskkill.exe"))
+                        .args(["/PID", &child.id().to_string(), "/T", "/F"])
+                        .output();
+                    let _ = child.wait();
+                    panic!("{shell}/{event}: fixture timed out");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let output = child.wait_with_output().unwrap();
+            eprintln!(
+                "Codex launcher {shell}/{event}: {} ms (includes shell startup)",
+                started.elapsed().as_millis()
+            );
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "{}");
+            assert!(output.stderr.is_empty());
+        }
+    }
+    let pdb = fixture.with_extension("pdb");
+    std::fs::remove_file(fixture).unwrap();
+    std::fs::remove_file(source).unwrap();
+    if pdb.exists() {
+        std::fs::remove_file(pdb).unwrap();
+    }
+    std::fs::remove_dir(dir).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
 fn claude_renderer_survives_git_bash_when_installed() {
     use agent_otel_bridge::hooks::format_claude_hook_command;
     use std::process::{Command, Stdio};

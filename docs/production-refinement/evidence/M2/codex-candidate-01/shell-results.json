@@ -1,0 +1,81 @@
+{
+  "scope": "isolated candidate installer and disconnected native hook; no Codex turn or OTLP delivery",
+  "native_binary": "C:\\Users\\samue\\code\\agent-otel-bridge\\target\\release\\agent-hook.exe",
+  "native_sha256": "54eeb1f06a1f4cc45cdace664cd86563733b83474fb2e172abccbafaae4097f0",
+  "private_home": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-codex-candidate-2cxudbx7",
+  "pipe": "\\\\.\\pipe\\aob-candidate-absent-52c92846318540a7a768d4e3f35a6ec0",
+  "results": [
+    {
+      "shell": "cmd",
+      "event": "PostToolUse",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 1614
+    },
+    {
+      "shell": "cmd",
+      "event": "PreToolUse",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 1654
+    },
+    {
+      "shell": "cmd",
+      "event": "Stop",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 1599
+    },
+    {
+      "shell": "powershell",
+      "event": "PostToolUse",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 2544
+    },
+    {
+      "shell": "powershell",
+      "event": "PreToolUse",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 2550
+    },
+    {
+      "shell": "powershell",
+      "event": "Stop",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 2572
+    },
+    {
+      "shell": "pwsh",
+      "event": "PostToolUse",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 1852
+    },
+    {
+      "shell": "pwsh",
+      "event": "PreToolUse",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 1514
+    },
+    {
+      "shell": "pwsh",
+      "event": "Stop",
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr_empty": true,
+      "elapsed_ms": 1585
+    }
+  ]
+}

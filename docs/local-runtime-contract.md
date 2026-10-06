@@ -178,3 +178,9 @@ Follow this strict cycle:
 ```
 
 This workflow guarantees that experimental code never breaks background agent daemons until full verification is complete.
+
+## 6. Codex Windows candidate launcher
+
+Codex can evaluate hooks through its session shell or a CMD fallback. The candidate adapter uses an absolute Windows PowerShell launcher and an encoded script containing the double-quoted canonical native path. It validates SystemRoot as an absolute shell-safe token before writing. Spaced or special-character SystemRoot paths are rejected; CMD and PowerShell are the tested outer shells. Non-Windows rendering remains unchanged. This adds shell startup overhead outside the native client's execution budget; the production-refinement candidate is not approved for station promotion until that overhead is resolved (see docs/production-refinement/evidence/M2/codex-candidate-01.md).
+
+Codex projection decodes owned bridge registrations, updates owned commandWindows overrides, and refuses ambiguous override ownership or malformed configuration without replacing the file. Changed hook definitions require the harness's normal trust review; installers must not write trust approval. Test previews are generated in an isolated home, never over the user's global configuration.

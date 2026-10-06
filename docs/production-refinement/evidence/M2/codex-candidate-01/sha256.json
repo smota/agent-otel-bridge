@@ -1,0 +1,18 @@
+[
+  {
+    "file": ".gitattributes",
+    "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
+  },
+  {
+    "file": "hooks-preview.json",
+    "sha256": "a2bc22ed34a2e54b326bba671b313988ba0375e6dc8e3c2830f80be6e797148d"
+  },
+  {
+    "file": "shell-probe.py",
+    "sha256": "3bd7d787410fd72ad3216c8b8a386c995a52e00f737b332823708ef6c935d1e2"
+  },
+  {
+    "file": "shell-results.json",
+    "sha256": "5b28de9aaa987ccb7ad7523eb7c695f5217033f926a81cbc22ccd6613a4746e1"
+  }
+]

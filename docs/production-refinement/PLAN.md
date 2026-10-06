@@ -129,3 +129,7 @@ Dashboards não inferem produtividade de churn, sucesso de exit 0 ou encerrament
 ### Atualização M2 — execução dos hooks Codex
 
 [Diagnóstico](evidence/M2/codex-execution-01.md): eventos reais expõem falha exit1 dos três hooks; reprodução PowerShell confirma incompatibilidade do comando atual e entrega sintética com operador de chamada. Próxima entrega: candidato do adaptador com seleção de shell explícita, preservação de terceiros e revisão normal de confiança após mudança do hash. AGY Flash medium implementa, Grok Build Fast low revisa; sessão Luna medium somente depois da validação do candidato. Não fechar M2 nem declarar instalação corrigida antes da prova real.
+
+### Atualização M2 — candidato e custo de shell
+
+[Candidato01](evidence/M2/codex-candidate-01.md) implementado pelo coordenador após timeout AGY e revisado por Grok. Provas de shells passaram; custo de 1,5–2,6s por hook impede promoção nesta unidade. Próximo passo: reduzir esse custo e definir contrato de shell antes da revisão normal de trust e da sessão real. M2 permanece in_progress. Nenhuma instalação alterada.

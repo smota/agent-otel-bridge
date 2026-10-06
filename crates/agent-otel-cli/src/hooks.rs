@@ -231,13 +231,14 @@ pub const CLIENT_ADAPTERS: &[ClientAdapter] = &[
         workspace_markers: &[".codex"],
         global_config_fn: || get_codex_config_path(false),
         project_config_fn: get_codex_project_path,
-        install_fn: install_standard_hooks,
+        install_fn: install_codex_hooks,
         uninstall_fn: uninstall_standard_hooks,
         is_registered_fn: |path| {
             path.exists()
                 && fs::read_to_string(path)
-                    .map(|s| s.contains("agent-hook") || s.contains("agent-otel-bridge"))
-                    .unwrap_or(false)
+                    .ok()
+                    .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                    .is_some_and(|value| has_bridge_command(&value))
         },
     },
     ClientAdapter {
@@ -385,6 +386,47 @@ pub fn format_grok_hook_command(binary: &str, event: &str, client_tag: Option<&s
     } else {
         format_hook_command(binary, event, client_tag)
     }
+}
+
+/// Codex uses the session shell (PowerShell on this station), or CMD as fallback.
+/// A quote-free, absolute launcher token works in both; encode the native path
+/// and its arguments so the outer interpreter cannot expand them.
+pub fn format_codex_hook_command(
+    binary: &str,
+    event: &str,
+    client_tag: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if !cfg!(windows) {
+        return Ok(format_hook_command(binary, event, client_tag));
+    }
+    let root = std::env::var("SystemRoot")?;
+    format_codex_windows_command(&root, binary, event, client_tag)
+}
+
+fn format_codex_windows_command(
+    system_root: &str,
+    binary: &str,
+    event: &str,
+    client_tag: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let root = system_root.replace('\\', "/");
+    let bytes = root.as_bytes();
+    if bytes.len() < 3
+        || !bytes[0].is_ascii_alphabetic()
+        || &bytes[1..3] != b":/"
+        || !bytes[3..]
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'-'))
+    {
+        return Err(
+            "Codex hooks require a token-safe absolute SystemRoot; configuration unchanged".into(),
+        );
+    }
+    let script = format_powershell_hook_command(binary, event, client_tag);
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let root = root.replace('/', "\\");
+    Ok(format!("{root}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -EncodedCommand {encoded}"))
 }
 
 pub fn format_antigravity_hook_command(
@@ -543,6 +585,7 @@ pub fn uninstall_antigravity_hooks(path: &Path) -> Result<bool, Box<dyn std::err
     Ok(false)
 }
 
+#[allow(dead_code)] // Retained public compatibility entry point.
 pub fn install_standard_hooks(
     path: &Path,
     binary: &str,
@@ -556,6 +599,77 @@ fn install_hooks_with_command_formatter(
     binary: &str,
     client_tag: Option<&str>,
     formatter: fn(&str, &str, Option<&str>) -> String,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    install_formatted_hooks(path, binary, client_tag, formatter, false)
+}
+
+pub fn install_codex_hooks(
+    path: &Path,
+    binary: &str,
+    client_tag: Option<&str>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if path.exists() {
+        // Unlike a missing file, unreadable/invalid configuration must never
+        // turn into an empty document and erase the user's other hooks.
+        let root: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+        if !root.is_object() || root.get("hooks").is_some_and(|v| !v.is_object()) {
+            return Err("Invalid Codex hook configuration; configuration unchanged".into());
+        }
+        for event in ["PreToolUse", "PostToolUse", "Stop"] {
+            if let Some(groups) = root.get("hooks").and_then(|h| h.get(event)) {
+                let groups = groups.as_array().ok_or("Invalid Codex hook event array")?;
+                for group in groups {
+                    let hooks = group
+                        .get("hooks")
+                        .and_then(Value::as_array)
+                        .ok_or("Invalid Codex hook group")?;
+                    for hook in hooks {
+                        if cfg!(windows)
+                            && hook
+                                .get("commandWindows")
+                                .and_then(Value::as_str)
+                                .is_some_and(is_bridge_command)
+                            && !hook
+                                .get("command")
+                                .and_then(Value::as_str)
+                                .is_some_and(is_bridge_command)
+                        {
+                            return Err("Codex Windows-only bridge override requires ownership review; configuration unchanged".into());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Validate before touching the file. The root is checked once; no shared
+    // process environment mutation is needed to render or test the commands.
+    let commands = ["PreToolUse", "PostToolUse", "Stop"]
+        .map(|event| format_codex_hook_command(binary, event, client_tag))
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    install_formatted_hooks(
+        path,
+        binary,
+        client_tag,
+        |_, event, _| {
+            commands[match event {
+                "PreToolUse" => 0,
+                "PostToolUse" => 1,
+                "Stop" => 2,
+                _ => unreachable!("standard hook event"),
+            }]
+            .clone()
+        },
+        cfg!(windows),
+    )
+}
+
+fn install_formatted_hooks(
+    path: &Path,
+    binary: &str,
+    client_tag: Option<&str>,
+    formatter: impl Fn(&str, &str, Option<&str>) -> String,
+    codex_windows: bool,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -612,6 +726,16 @@ fn install_hooks_with_command_formatter(
                             .map(is_bridge_command)
                             .unwrap_or(false);
                         if is_bridge {
+                            if codex_windows {
+                                if let Some(command) = h.get("commandWindows") {
+                                    if !command.as_str().is_some_and(is_bridge_command) {
+                                        return Err("Codex bridge hook has an unowned commandWindows override; configuration unchanged".into());
+                                    }
+                                    // Codex prioritizes this field. Do not leave
+                                    // an old bridge command overriding the fix.
+                                    h["commandWindows"] = json!(&target_cmd);
+                                }
+                            }
                             h["command"] = json!(&target_cmd);
                             updated = true;
                         }
@@ -1077,6 +1201,73 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_launcher_rejects_unsafe_system_root() {
+        for root in [
+            "",
+            "Windows",
+            "C:/Program Files/Windows",
+            "C:/Win&dows",
+            "C:/$env",
+            "C:/Win%TEMP%",
+        ] {
+            assert!(
+                format_codex_windows_command(root, "agent-hook.exe", "Stop", Some("codex"))
+                    .is_err()
+            );
+        }
+        let command = format_codex_windows_command(
+            "C:/Windows",
+            "C:/a $&`/agent-hook.exe",
+            "Stop",
+            Some("codex"),
+        )
+        .unwrap();
+        assert!(command.starts_with("C:\\Windows\\System32\\"));
+        assert!(!command.contains('"'));
+        assert!(is_bridge_command(&command));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn codex_updates_owned_override_and_preserves_third_party() {
+        let dir = std::env::temp_dir().join(format!("codex_renderer_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("hooks.json");
+        let third = json!({"type":"command", "command":"herdr status", "commandWindows":"herdr.exe status", "timeout":17});
+        let initial = json!({"custom":true, "hooks":{"PreToolUse":[{"matcher":".*", "hooks":[third, {"type":"command", "command":"agent-hook.exe PreToolUse", "commandWindows":"agent-hook.exe PreToolUse", "timeout":5}]}]}});
+        fs::write(&path, serde_json::to_vec(&initial).unwrap()).unwrap();
+        install_codex_hooks(&path, "C:/a $&`/agent-hook.exe", Some("codex")).unwrap();
+        let first = fs::read(&path).unwrap();
+        install_codex_hooks(&path, "C:/a $&`/agent-hook.exe", Some("codex")).unwrap();
+        assert_eq!(first, fs::read(&path).unwrap());
+        let value: Value = serde_json::from_slice(&first).unwrap();
+        assert_eq!(value["hooks"]["PreToolUse"][0]["hooks"][0], third);
+        let owned = &value["hooks"]["PreToolUse"][0]["hooks"][1];
+        assert_eq!(owned["command"], owned["commandWindows"]);
+        assert_eq!(value["custom"], true);
+        let adapter = CLIENT_ADAPTERS.iter().find(|a| a.id == "codex").unwrap();
+        assert!((adapter.is_registered_fn)(&path));
+        let mut conflict = value;
+        conflict["hooks"]["PreToolUse"][0]["hooks"][1]["commandWindows"] = json!("custom.exe");
+        fs::write(&path, serde_json::to_vec(&conflict).unwrap()).unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(install_codex_hooks(&path, "C:/agent-hook.exe", Some("codex")).is_err());
+        assert_eq!(before, fs::read(&path).unwrap());
+        for invalid in [
+            "{invalid",
+            "[]",
+            r#"{"hooks":{"PreToolUse":{}}}"#,
+            r#"{"hooks":{"Stop":[{"hooks":[{"command":"herdr", "commandWindows":"agent-hook.exe Stop"}]}]}}"#,
+        ] {
+            fs::write(&path, invalid).unwrap();
+            assert!(install_codex_hooks(&path, "C:/agent-hook.exe", Some("codex")).is_err());
+            assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
+        }
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
 
     #[test]
     fn test_format_hook_command_with_and_without_spaces() {

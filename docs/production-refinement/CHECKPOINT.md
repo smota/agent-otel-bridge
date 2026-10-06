@@ -1,6 +1,6 @@
 # Checkpoint — refinamento de produção
 
-Atualizado: 2026-10-06 (M2: falha dos três hooks Codex observada; incompatibilidade PowerShell reproduzida). Fonte do plano: [PLAN.md](PLAN.md).
+Atualizado: 2026-10-06 (M2: adaptador candidato validado nos shells; promoção pendente por latência). Fonte do plano: [PLAN.md](PLAN.md).
 
 ## Posição atual
 
@@ -9,8 +9,8 @@ Atualizado: 2026-10-06 (M2: falha dos três hooks Codex observada; incompatibili
 - Próximos fechamentos: M2 diagnóstico dos hooks Codex e lifecycle Grok; M3 runbook da estação.
 - Branch: docs/production-refinement-milestones.
 - Base observada: a47a9ab (merge da release v0.6.0).
-- Persistência: cd14ca2 confirmado no remoto na abertura desta rodada; evidência de execução/falha Codex preparada para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
-- Operação externa pendente: nenhuma. Cinco sessões supervisionadas (AGY, Grok, Claude e duas tentativas Codex) foram encerradas e reconciliadas; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
+- Persistência: e6bf1f0 era a base desta rodada; código candidato, testes e evidência preparados para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
+- Operação externa pendente: nenhuma. Na unidade CLI anterior, cinco sessões supervisionadas (AGY, Grok, Claude e duas tentativas Codex) foram encerradas e reconciliadas; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
 - Registro de encerramento da rodada anterior (2026-09-30; revalidar processos antes de executar): todos os executores encerrados. M1: Luna medium. M2: Sol high. M3: Flash medium via AGY não aceito ([recibo](evidence/M3/research-attempt-01.md)); fallback Sol medium concluiu pesquisa de código ([resultado](evidence/M3/source-research-02.md)). IDs são modelos solicitados; não inferir versão observada quando executor não a expõe.
 - Resultado CLI real: [real-cli-01.md](evidence/M2/real-cli-01.md), [contrato](evidence/M2/agy-real-01-contract.md).
 - Resultado M2: [diagnosis-01.md](evidence/M2/diagnosis-01.md), [tentativa02](evidence/M2/diagnosis-02.md), [contrato](evidence/M2/diagnosis-02-contract.md).
@@ -67,10 +67,10 @@ Não repetir inventário inteiro na retomada: revalidar somente estado volátil 
 
 ## Próxima tarefa concreta
 
-1. Preparar correção candidata do adaptador Codex Windows: AGY Flash medium implementa; Grok Build Fast low revisa. Contrato e aceites em [codex-execution-01](evidence/M2/codex-execution-01.md). Validar seleção de shell/CMD, caminhos especiais, stdin e preservação de terceiros.
+1. Reduzir o custo do candidato Codex antes da promoção. [Candidato01](evidence/M2/codex-candidate-01.md): testes de shells, stdin, idempotência e fail-open passaram; launcher custa 1,5–2,6s por hook nesta estação. Avaliar seleção explícita de shell/comando direto ou launcher de menor custo. Grok Build Fast low revisa; AGY Flash medium implementa se disponível. AGY expirou sem proposta nesta unidade; coordenador implementou fallback.
 2. Sessão real: três hooks failed/exit1, ferramenta exit0. Reprodução PowerShell: strings atuais falham; prefixo & envia três spans. Fonte da versão usa shell do ambiente local. Notificação real não expõe stderr/argv: não confundir reprodução com captura interna. Após candidato, tratar mudança de hash via revisão normal de confiança e provar sessão real; sem bypass.
 3. Grok: localizar os dois Stop da mesma sessão e provar supressão do hook Claude importado. Capturar somente IDs/tipos/flags necessários, sem conteúdo de prompts.
-4. M4/M6: corrigir semântica de provider desconhecido e mapear tool IDs após verificar payloads reais; nenhuma correção de produto implementada ainda.
+4. M4/M6: corrigir semântica de provider desconhecido e mapear tool IDs após verificar payloads reais; sem correção semântica implementada ainda.
 5. Investigar persistência normal do daemon e, depois dos contratos/correções, validar até SigNoz e superfícies Desktop/IDE. M3 runbook WSL continua independente.
 
 Uma tarefa e um auxiliar por vez; até duas tentativas por unidade. Não fechar M2 com base somente na entrega de três CLIs ao sink privado.
@@ -85,8 +85,14 @@ Uma tarefa e um auxiliar por vez; até duas tentativas por unidade. Não fechar 
 
 ## Preservar
 
-O commit 68418c3 já inclui BUG_REPORT_AGY_WEBCHANNEL.md e mudanças de .gitignore. Preservar esse conteúdo e configurações de clientes. Esta unidade altera plano, checkpoint e suas evidências; não reverter mudanças anteriores nem incluir configurações ignoradas.
+O commit 68418c3 já inclui BUG_REPORT_AGY_WEBCHANNEL.md e mudanças de .gitignore. Preservar esse conteúdo e configurações de clientes. Esta unidade altera adaptador Codex, testes, contrato local, plano, checkpoint e suas evidências; não reverter mudanças anteriores nem incluir configurações ignoradas.
 
 ## Prompt de retomada
 
 > Retome o refinamento de produção do agent-otel-bridge. Leia docs/production-refinement/CHECKPOINT.md e as seções necessárias de PLAN.md. Verifique branch, diff, escritor anterior e efeitos pendentes. Execute apenas a próxima tarefa pronta com o modelo indicado ou fallback registrado. Salve resultados antes de avançar. Use subscrições; não use APIs pagas. Pi está fora do escopo.
+
+## Candidato Codex registrado
+
+- [Implementação e limites](evidence/M2/codex-candidate-01.md): nove invocações nativas passaram em três shells, endpoint privado ausente. Sem sessão Codex real corrigida ou promoção.
+- Prévia canônica disponível; hashes de trust devem ser obtidos pela revisão normal após definir a implementação final.
+- Cargo guardrails passou (56,6s após build): fmt, Clippy, workspace tests, conformance, docs e cliente 152576 bytes. Processos auxiliares e testes encerrados; instalação/trust preservados.
