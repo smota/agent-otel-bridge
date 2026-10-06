@@ -1,0 +1,32 @@
+{
+  "tag": "rust-v0.154.0",
+  "commit": "6b9826e3aa83b1a5947db50f4332cb9c65f1b340",
+  "retrieved": "2026-10-06",
+  "files": [
+    {
+      "path": "codex-rs/core/src/session/mod.rs",
+      "sha256": "41fb07e8f5841e54dc5deed55d4573a7f56ff451b1bda24a5cb665c74711a13a",
+      "url": "https://raw.githubusercontent.com/openai/codex/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/session/mod.rs"
+    },
+    {
+      "path": "codex-rs/core/src/session/session.rs",
+      "sha256": "8baee944befc7896a19d8d59327c3566498c5cc8e8d497eb8085c60f27ccaa05",
+      "url": "https://raw.githubusercontent.com/openai/codex/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/session/session.rs"
+    },
+    {
+      "path": "codex-rs/hooks/src/engine/command_runner.rs",
+      "sha256": "c3913ff8ee6f449f07ce3c69bb2f194ad8aef2ce13b83e693165d74329ca3e14",
+      "url": "https://raw.githubusercontent.com/openai/codex/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/hooks/src/engine/command_runner.rs"
+    },
+    {
+      "path": "codex-rs/hooks/src/registry.rs",
+      "sha256": "2ab1f5faf0deb5c846e3a7df9f933c3b607f1388795c91c9aeb2f068eae97f5b",
+      "url": "https://raw.githubusercontent.com/openai/codex/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/hooks/src/registry.rs"
+    },
+    {
+      "path": "codex-rs/protocol/src/shell_environment.rs",
+      "sha256": "e16f61ea96db99307e3d8d2eb2fbb1b6fc703ce0ca7651fa97170dd6e0557da0",
+      "url": "https://raw.githubusercontent.com/openai/codex/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/protocol/src/shell_environment.rs"
+    }
+  ]
+}

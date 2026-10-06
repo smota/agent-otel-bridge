@@ -1,0 +1,84 @@
+{
+  "shell": "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+  "synthetic": true,
+  "cases": [
+    {
+      "event": "PreToolUse",
+      "variant": "configured",
+      "argv": [
+        "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+        "-NoProfile",
+        "-Command",
+        "\"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse --client codex"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "ParserError: \nLine |\n   1 |  . ppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse --clien .\n     |                                                       ~~~~~~~~~~\n     | Unexpected token 'PreToolUse' in expression or statement.\n"
+    },
+    {
+      "event": "PreToolUse",
+      "variant": "call_operator",
+      "argv": [
+        "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+        "-NoProfile",
+        "-Command",
+        "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PreToolUse --client codex"
+      ],
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr": ""
+    },
+    {
+      "event": "PostToolUse",
+      "variant": "configured",
+      "argv": [
+        "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+        "-NoProfile",
+        "-Command",
+        "\"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PostToolUse --client codex"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "ParserError: \nLine |\n   1 |  . pData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PostToolUse --clien .\n     |                                                      ~~~~~~~~~~~\n     | Unexpected token 'PostToolUse' in expression or statement.\n"
+    },
+    {
+      "event": "PostToolUse",
+      "variant": "call_operator",
+      "argv": [
+        "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+        "-NoProfile",
+        "-Command",
+        "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" PostToolUse --client codex"
+      ],
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr": ""
+    },
+    {
+      "event": "Stop",
+      "variant": "configured",
+      "argv": [
+        "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+        "-NoProfile",
+        "-Command",
+        "\"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" Stop --client codex"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "ParserError: \nLine |\n   1 |  . amue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" Stop --clien .\n     |                                                             ~~~~\n     | Unexpected token 'Stop' in expression or statement.\n"
+    },
+    {
+      "event": "Stop",
+      "variant": "call_operator",
+      "argv": [
+        "C:\\Users\\samue\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+        "-NoProfile",
+        "-Command",
+        "& \"C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-hook.exe\" Stop --client codex"
+      ],
+      "exit_code": 0,
+      "stdout": "{}",
+      "stderr": ""
+    }
+  ]
+}

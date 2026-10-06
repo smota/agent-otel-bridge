@@ -1,0 +1,15 @@
+{
+  "aob-codex-hook-execution.py": "730ee0170a8c7b20ffe74b59fd93b17a55a117ee2029b311f47f75034535a898",
+  "aob-codex-hook-supervisor.py": "d2c3022511a3fafcaed8de6b4672df3e31e9e6b8157ebe48a52fb61273a5e329",
+  "aob-codex-shell-repro.py": "636043aab8ea895e0ba7028279ea5628ef902ff7dd750e14fb65fe7c37a4375d",
+  "aob-codex-shell-supervisor.py": "97b855a382578c4000b6640f261ca14734222b543f1a5a0b6f320f33a9d0a8b8",
+  "real-daemon.json": "155171d8fff7c846edfcd45528ec1eef71d480a9716f3655231e9684dd94d28e",
+  "real-receipt.json": "94e42078db23995bf6ba47649d4379fb36689f47843840045b33510ef1613f7f",
+  "real-result.json": "47a47134fb1d9e0e53e27520eb9beac31ef44819159ac6bfdbf1ac52e7bda042",
+  "sources.json": "752a94724137bb366e67266854b3cc594b3139acbdd1d62762edb4aac3dbffdb",
+  "synthetic-daemon.json": "da06156b4853e9add22930365619257ebc533b09a3440f706b6d2cacc3647cb6",
+  "synthetic-receipt.json": "4726c35f432e648450fb575ed1c28c8286fc9a6f315274dbb0c47e9562b023a1",
+  "synthetic-result.json": "06c43b3d8d9d8efe96cbd0881d6a1b95a7157acf68e2369dc808e07d3bcf7e5c",
+  "synthetic-spans.json": "e6302ad4f731a85699ece57b0e4d561948cd75ea8b7f86cd026492f0d3cfe8a6",
+  "validation.json": "e50985324ae891862b09464d2cfb1141a45933c4fb0b2c4ec790bfa804f60182"
+}

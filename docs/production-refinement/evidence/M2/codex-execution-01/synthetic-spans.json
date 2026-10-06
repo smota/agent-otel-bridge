@@ -1,0 +1,44 @@
+[
+  {
+    "trace_id": "da5ca1a5946ca7513a61bd891f99f650",
+    "span_id": "e173c66a7d4ebeda",
+    "name": "execute_tool Bash",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "m2-shell-call_operator",
+      "gen_ai.tool.name": "Bash",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "da5ca1a5946ca7513a61bd891f99f650",
+    "span_id": "7839b89792c81a05",
+    "name": "execute_tool Bash",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "PostToolUse",
+      "gen_ai.conversation.id": "m2-shell-call_operator",
+      "gen_ai.tool.name": "Bash",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "da5ca1a5946ca7513a61bd891f99f650",
+    "span_id": "9003667a36d61053",
+    "name": "agent.stop",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "codex",
+      "agent.hook.event": "Stop",
+      "gen_ai.conversation.id": "m2-shell-call_operator",
+      "gen_ai.tool.name": "Bash",
+      "agent.context.state": "missing"
+    }
+  }
+]

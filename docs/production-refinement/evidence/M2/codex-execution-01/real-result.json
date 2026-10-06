@@ -1,0 +1,97 @@
+{
+  "app_server_pid": 57376,
+  "hooks": [
+    {
+      "threadId": "01a10ed9-b225-7af3-8166-c7bfdfc91eca",
+      "turnId": "01a10ed9-b335-74d1-b51e-340d168ca39f",
+      "run": {
+        "id": "pre-tool-use:0:C:\\Users\\samue\\.codex\\hooks.json:exec-9b888b24-f36a-41f1-a817-36990ee578c2",
+        "eventName": "preToolUse",
+        "handlerType": "command",
+        "executionMode": "sync",
+        "scope": "turn",
+        "sourcePath": "C:\\Users\\samue\\.codex\\hooks.json",
+        "source": "user",
+        "displayOrder": 0,
+        "status": "failed",
+        "statusMessage": null,
+        "startedAt": 1791250518,
+        "completedAt": 1791250519,
+        "durationMs": 694,
+        "entries": [
+          {
+            "kind": "error",
+            "text": "hook exited with code 1"
+          }
+        ]
+      }
+    },
+    {
+      "threadId": "01a10ed9-b225-7af3-8166-c7bfdfc91eca",
+      "turnId": "01a10ed9-b335-74d1-b51e-340d168ca39f",
+      "run": {
+        "id": "post-tool-use:1:C:\\Users\\samue\\.codex\\hooks.json:exec-9b888b24-f36a-41f1-a817-36990ee578c2",
+        "eventName": "postToolUse",
+        "handlerType": "command",
+        "executionMode": "sync",
+        "scope": "turn",
+        "sourcePath": "C:\\Users\\samue\\.codex\\hooks.json",
+        "source": "user",
+        "displayOrder": 1,
+        "status": "failed",
+        "statusMessage": null,
+        "startedAt": 1791250520,
+        "completedAt": 1791250521,
+        "durationMs": 630,
+        "entries": [
+          {
+            "kind": "error",
+            "text": "hook exited with code 1"
+          }
+        ]
+      }
+    },
+    {
+      "threadId": "01a10ed9-b225-7af3-8166-c7bfdfc91eca",
+      "turnId": "01a10ed9-b335-74d1-b51e-340d168ca39f",
+      "run": {
+        "id": "stop:3:C:\\Users\\samue\\.codex\\hooks.json",
+        "eventName": "stop",
+        "handlerType": "command",
+        "executionMode": "sync",
+        "scope": "turn",
+        "sourcePath": "C:\\Users\\samue\\.codex\\hooks.json",
+        "source": "user",
+        "displayOrder": 3,
+        "status": "failed",
+        "statusMessage": null,
+        "startedAt": 1791250525,
+        "completedAt": 1791250525,
+        "durationMs": 654,
+        "entries": [
+          {
+            "kind": "error",
+            "text": "hook exited with code 1"
+          }
+        ]
+      }
+    }
+  ],
+  "commands": [
+    {
+      "id": "exec-9b888b24-f36a-41f1-a817-36990ee578c2",
+      "status": "completed",
+      "exitCode": 0,
+      "output_matches_marker": true
+    }
+  ],
+  "thread_id": "01a10ed9-b225-7af3-8166-c7bfdfc91eca",
+  "model": "gpt-5.6-luna",
+  "sandbox": {
+    "type": "readOnly",
+    "networkAccess": false
+  },
+  "response_matches_marker": true,
+  "turn_status": "completed",
+  "app_server_exit_code": 0
+}

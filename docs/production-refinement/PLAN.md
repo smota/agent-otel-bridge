@@ -125,3 +125,7 @@ Dashboards não inferem produtividade de churn, sucesso de exit 0 ou encerrament
 ### Atualização M2 — 2026-10-06, hooks Codex
 
 [Unidade concluída](evidence/M2/codex-hooks-01.md): descoberta efetiva trusted e contraste limitado de ambiente não restauraram entrega. Próximo diagnóstico deve observar o executor de hooks (shell/argv/status/pipe); parser PowerShell isolado não basta para corrigir o adaptador. AGY Flash medium prepara fixture, Grok Build Fast low revisa, Codex CLI gpt-5.6-luna medium somente se houver hipótese discriminante que exija inferência. M2 permanece in_progress.
+
+### Atualização M2 — execução dos hooks Codex
+
+[Diagnóstico](evidence/M2/codex-execution-01.md): eventos reais expõem falha exit1 dos três hooks; reprodução PowerShell confirma incompatibilidade do comando atual e entrega sintética com operador de chamada. Próxima entrega: candidato do adaptador com seleção de shell explícita, preservação de terceiros e revisão normal de confiança após mudança do hash. AGY Flash medium implementa, Grok Build Fast low revisa; sessão Luna medium somente depois da validação do candidato. Não fechar M2 nem declarar instalação corrigida antes da prova real.

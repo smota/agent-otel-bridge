@@ -1,6 +1,6 @@
 # Checkpoint — refinamento de produção
 
-Atualizado: 2026-10-06 (M2: trust efetiva consultada e contraste de ambiente Codex concluído). Fonte do plano: [PLAN.md](PLAN.md).
+Atualizado: 2026-10-06 (M2: falha dos três hooks Codex observada; incompatibilidade PowerShell reproduzida). Fonte do plano: [PLAN.md](PLAN.md).
 
 ## Posição atual
 
@@ -9,7 +9,7 @@ Atualizado: 2026-10-06 (M2: trust efetiva consultada e contraste de ambiente Cod
 - Próximos fechamentos: M2 diagnóstico dos hooks Codex e lifecycle Grok; M3 runbook da estação.
 - Branch: docs/production-refinement-milestones.
 - Base observada: a47a9ab (merge da release v0.6.0).
-- Persistência: 69acfe4 confirmado no remoto na abertura desta rodada; nova evidência de hooks Codex preparada para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
+- Persistência: cd14ca2 confirmado no remoto na abertura desta rodada; evidência de execução/falha Codex preparada para entrega. Reconciliar HEAD com origin/docs/production-refinement-milestones na retomada; checkpoint não substitui prova remota.
 - Operação externa pendente: nenhuma. Cinco sessões supervisionadas (AGY, Grok, Claude e duas tentativas Codex) foram encerradas e reconciliadas; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
 - Registro de encerramento da rodada anterior (2026-09-30; revalidar processos antes de executar): todos os executores encerrados. M1: Luna medium. M2: Sol high. M3: Flash medium via AGY não aceito ([recibo](evidence/M3/research-attempt-01.md)); fallback Sol medium concluiu pesquisa de código ([resultado](evidence/M3/source-research-02.md)). IDs são modelos solicitados; não inferir versão observada quando executor não a expõe.
 - Resultado CLI real: [real-cli-01.md](evidence/M2/real-cli-01.md), [contrato](evidence/M2/agy-real-01-contract.md).
@@ -58,10 +58,17 @@ Não repetir inventário inteiro na retomada: revalidar somente estado volátil 
 - Parser PowerShell rejeita comando sem `&`; shell efetivo do hook ainda desconhecido. Causa permanece aberta.
 - Evidência e próximos testes: [codex-hooks-01](evidence/M2/codex-hooks-01.md). Nenhum teste ativo ou efeito pendente.
 
+## Execução dos hooks delimitada (2026-10-06)
+
+- App-server real com Luna medium: PreToolUse, PostToolUse e Stop falharam com exit1; a leitura e o turno completaram.
+- Fonte pública 0.154.0 fixada: hook recebe shell do ambiente local, com fallback CMD.
+- Prova sintética no PowerShell: comandos atuais exit1/ParserError; com operador & exit0 e três spans no receptor. Forte suporte ao defeito de compatibilidade, sem prova ainda de correção dentro do harness.
+- [Evidências e aceites da correção](evidence/M2/codex-execution-01.md). Instalação e hooks globais preservados; processos e pipes de teste encerrados.
+
 ## Próxima tarefa concreta
 
-1. Identificar shell/argv e resultado de execução dos hooks Codex 0.154.0. AGY Flash medium prepara fixture limitada; Grok Build Fast low revisa. Definir observação discriminante antes de nova inferência.
-2. Trust efetiva e contraste de seis variáveis do coordenador já observados: [codex-hooks-01](evidence/M2/codex-hooks-01.md). Não repetir para confirmar configuração. A string atual falha no parser PowerShell; comprovar shell real antes de corrigir candidato. Sem remover sandbox, ignorar trust ou alterar hooks globais para forçar sucesso.
+1. Preparar correção candidata do adaptador Codex Windows: AGY Flash medium implementa; Grok Build Fast low revisa. Contrato e aceites em [codex-execution-01](evidence/M2/codex-execution-01.md). Validar seleção de shell/CMD, caminhos especiais, stdin e preservação de terceiros.
+2. Sessão real: três hooks failed/exit1, ferramenta exit0. Reprodução PowerShell: strings atuais falham; prefixo & envia três spans. Fonte da versão usa shell do ambiente local. Notificação real não expõe stderr/argv: não confundir reprodução com captura interna. Após candidato, tratar mudança de hash via revisão normal de confiança e provar sessão real; sem bypass.
 3. Grok: localizar os dois Stop da mesma sessão e provar supressão do hook Claude importado. Capturar somente IDs/tipos/flags necessários, sem conteúdo de prompts.
 4. M4/M6: corrigir semântica de provider desconhecido e mapear tool IDs após verificar payloads reais; nenhuma correção de produto implementada ainda.
 5. Investigar persistência normal do daemon e, depois dos contratos/correções, validar até SigNoz e superfícies Desktop/IDE. M3 runbook WSL continua independente.
