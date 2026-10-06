@@ -1,0 +1,34 @@
+{
+  "agy": {
+    "spans": 7,
+    "unique_span_ids": true,
+    "daemon_exit": 0,
+    "harness_exit": 0,
+    "cleanup": true,
+    "hook_config_unchanged": true
+  },
+  "grok": {
+    "spans": 4,
+    "unique_span_ids": true,
+    "daemon_exit": 0,
+    "harness_exit": 0,
+    "cleanup": true,
+    "hook_config_unchanged": true
+  },
+  "claude": {
+    "spans": 3,
+    "unique_span_ids": true,
+    "daemon_exit": 0,
+    "harness_exit": 0,
+    "cleanup": true,
+    "hook_config_unchanged": true
+  },
+  "codex": {
+    "spans": 0,
+    "unique_span_ids": true,
+    "daemon_exit": 0,
+    "harness_exit": 0,
+    "cleanup": true,
+    "hook_config_unchanged": true
+  }
+}

@@ -1,17 +1,18 @@
 # Checkpoint — refinamento de produção
 
-Atualizado: 2026-10-06 (M2: duas sondagens isoladas concluídas; estação ativa preservada). Fonte do plano: [PLAN.md](PLAN.md).
+Atualizado: 2026-10-06 (M2: sessões CLI reais executadas; lacuna Codex delimitada). Fonte do plano: [PLAN.md](PLAN.md).
 
 ## Posição atual
 
-- Milestones: M0/M1 done; M2 in_progress (tentativa 02 encerrada; integração real pendente); M3 in_progress (pesquisa fonte concluída, runbook pendente); M4–M10 pending.
+- Milestones: M0/M1 done; M2 in_progress (unidade CLI real encerrada; Codex/semântica/E2E pendentes); M3 in_progress (pesquisa fonte concluída, runbook pendente); M4–M10 pending.
 - Evidência M1: [inventory-01.md](evidence/M1/inventory-01.md), [aceite](evidence/M1/acceptance.md).
-- Próximos fechamentos: M2 diagnóstico controlado; M3 runbook específico da estação.
+- Próximos fechamentos: M2 diagnóstico dos hooks Codex e lifecycle Grok; M3 runbook da estação.
 - Branch: docs/production-refinement-milestones.
 - Base observada: a47a9ab (merge da release v0.6.0).
-- Persistência: plano-base 67ef649 confirmado no remoto na entrega anterior. Evidências e checkpoint da tentativa02 preparados para commit/push nesta rodada; reconciliar HEAD com origin/docs/production-refinement-milestones na retomada. A intenção de entrega não substitui verificação remota.
-- Operação externa pendente: nenhuma. Dois processos de teste em ambiente privado foram encerrados e reconciliados; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
+- Persistência: base ddf1f1a confirmada na entrega anterior. Evidências e checkpoint das sessões CLI reais preparados para commit/push nesta rodada; reconciliar HEAD com origin/docs/production-refinement-milestones na retomada. A intenção de entrega não substitui verificação remota.
+- Operação externa pendente: nenhuma. Cinco sessões supervisionadas (AGY, Grok, Claude e duas tentativas Codex) foram encerradas e reconciliadas; nenhum daemon permanente, restart global, upgrade ou instalação. Hooks preservados.
 - Registro de encerramento da rodada anterior (2026-09-30; revalidar processos antes de executar): todos os executores encerrados. M1: Luna medium. M2: Sol high. M3: Flash medium via AGY não aceito ([recibo](evidence/M3/research-attempt-01.md)); fallback Sol medium concluiu pesquisa de código ([resultado](evidence/M3/source-research-02.md)). IDs são modelos solicitados; não inferir versão observada quando executor não a expõe.
+- Resultado CLI real: [real-cli-01.md](evidence/M2/real-cli-01.md), [contrato](evidence/M2/agy-real-01-contract.md).
 - Resultado M2: [diagnosis-01.md](evidence/M2/diagnosis-01.md), [tentativa02](evidence/M2/diagnosis-02.md), [contrato](evidence/M2/diagnosis-02-contract.md).
 - Upgrade verificado e lacunas do runbook: [upgrade-path-01.md](evidence/M3/upgrade-path-01.md).
 
@@ -41,27 +42,36 @@ Não repetir inventário inteiro na retomada: revalidar somente estado volátil 
 - Defeito reproduzido: modelo ausente resulta em provider Google para todos os clientes. Agente correto, provedor fictício; encaminhado a M4/M6.
 - Causa da ausência do daemon normal permanece desconhecida. Não inferir falha de startup, desativação pelo Windows ou correção a partir desses testes.
 
+## Sessões reais (2026-10-06)
+
+- AGY CLI Flash low: uma leitura real ->7 spans; sessão/modelo/step2 correspondem.
+- Grok Build Fast low: uma leitura OAuth ->4 spans, incluindo2 Stop; nenhum span Claude na amostra, guarda importada ainda não provada isoladamente.
+- Claude CLI: uma Read ->3 spans; login Pro/claude.ai. Alias haiku anunciou4.5, mas modelUsage registrou Sonnet5.5.
+- Codex CLI0.154.0: gpt-6-luna rejeitado; gpt-5.6-luna medium leu marcador, porém zero frames de hook. Feature ativa/config/trust entries presentes não provam execução. Ambiente herdado CODEX_* pode influenciar; manter hipótese explícita.
+- Provider Google indevido confirmado em sessões Grok/Claude. Tool-call IDs ausentes dos spans; correspondência desta amostra por sessão/ferramenta, não aceite de correlação geral.
+- Todos os processos de teste encerrados, pipes removidos e hashes de hooks preservados. Receptor privado: SigNoz/Desktop/IDE não certificados.
+
 ## Próxima tarefa concreta
 
-1. AGY / gemini-3.8-flash-low: desenhar teste de uma sessão AGY real com daemon privado supervisionado, herança de pipe e evento marcado inofensivo. Preservar hooks e autenticação; não copiar credenciais para evidência. Separar superfície CLI de IDE/Desktop.
-2. Grok / grok-4.7-build-fast revisa a receita; AGY / gemini-3.8-flash-medium executa somente com isolamento verificável. Salvar contrato, resultado e cleanup antes de avançar aos demais clientes.
-3. Repetir por Grok (guarda Claude/importação), Claude e Codex com modelos econômicos disponíveis. Medir eventos reais e atribuição; não usar exit0 do hook como prova de entrega.
-4. Investigar lifecycle no ambiente normal como unidade separada: stdout/stderr e ambiente efetivo no login, sem remover isolamento ou reinstalar por tentativa. O teste com home vazio não cobre providers/configurações reais.
-5. M3 independente: completar runbook WSL com Flash medium; Grok revisa fontes e riscos. Reutilizar pesquisa aceita e revalidar versão alvo antes do ensaio.
+1. AGY Flash low prepara observação limitada do caminho Codex (trust efetiva, shell/quoting e env do hook). Usar dados locais/diagnóstico antes de nova inferência; não repetir a unidade já encerrada de duas tentativas.
+2. Grok Build Fast low revisa a receita. Comparar lançamento independente do ambiente coordenador com gpt-5.6-luna medium; sem remover sandbox, ignorar trust ou alterar hooks globais para forçar sucesso.
+3. Grok: localizar os dois Stop da mesma sessão e provar supressão do hook Claude importado. Capturar somente IDs/tipos/flags necessários, sem conteúdo de prompts.
+4. M4/M6: corrigir semântica de provider desconhecido e mapear tool IDs após verificar payloads reais; nenhuma correção de produto implementada ainda.
+5. Investigar persistência normal do daemon e, depois dos contratos/correções, validar até SigNoz e superfícies Desktop/IDE. M3 runbook WSL continua independente.
 
-Uma tarefa e um auxiliar por vez; no máximo duas tentativas por unidade. Não fechar M2 antes da matriz real. Nenhuma correção de produto foi implementada nesta rodada.
+Uma tarefa e um auxiliar por vez; até duas tentativas por unidade. Não fechar M2 com base somente na entrega de três CLIs ao sink privado.
 
 ## Revisão econômica de 2026-10-06
 
 - AGY Flash low para coleta e manutenção; Flash medium para implementação delimitada e receitas verificadas.
 - Grok Build Fast para diagnóstico e revisão comum; Grok 4.7 permanece consultor principal de arquitetura em pareceres curtos.
-- Codex Luna como fallback econômico; Sol medium para criticidade concreta. High sem alocação automática.
-- grok models confirmou login grok.com na repetição; agy models retornou o catálogo. Nenhuma nova inferência nesses clientes foi executada nesta revisão; disponibilidade de quota continua não comprovada.
+- Codex CLI gpt-5.6-luna medium validado como fallback econômico; Sol medium para criticidade concreta. High sem alocação automática.
+- Inferências reais concluídas por AGY, Grok, Claude e Codex nesta unidade. Disponibilidade futura de subscrição permanece sujeita a preflight; catálogo não garante aceite de backend.
 - Preservados aceites e estados dos milestones; pesquisa M3 já aceita não será refeita para trocar modelo.
 
 ## Preservar
 
-O commit 68418c3 já inclui BUG_REPORT_AGY_WEBCHANNEL.md e mudanças de .gitignore. Preservar esse conteúdo e configurações de clientes. Esta revisão altera somente PLAN.md e CHECKPOINT.md; não reverter mudanças anteriores nem incluir configurações ignoradas.
+O commit 68418c3 já inclui BUG_REPORT_AGY_WEBCHANNEL.md e mudanças de .gitignore. Preservar esse conteúdo e configurações de clientes. Esta unidade altera plano, checkpoint e suas evidências; não reverter mudanças anteriores nem incluir configurações ignoradas.
 
 ## Prompt de retomada
 

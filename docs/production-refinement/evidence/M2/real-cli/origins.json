@@ -1,0 +1,137 @@
+[
+  {
+    "run": "agy-22f29b48c5",
+    "stream_sha256": "8f6a6b149ae43d9ed404501e617f54b30881f0a3d9799b3dd8296600262612f3",
+    "request_hashes": [
+      {
+        "path": "/v1/traces",
+        "bytes": 673,
+        "sha256": "113cbe1012ef2b592160e6cd30318a7f52d7dd86f6b2dd2a53e00e6dd8ad7335",
+        "file": "request-006.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 1421,
+        "sha256": "250661d18d105d926faa5c8b63ac23334a934af4a5029f4196742ae0eefb2772",
+        "file": "request-010.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 1422,
+        "sha256": "c5d87ce576c2d57d535b296b9f17fe61221584d2cb67229cfdb0478832935bc3",
+        "file": "request-013.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 1137,
+        "sha256": "eb5d44c19734c4ef28cbd06f16875f4737b480909185eaedbe29402f7d4a52b8",
+        "file": "request-015.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 1136,
+        "sha256": "6c8647291edbf190cae2f9a7eb0e55f08dbdc857483553063ce28508cdc37e53",
+        "file": "request-017.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 1137,
+        "sha256": "dcc15a8c733429502d6138e72cc9cab59a689f7c1cd99f4b098a9208976f0647",
+        "file": "request-021.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 1256,
+        "sha256": "99f752f70c90950157403a4276cc3449bda101ce572850e6e1a15319dd1c62e6",
+        "file": "request-023.bin"
+      }
+    ],
+    "raw_retention": "raw stream and OTLP bodies removed after selected projections and hashes were validated; no raw content committed",
+    "request_counts": {
+      "/v1/metrics": 20,
+      "/v1/traces": 7
+    }
+  },
+  {
+    "run": "claude-fbfa9865ba",
+    "stream_sha256": "096586f714f9ab99b0fa5dd9eeab69fe8ab454acbd0d84477c23adfc40ec0b12",
+    "request_hashes": [
+      {
+        "path": "/v1/traces",
+        "bytes": 833,
+        "sha256": "229819bbdf31c777f7b08e536ba1dd279a2fc7a596251d38cf58678c293dec34",
+        "file": "request-009.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 834,
+        "sha256": "f6d1f3e4df4d7727fa406934cfb20feeeecd98aa93d57a9acdfb87cb4ae22aba",
+        "file": "request-012.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 600,
+        "sha256": "a28b2cf2bf2d6499721e59d0cb30aba93e24695013c069ba6a79691349550d9e",
+        "file": "request-016.bin"
+      }
+    ],
+    "raw_retention": "raw stream and OTLP bodies removed after selected projections and hashes were validated; no raw content committed",
+    "request_counts": {
+      "/v1/metrics": 17,
+      "/v1/traces": 3
+    }
+  },
+  {
+    "run": "codex-3d9e8f24c3",
+    "stream_sha256": "341e2bb73308810b3b893984c77ad67b100bf13d9b9849d1df9b9e4f27ebf0cf",
+    "request_hashes": [],
+    "raw_retention": "raw stream and OTLP bodies removed after selected projections and hashes were validated; no raw content committed",
+    "request_counts": {
+      "/v1/metrics": 8
+    }
+  },
+  {
+    "run": "codex-d6c2fb9037",
+    "stream_sha256": "9dcd6efe6c385f0872f1c5825780f105be2b2381d456a9300725309638c40ee6",
+    "request_hashes": [],
+    "raw_retention": "raw stream and OTLP bodies removed after selected projections and hashes were validated; no raw content committed",
+    "request_counts": {
+      "/v1/metrics": 17
+    }
+  },
+  {
+    "run": "grok-cda99c63d4",
+    "stream_sha256": "83e1ebedddd2f3aaa88b343ada3a0a566ef2a40625c11f991c48017cc4de376a",
+    "request_hashes": [
+      {
+        "path": "/v1/traces",
+        "bytes": 846,
+        "sha256": "80b3c245ea4d214e4dff9e74abfe1411ca5d3010813d6e18dfab420f21317201",
+        "file": "request-005.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 847,
+        "sha256": "f2315049c300a412f3e72439e6181c768f89d381c441010b7b0ddb468cb0c6c9",
+        "file": "request-009.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 593,
+        "sha256": "7d40a0ea141d2888d15d972d2b7628e3e126dbc4e2a9d69c3aa4dd84cbf4f7f4",
+        "file": "request-014.bin"
+      },
+      {
+        "path": "/v1/traces",
+        "bytes": 593,
+        "sha256": "c9479a5809f4041bc1376fed040661bc1f8119042eee2227470cfa8b55bda29c",
+        "file": "request-018.bin"
+      }
+    ],
+    "raw_retention": "raw stream and OTLP bodies removed after selected projections and hashes were validated; no raw content committed",
+    "request_counts": {
+      "/v1/metrics": 19,
+      "/v1/traces": 4
+    }
+  }
+]

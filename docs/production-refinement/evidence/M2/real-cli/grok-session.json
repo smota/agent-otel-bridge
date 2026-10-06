@@ -1,0 +1,43 @@
+{
+  "session_id": "01a10ec3-7820-7731-a900-02bebf040b8e",
+  "model": "grok-4.7-build-fast",
+  "auth_source": "oauth",
+  "permission_mode": "plan",
+  "tools": [
+    {
+      "type": "tool_use",
+      "id": "call-97d2ff63-9d7c-48ff-b1ab-2eb6a5970ad5-0",
+      "name": "read_file",
+      "input": {
+        "target_file": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\grok-cda99c63d4\\marker.txt"
+      }
+    }
+  ],
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 11558,
+    "num_turns": 2,
+    "usage": {
+      "input_tokens": 30753,
+      "output_tokens": 176,
+      "cache_read_input_tokens": 2688,
+      "cache_creation_input_tokens": 0,
+      "server_tool_use": {
+        "web_search_requests": 0
+      }
+    },
+    "modelUsage": {
+      "grok-4.7-build-fast": {
+        "inputTokens": 30753,
+        "outputTokens": 176,
+        "cacheReadInputTokens": 2688,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.04345608,
+        "contextWindow": 256000
+      }
+    }
+  },
+  "response_matches_marker": true
+}

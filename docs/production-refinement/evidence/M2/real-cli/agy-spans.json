@@ -1,0 +1,104 @@
+[
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "29f2a8a8fc5b6e85",
+    "name": "invoke_agent antigravity",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PreInvocation",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "46f60dab6e81c245",
+    "name": "execute_tool view_file",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "gen_ai.tool.name": "view_file",
+      "agent.step.index": 2,
+      "agent.context.state": "stale"
+    }
+  },
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "0e62ad2316efc23c",
+    "name": "execute_tool view_file",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PostToolUse",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "gen_ai.tool.name": "view_file",
+      "agent.step.index": 2,
+      "agent.context.state": "stale"
+    }
+  },
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "811d4a0d68f92bc3",
+    "name": "invoke_agent antigravity",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PostInvocation",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "agent.context.state": "stale"
+    }
+  },
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "cae52752697861e6",
+    "name": "invoke_agent antigravity",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PreInvocation",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "agent.context.state": "stale"
+    }
+  },
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "2b315609213ceb39",
+    "name": "invoke_agent antigravity",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "PostInvocation",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "agent.context.state": "stale"
+    }
+  },
+  {
+    "trace_id": "737badb23deba649ce2707b22ab8ee11",
+    "span_id": "c362f3b47327e376",
+    "name": "agent.stop",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "antigravity",
+      "agent.hook.event": "Stop",
+      "gen_ai.conversation.id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "gen_ai.request.model": "gemini-3.8-flash-low",
+      "agent.context.state": "stale"
+    }
+  }
+]

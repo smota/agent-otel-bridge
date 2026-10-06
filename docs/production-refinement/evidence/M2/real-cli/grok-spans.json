@@ -1,0 +1,56 @@
+[
+  {
+    "trace_id": "20da5d7a34aaaf8cdf038250ffdb8181",
+    "span_id": "cb445570d023a505",
+    "name": "execute_tool read_file",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "grok",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "01a10ec3-7820-7731-a900-02bebf040b8e",
+      "gen_ai.tool.name": "read_file",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "20da5d7a34aaaf8cdf038250ffdb8181",
+    "span_id": "23b805f637a5c351",
+    "name": "execute_tool read_file",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "grok",
+      "agent.hook.event": "PostToolUse",
+      "gen_ai.conversation.id": "01a10ec3-7820-7731-a900-02bebf040b8e",
+      "gen_ai.tool.name": "read_file",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "20da5d7a34aaaf8cdf038250ffdb8181",
+    "span_id": "077c30d9322771ba",
+    "name": "agent.stop",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "grok",
+      "agent.hook.event": "Stop",
+      "gen_ai.conversation.id": "01a10ec3-7820-7731-a900-02bebf040b8e",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "20da5d7a34aaaf8cdf038250ffdb8181",
+    "span_id": "1c2bf3a3d24a3fb9",
+    "name": "agent.stop",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "grok",
+      "agent.hook.event": "Stop",
+      "gen_ai.conversation.id": "01a10ec3-7820-7731-a900-02bebf040b8e",
+      "agent.context.state": "missing"
+    }
+  }
+]

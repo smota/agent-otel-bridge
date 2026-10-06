@@ -1,0 +1,74 @@
+{
+  "started_utc": "2026-10-06T01:11:42Z",
+  "exe": "C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-otel-bridge.exe",
+  "sha256": "24c73837129c674d80df727b85d04915952fc9c73b9bffb451e6a531497c6e9d",
+  "supervisor_pid": 51504,
+  "pipe": "\\\\.\\pipe\\agent-otel-m2-715a7519d1f148b9b11ce4002a99f2ff",
+  "endpoint": "http://127.0.0.1:56131",
+  "env": {
+    "SystemRoot": "C:\\Windows",
+    "WINDIR": "C:\\Windows",
+    "PATH": "C:\\Windows\\System32",
+    "USERPROFILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\USERPROFILE",
+    "HOME": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\HOME",
+    "LOCALAPPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\LOCALAPPDATA",
+    "APPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\APPDATA",
+    "TEMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\TEMP",
+    "TMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\TMP",
+    "AGENT_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-715a7519d1f148b9b11ce4002a99f2ff",
+    "AGY_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-715a7519d1f148b9b11ce4002a99f2ff",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:56131",
+    "OTEL_SERVICE_NAME": "agent-otel-m2-isolated",
+    "AGENT_OTEL_IDLE_TIMEOUT_SECS": "180",
+    "AGENT_OTEL_QUOTA_INTERVAL_SECS": "60",
+    "AGENT_OTEL_QUOTA_FILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\absent-quota.json"
+  },
+  "run": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba",
+  "requests": [
+    {
+      "path": "/v1/traces",
+      "bytes": 833,
+      "sha256": "229819bbdf31c777f7b08e536ba1dd279a2fc7a596251d38cf58678c293dec34",
+      "file": "request-009.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 834,
+      "sha256": "f6d1f3e4df4d7727fa406934cfb20feeeecd98aa93d57a9acdfb87cb4ae22aba",
+      "file": "request-012.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 600,
+      "sha256": "a28b2cf2bf2d6499721e59d0cb30aba93e24695013c069ba6a79691349550d9e",
+      "file": "request-016.bin"
+    }
+  ],
+  "stage": "exited",
+  "hook_config_sha256_before": "4cd2e8f78af5d7496df184f9acba85f30927f0df846368fdcee06b73f986d0b4",
+  "pid": 61032,
+  "pipes_after_start": [
+    "agent-otel-m2-715a7519d1f148b9b11ce4002a99f2ff"
+  ],
+  "pipe_owner_pid": 61032,
+  "marker_file": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\marker.txt",
+  "marker_sha256": "715fabd8a6bce245ca58d02f3440cda4068876cec65b7e284aa645dc9e9df3c6",
+  "requested_model": "haiku",
+  "harness_exe": "C:\\Users\\samue\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.exe",
+  "harness_pid": 6936,
+  "harness_exit_code": 0,
+  "hook_config_sha256_after": "4cd2e8f78af5d7496df184f9acba85f30927f0df846368fdcee06b73f986d0b4",
+  "hook_config_unchanged": true,
+  "claude_config_unchanged": true,
+  "shutdown_sent": true,
+  "exit_code": 0,
+  "harness_alive_after_cleanup": false,
+  "daemon_alive_after_cleanup": false,
+  "pipes_after_cleanup": [],
+  "source_receipt_sha256": "758e91daf9f20fd5f03759c9250e99e67c0d2f12dc5fd5917929901824c6b64a",
+  "request_counts": {
+    "/v1/metrics": 17,
+    "/v1/traces": 3
+  },
+  "projection": "trace receipts retained; metric bodies omitted and counted"
+}

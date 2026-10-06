@@ -1,0 +1,15 @@
+# M2 — sessão AGY real: contrato
+
+2026-10-06. Base ddf1f1a. Estado: preparação, sem teste iniciado.
+
+Objetivo: comprovar evento de ferramenta disparado pelo AGY CLI real, usando configuração global existente e receptor OTLP privado. Uma leitura de arquivo marcador criado pelo supervisor; nenhum evento sintético substitui o evento real. Modelo gemini-3.8-flash-low, subscrição existente; máximo duas tentativas.
+
+Daemon: binário canônico com hash fixado na tentativa02, foreground, ambiente mínimo/home temporário, pipe UUID, receiver127.0.0.1:porta efêmera. Job Windows kill-on-close, PID dono do pipe conferido, deadline150s. Harness: ambiente normal para encontrar login/hooks globais, sobrescrevendo pipe somente no processo filho; chaves de API removidas do ambiente filho; nenhum dump de ambiente real. Sem alteração de hooks, instalação, registro ou configuração persistente. Arquivos de sessão normais do próprio CLI podem ser criados pelo harness.
+
+Antes do efeito: salvar intenção, hashes de config/binários e identidades no recibo. Depois: confirmar leitura via tool-use do stream do harness e correlacionar conversation/tool IDs com spans recebidos. Guardar raw temporariamente fora do Git; persistir somente campos necessários e hashes, sem prompts/contexto/credenciais. Receber no sink privado não comprova ingestão no SigNoz nem IDE/Desktop. Encerrar daemon/harness/job e reconciliar pipes; preservar resultado antes do próximo cliente.
+
+Revisão Grok Build Fast: aprovação condicional. Aplicado modo plan (sem bypass de permissões) para a única leitura; rejeitar teste se ferramentas adicionais forem usadas. Harness suspenso e associado ao job antes de executar; conferir ambos PIDs e pipe na limpeza. Variáveis OTEL e chaves API removidas do ambiente filho; configuração local AGY/Gemini inspecionada sem expor valores sensíveis. Stream bruto fora do Git e projeção mínima. Caso modo plan negue leitura, registrar impedimento; não substituir por bypass nesta tentativa.
+
+Extensão sequencial para Grok/Claude/Codex: mesma receita validada. Grok Build Fast low em plan, sem subagentes/web, até3turnos; Claude alias econômico haiku em plan com Read permitido (resolver modelo observado pelo stream); Codex gpt-6-luna medium em sandbox read-only para uma leitura shell. Preservar trust/hooks existentes; não ignorar gates. Endpoint OTLP do harness direcionado ao receiver privado para evitar misturar sinais nativos com produção; separar spans bridge por atributos. Usar subscrição, sem chaves API no ambiente. Uma sessão por vez; timeout100s e job150s. Hashes dos hooks e guarda Claude conferidos antes/depois. Salvar resultado por cliente antes de avançar.
+
+Codex tentativa1: conta ChatGPT logada, gpt-6-luna rejeitado pelo servidor (400 unsupported) antes de ferramenta; zero spans bridge, inconclusivo para hooks. Segunda e última tentativa da unidade usa gpt-5.6-luna medium, presente no catálogo local atualizado em03:12; catálogo não garante disponibilidade de backend. Não escalar para Astra nem API paga se falhar.

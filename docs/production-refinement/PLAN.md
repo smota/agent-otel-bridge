@@ -59,7 +59,7 @@ Política revisada em 2026-10-06: priorizar AGY Flash e Grok Build Fast. Esta é
 
 | Operação | Principal | Fallback da mesma faixa | Quando escalar |
 |---|---|---|---|
-| Inventário, extração, índice, formatação | gemini-3.8-flash-low / AGY | gpt-6-luna medium / Codex | Extração ambígua: Flash medium, com exemplos concretos |
+| Inventário, extração, índice, formatação | gemini-3.8-flash-low / AGY | gpt-5.6-luna medium / Codex CLI | Extração ambígua: Flash medium, com exemplos concretos |
 | Diagnóstico delimitado e revisão comum | grok-4.7-build-fast / Grok | gemini-3.8-flash-medium / AGY; Luna medium se autor for Flash | Hipótese não resolvida com evidências: Grok 4.7 em parecer curto |
 | Pesquisa de código, fixtures, adaptadores e dashboards | gemini-3.8-flash-medium / AGY | grok-4.7-build-fast / Grok | Falha reproduzível persistente: gpt-6.1-sol medium / Codex |
 | Arquitetura, contratos e recuperação de migração | grok-4.7 / Grok, somente parecer delimitado | gpt-6.1-sol medium / Codex, parecer provisório | Fechar M4 requer parecer Grok; executar outra tarefa se indisponível |
@@ -67,6 +67,8 @@ Política revisada em 2026-10-06: priorizar AGY Flash e Grok Build Fast. Esta é
 | Revisão crítica de instalação, migração, OTLP ou concorrência | gpt-6.1-sol medium / Codex | claude-sonnet-5-5-medium / AGY | Se Sol for autor, usar Sonnet; aprofundar apenas o ponto sem evidência |
 
 Catálogos consultados: agy models e grok models em 2026-10-06. AGY lista Flash 3.8 low/medium, Gemini 3.1 Pro high e Sonnet 5.5 medium; o antigo claude-sonnet-4-6 não foi listado e saiu do roteamento. Grok lista grok-4.7-build-fast e grok-4.7; uma segunda consulta confirmou login grok.com após resposta transitória de autenticação. Catálogo/login não comprovam execução de inferência nem capacidade disponível. Revalidar no despacho; nunca substituir silenciosamente o ID solicitado.
+
+Verificação em sessões reais (2026-10-06): AGY gemini-3.8-flash-low e Grok grok-4.7-build-fast low executaram leituras. No Codex CLI0.154.0, gpt-6-luna retornou400 unsupported apesar de listado no cache; gpt-5.6-luna medium executou a tarefa com conta ChatGPT. Usar este último como fallback econômico do CLI enquanto a incompatibilidade persistir; o catálogo do Desktop não certifica o backend do CLI. No Claude direto, alias haiku foi apresentado como claude-haiku-4-5-20251001 no init, mas modelUsage informou claude-sonnet-5-5. Não tratar esse alias como garantia econômica; preferir AGY/Grok para tarefas comuns e registrar solicitado, anunciado e contabilizado separadamente. Claude auth status confirmou subscrição Pro/claude.ai. Nenhuma inferência via API paga nesta unidade.
 
 Modelo e cliente são campos separados. Sonnet via Claude direto pode substituir o transporte AGY após resolver e registrar o ID exato disponível. Não tratar o alias sonnet como prova de versão.
 

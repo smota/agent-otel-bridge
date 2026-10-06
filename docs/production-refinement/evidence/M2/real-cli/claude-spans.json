@@ -1,0 +1,43 @@
+[
+  {
+    "trace_id": "53480dd963e5a57688f41f53de20616d",
+    "span_id": "cfd02f682c000ea1",
+    "name": "execute_tool Read",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "claude-code",
+      "agent.hook.event": "PreToolUse",
+      "gen_ai.conversation.id": "6c55f3c0-c4a0-4417-ad4d-287381805cc6",
+      "gen_ai.tool.name": "Read",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "53480dd963e5a57688f41f53de20616d",
+    "span_id": "7156db9158e6d134",
+    "name": "execute_tool Read",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "claude-code",
+      "agent.hook.event": "PostToolUse",
+      "gen_ai.conversation.id": "6c55f3c0-c4a0-4417-ad4d-287381805cc6",
+      "gen_ai.tool.name": "Read",
+      "agent.context.state": "missing"
+    }
+  },
+  {
+    "trace_id": "53480dd963e5a57688f41f53de20616d",
+    "span_id": "1902bc63fd1b9006",
+    "name": "agent.stop",
+    "attributes": {
+      "gen_ai.provider.name": "google",
+      "gen_ai.system": "google",
+      "gen_ai.agent.name": "claude-code",
+      "agent.hook.event": "Stop",
+      "gen_ai.conversation.id": "6c55f3c0-c4a0-4417-ad4d-287381805cc6",
+      "agent.context.state": "missing"
+    }
+  }
+]

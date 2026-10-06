@@ -1,0 +1,97 @@
+{
+  "started_utc": "2026-10-06T01:09:13Z",
+  "exe": "C:\\Users\\samue\\AppData\\Local\\agent-otel-bridge\\bin\\agent-otel-bridge.exe",
+  "sha256": "24c73837129c674d80df727b85d04915952fc9c73b9bffb451e6a531497c6e9d",
+  "supervisor_pid": 9864,
+  "pipe": "\\\\.\\pipe\\agent-otel-m2-cf154187e1004ee4bc03affede842e38",
+  "endpoint": "http://127.0.0.1:60910",
+  "env": {
+    "SystemRoot": "C:\\Windows",
+    "WINDIR": "C:\\Windows",
+    "PATH": "C:\\Windows\\System32",
+    "USERPROFILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\USERPROFILE",
+    "HOME": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\HOME",
+    "LOCALAPPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\LOCALAPPDATA",
+    "APPDATA": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\APPDATA",
+    "TEMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\TEMP",
+    "TMP": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\TMP",
+    "AGENT_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-cf154187e1004ee4bc03affede842e38",
+    "AGY_OTEL_PIPE": "\\\\.\\pipe\\agent-otel-m2-cf154187e1004ee4bc03affede842e38",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:60910",
+    "OTEL_SERVICE_NAME": "agent-otel-m2-isolated",
+    "AGENT_OTEL_IDLE_TIMEOUT_SECS": "180",
+    "AGENT_OTEL_QUOTA_INTERVAL_SECS": "60",
+    "AGENT_OTEL_QUOTA_FILE": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\absent-quota.json"
+  },
+  "run": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5",
+  "requests": [
+    {
+      "path": "/v1/traces",
+      "bytes": 673,
+      "sha256": "113cbe1012ef2b592160e6cd30318a7f52d7dd86f6b2dd2a53e00e6dd8ad7335",
+      "file": "request-006.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 1421,
+      "sha256": "250661d18d105d926faa5c8b63ac23334a934af4a5029f4196742ae0eefb2772",
+      "file": "request-010.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 1422,
+      "sha256": "c5d87ce576c2d57d535b296b9f17fe61221584d2cb67229cfdb0478832935bc3",
+      "file": "request-013.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 1137,
+      "sha256": "eb5d44c19734c4ef28cbd06f16875f4737b480909185eaedbe29402f7d4a52b8",
+      "file": "request-015.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 1136,
+      "sha256": "6c8647291edbf190cae2f9a7eb0e55f08dbdc857483553063ce28508cdc37e53",
+      "file": "request-017.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 1137,
+      "sha256": "dcc15a8c733429502d6138e72cc9cab59a689f7c1cd99f4b098a9208976f0647",
+      "file": "request-021.bin"
+    },
+    {
+      "path": "/v1/traces",
+      "bytes": 1256,
+      "sha256": "99f752f70c90950157403a4276cc3449bda101ce572850e6e1a15319dd1c62e6",
+      "file": "request-023.bin"
+    }
+  ],
+  "stage": "exited",
+  "hook_config_sha256_before": "e122f9d9e2acf42d4b3c34d8ed7787a1b83a3d770dccef3f5917f0b2729583e6",
+  "pid": 56424,
+  "pipes_after_start": [
+    "agent-otel-m2-cf154187e1004ee4bc03affede842e38"
+  ],
+  "pipe_owner_pid": 56424,
+  "marker_file": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\marker.txt",
+  "marker_sha256": "b7b22400b806cfd3186e500d654ef5caad3819cbb89da336988adf3f801cb7da",
+  "requested_model": "gemini-3.8-flash-low",
+  "harness_exe": "C:\\Users\\samue\\AppData\\Local\\agy\\bin\\agy.exe",
+  "harness_pid": 65392,
+  "harness_exit_code": 0,
+  "hook_config_sha256_after": "e122f9d9e2acf42d4b3c34d8ed7787a1b83a3d770dccef3f5917f0b2729583e6",
+  "hook_config_unchanged": true,
+  "shutdown_sent": true,
+  "exit_code": 0,
+  "harness_alive_after_cleanup": false,
+  "daemon_alive_after_cleanup": false,
+  "pipes_after_cleanup": [],
+  "source_receipt_sha256": "a5e84155a21d964724e9d7118e48e450b3994431ab4c1e4d58ccdae9b7f33a2b",
+  "request_counts": {
+    "/v1/metrics": 20,
+    "/v1/traces": 7
+  },
+  "projection": "trace receipts retained; metric bodies omitted and counted"
+}

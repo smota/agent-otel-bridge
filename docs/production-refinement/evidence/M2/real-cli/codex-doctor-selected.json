@@ -1,0 +1,48 @@
+{
+  "exit_code": 1,
+  "overall": "fail",
+  "selected_checks": [
+    {
+      "id": "auth.credentials",
+      "category": "auth",
+      "status": "ok",
+      "summary": "auth is configured",
+      "details": {
+        "auth file": "C:\\Users\\samue\\.codex\\auth.json",
+        "auth storage mode": "File",
+        "stored API key": "false",
+        "stored ChatGPT tokens": "true",
+        "stored agent identity": "false",
+        "stored auth mode": "chatgpt"
+      },
+      "remediation": null,
+      "durationMs": 0
+    },
+    {
+      "id": "config.load",
+      "category": "config",
+      "status": "ok",
+      "summary": "config loaded",
+      "details": {
+        "CODEX_HOME": "C:\\Users\\samue\\.codex",
+        "active thread overrides": "not inspected",
+        "config.toml": "C:\\Users\\samue\\.codex\\config.toml",
+        "config.toml parse": "ok",
+        "configuration load ms": "9",
+        "configuration scope": "invocation config, including cloud-managed policy",
+        "cwd": "C:\\Users\\samue\\code\\agent-otel-bridge",
+        "enabled feature flags": "<redacted>",
+        "feature flag overrides": "memories=true",
+        "feature flags enabled": "50",
+        "log dir": "C:\\Users\\samue\\.codex\\log",
+        "mcp servers": "1",
+        "model": "gpt-6-astra",
+        "model provider": "openai",
+        "sqlite home": "C:\\Users\\samue\\.codex"
+      },
+      "remediation": null,
+      "durationMs": 0
+    }
+  ],
+  "scope": "auth and config only; overall doctor did not pass"
+}

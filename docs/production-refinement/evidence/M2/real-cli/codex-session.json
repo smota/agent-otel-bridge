@@ -1,0 +1,30 @@
+{
+  "thread_id": "01a10ec5-c962-7c23-ae0e-9a6cfccbd13e",
+  "requested_model": "gpt-5.6-luna",
+  "observed_rollout_model": "gpt-5.6-luna",
+  "reasoning": "medium",
+  "auth_status": "Logged in using ChatGPT",
+  "commands": [
+    {
+      "id": "item_0",
+      "type": "command_execution",
+      "command": "\"C:\\\\Users\\\\samue\\\\.cache\\\\codex-runtimes\\\\codex-primary-runtime\\\\dependencies\\\\native\\\\powershell\\\\pwsh.exe\" -NoProfile -Command \"Get-Content -Raw -LiteralPath 'C:\\\\Users\\\\samue\\\\AppData\\\\Local\\\\Temp\\\\aob-m2-real-20261006\\\\codex-d6c2fb9037\\\\marker.txt'\"",
+      "exit_code": 0,
+      "status": "completed"
+    }
+  ],
+  "command_output_matches_marker": true,
+  "response_matches_marker": true,
+  "usage": {
+    "input_tokens": 47628,
+    "cached_input_tokens": 34304,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 204,
+    "reasoning_output_tokens": 69
+  },
+  "feature_hooks": true,
+  "global_hook_registrations_present": true,
+  "trust_entries_present": true,
+  "trust_effectiveness": "unverified",
+  "cli_version": "0.154.0"
+}

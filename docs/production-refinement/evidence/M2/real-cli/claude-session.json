@@ -1,0 +1,76 @@
+{
+  "session_id": "6c55f3c0-c4a0-4417-ad4d-287381805cc6",
+  "model": "claude-haiku-4-5-20251001",
+  "auth_source": "none",
+  "permission_mode": "plan",
+  "tools": [
+    {
+      "type": "tool_use",
+      "id": "toolu_01ScN3zxnGCumXxmbVb1bDM9",
+      "name": "Read",
+      "input": {
+        "file_path": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\claude-fbfa9865ba\\marker.txt"
+      },
+      "caller": {
+        "type": "direct"
+      }
+    }
+  ],
+  "result": {
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 9961,
+    "num_turns": 2,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 16202,
+      "cache_read_input_tokens": 43117,
+      "output_tokens": 152,
+      "output_tokens_details": {
+        "thinking_tokens": 25
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 16202,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 30,
+          "cache_read_input_tokens": 29569,
+          "cache_creation_input_tokens": 181,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 181
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "modelUsage": {
+      "claude-sonnet-5-5": {
+        "inputTokens": 4,
+        "outputTokens": 152,
+        "cacheReadInputTokens": 43117,
+        "cacheCreationInputTokens": 16202,
+        "webSearchRequests": 0,
+        "costUSD": 0.0749594,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 128000,
+        "thinkingTokens": 25,
+        "canonicalModel": "claude-sonnet-5-5",
+        "provider": "firstParty",
+        "costBasis": "list"
+      }
+    }
+  },
+  "response_matches_marker": true
+}

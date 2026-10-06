@@ -1,0 +1,51 @@
+{
+  "session_id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+  "init": {
+    "model": "gemini-3.8-flash-low",
+    "permission_mode": "request-review"
+  },
+  "tools": [
+    {
+      "conversation_id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "step_index": 2,
+      "state": "ACTIVE",
+      "step_type": "tool",
+      "tool_name": "view_file",
+      "tool_info": {
+        "name": "view_file",
+        "parameters": {
+          "AbsolutePath": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\marker.txt"
+        }
+      }
+    },
+    {
+      "conversation_id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+      "step_index": 2,
+      "state": "DONE",
+      "step_type": "tool",
+      "tool_name": "view_file",
+      "duration_seconds": 1.500741,
+      "tool_info": {
+        "name": "view_file",
+        "parameters": {
+          "AbsolutePath": "C:\\Users\\samue\\AppData\\Local\\Temp\\aob-m2-real-20261006\\agy-22f29b48c5\\marker.txt"
+        },
+        "output": "1 lines, 44 bytes"
+      }
+    }
+  ],
+  "result": {
+    "conversation_id": "a7d9c366-da09-487e-88ce-534a13ef05cf",
+    "status": "SUCCESS",
+    "duration_seconds": 10.1695992,
+    "num_turns": 1,
+    "usage": {
+      "input_tokens": 31339,
+      "output_tokens": 115,
+      "thinking_tokens": 0,
+      "cache_read_tokens": 0,
+      "total_tokens": 31454
+    }
+  },
+  "response_matches_marker": true
+}
