@@ -1452,7 +1452,11 @@ mod tests {
         let command = parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert!(command.starts_with("& \""));
+        if cfg!(windows) {
+            assert!(command.starts_with("& \""));
+        } else {
+            assert!(command.starts_with("\""));
+        }
         assert!(command.ends_with(" PreToolUse --client grok"));
         assert!(command.contains("C:\\Program Files\\agent-hook.exe"));
         let _ = fs::remove_dir_all(dir);

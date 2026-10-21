@@ -1,0 +1,482 @@
+{
+  "version": 1,
+  "namespace": "agentflow",
+  "entries": [
+    {
+      "harness": "claude-code",
+      "role": "agentflow:requester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-requester.md",
+      "status": "unchanged",
+      "hash": "a007af78c4246f7b12fa8ff2c6705946a22676f890da307725bc671def1450c8"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:requester",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-requester.md",
+      "status": "unchanged",
+      "hash": "6ea0e61cc33434355d8896573cda2a6930d2f90faa675cb237393d023d57ffb8"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:product-manager",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-product-manager.md",
+      "status": "unchanged",
+      "hash": "df4c71fbd1490d148930ab87e8963cc8f8e4dc271bcaafdfd68d9bdc56f0af2c"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:product-manager",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-product-manager.md",
+      "status": "unchanged",
+      "hash": "56f03597e8485694af892db7e2323f10316b62628364550619a5d210f64a5cd2"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:analyst",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-analyst.md",
+      "status": "unchanged",
+      "hash": "122da17a89ab49fa9252692857a1be641976c9a560ee8b72f5aa8d7a35c9df69"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:analyst",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-analyst.md",
+      "status": "unchanged",
+      "hash": "d885ca61545adb939bdbc6942f5cd9c01311305fb5afa608d29c0b3fb8fd2d4f"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:architect",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-architect.md",
+      "status": "unchanged",
+      "hash": "1e1a5b1ee6271368b957383fbc4ca32e312e5eff2c801cf5c779d66c3cec07cf"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:architect",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-architect.md",
+      "status": "unchanged",
+      "hash": "3ccf9b49e958a407dd98aad7107e811d5d649c253cc28527e19d987b053ab39e"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:implementation-planner",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-implementation-planner.md",
+      "status": "unchanged",
+      "hash": "9d541fb3e7b9283644a62f68e3be31c503dac467b5b613e983ec382fd11db255"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:implementation-planner",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-implementation-planner.md",
+      "status": "unchanged",
+      "hash": "9b9f6d6cadf84abacc1b8956d71600b239364692d9c95b08555fbe89273a7aa8"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:developer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-developer.md",
+      "status": "unchanged",
+      "hash": "8cb9efd91da40ae9d0ab5fed6dc645ecc0d587677fc6400c0d3807876885e89e"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:developer",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-developer.md",
+      "status": "unchanged",
+      "hash": "1592e81337a3cc44f659225a66dd58e4e76d02577f77d8ff79768a7c46199934"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:tester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-tester.md",
+      "status": "unchanged",
+      "hash": "ad4e0b4d9cead0931f63ae45819ffa1468fab9d63eb62c1f4cfd5acab1367df7"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:tester",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-tester.md",
+      "status": "unchanged",
+      "hash": "4bb5067b6ea5a31237fb553390a308ba40d01151aa57f58088c83294dc49f854"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:reviewer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-reviewer.md",
+      "status": "unchanged",
+      "hash": "72177805aa838cf5c57541adf2200fd57dd462a6215cf389bf7375c8d0dad6e7"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:reviewer",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-reviewer.md",
+      "status": "unchanged",
+      "hash": "f3220d74cd77af2acc8cb7a6a4db1a9bce66e4b7dfb54b5c5be924fd8f55a729"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:technical-writer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-technical-writer.md",
+      "status": "unchanged",
+      "hash": "e46233f8630cace04fea13bb5bf4a603e6ae9cbec8ea881e0e4f19afc8025664"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:technical-writer",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-technical-writer.md",
+      "status": "unchanged",
+      "hash": "8367513fe5d0c7606d4235282ab9f65d30672d7458b09310bccb4414b49c6097"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:pr-readiness",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-pr-readiness.md",
+      "status": "unchanged",
+      "hash": "a0a082b9a9559de64ab28547ec989e0a0954183c1206032df8cf8f9f10f3b178"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:pr-readiness",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-pr-readiness.md",
+      "status": "unchanged",
+      "hash": "72d9eb4b65aebdb8cbbc39ace9c47936d2b24653cfaed7aead9d85b69ef179ea"
+    },
+    {
+      "harness": "claude-code",
+      "role": "agentflow:qa-expert",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/claude-code/agentflow-qa-expert.md",
+      "status": "unchanged",
+      "hash": "d05db6335f2d5805569cc047597321f15bde7b304d9565015ba90d0062272bc9"
+    },
+    {
+      "harness": "claude-code:command",
+      "role": "agentflow:qa-expert",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/role-qa-expert.md",
+      "status": "unchanged",
+      "hash": "6b9f8e4519a332c71201544d8ec61dfa54ad6820361bfd74aafedba824c5e36f"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:requester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-requester.md",
+      "status": "unchanged",
+      "hash": "910fc3fdfc0df9d34285cecf9bc56920afc8375173d0c0e4ae7143aad31d890f"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:product-manager",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-product-manager.md",
+      "status": "unchanged",
+      "hash": "41fa952ac45f96c0264a6180b81403ebb4bdd19cc87dd56efe4375eda623cca1"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:analyst",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-analyst.md",
+      "status": "unchanged",
+      "hash": "9d497555473aea3ebab9bdc339cc16faa23953398d954a63fefd1c18534f63ac"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:architect",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-architect.md",
+      "status": "unchanged",
+      "hash": "f76d766847f94df5a7bf5719166c8ce7b6b9471c894acdeb56270152f044571c"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:implementation-planner",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-implementation-planner.md",
+      "status": "unchanged",
+      "hash": "0e666b38fb4e19d5ba0adef85d85a1f5e9972aa38a5cde5d865d5f4ddf9ccf93"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:developer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-developer.md",
+      "status": "unchanged",
+      "hash": "bce5c5effb7a8e97e1c0ef3259299f726e7fbfab1099e170960e5ea6b0cdf9e8"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:tester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-tester.md",
+      "status": "unchanged",
+      "hash": "9db3a2b4fb75bf756dd9f0babea05e70541c218edd92c93e2163f4c787fd9914"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:reviewer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-reviewer.md",
+      "status": "unchanged",
+      "hash": "0f97b3eecaba2867da8d2858d686e54cab9ecd129a0b6a09ebe04fc67bbbd056"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:technical-writer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-technical-writer.md",
+      "status": "unchanged",
+      "hash": "0ce6d05ed6312d8881352ce7dca1d5fc98e92f2511528e2b87735ffed4487706"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:pr-readiness",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-pr-readiness.md",
+      "status": "unchanged",
+      "hash": "06cd1959e1fa5e4d8a872439fdee3a7b27f90e986f4b54b43b6995d7d0ca142e"
+    },
+    {
+      "harness": "codex",
+      "role": "agentflow:qa-expert",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/codex/agentflow-qa-expert.md",
+      "status": "unchanged",
+      "hash": "ce1e52729a420b7ffa46a70c39314bd43ef9f583b61e413e1b0c18a8e2eae496"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:requester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-requester.md",
+      "status": "unchanged",
+      "hash": "79c06c9a042709fa5e05de59f71884dc97daed7436f4bc7460b9c1dff4c1b841"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:product-manager",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-product-manager.md",
+      "status": "unchanged",
+      "hash": "cb3d698a909c21e9082e1d319a9bf9bdf2ff6e0f7517c76b6b04ee500e404983"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:analyst",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-analyst.md",
+      "status": "unchanged",
+      "hash": "9f66a912f0fd4425ddcf59a3d5a89228e184b4fff0f9c7eae7b54f8b477d2776"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:architect",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-architect.md",
+      "status": "unchanged",
+      "hash": "a34a7d6d4b72d870d1b14fb80c187349d60f22f820dc5d73b8f5a33af5db55d0"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:implementation-planner",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-implementation-planner.md",
+      "status": "unchanged",
+      "hash": "b90c5a8faa4ce60a13bf6dfb1ae36258dc1425368d1aecddf987556753fd5e4d"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:developer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-developer.md",
+      "status": "unchanged",
+      "hash": "f35c641425983ace03be1151786b00935bc79eb16b8dfd02243195db4379b34d"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:tester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-tester.md",
+      "status": "unchanged",
+      "hash": "789f5d9cbbcf8f782b929908fa910a12ee2d760c11f73be65530d1577826ce57"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:reviewer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-reviewer.md",
+      "status": "unchanged",
+      "hash": "49b46f34b6c605b60b9ebe835a4bbb0f9885df51bc42ceca24ce3ab819c8f4be"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:technical-writer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-technical-writer.md",
+      "status": "unchanged",
+      "hash": "123e0d79ea49d221cf63912d15759c59ad19f6fb766a46cfd91d7f75504bc9ae"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:pr-readiness",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-pr-readiness.md",
+      "status": "unchanged",
+      "hash": "5b0d9954239a8652163bc5b56a3071ee50bdb3f42e036b0088ae2cf3c3bab9a0"
+    },
+    {
+      "harness": "agy",
+      "role": "agentflow:qa-expert",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/agy/agentflow-qa-expert.md",
+      "status": "unchanged",
+      "hash": "c0ad66f4c05f8c0646fca04f2c9f83c5016dfe025687e78ca6fb11e4c9b6a4a3"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:requester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-requester.md",
+      "status": "unchanged",
+      "hash": "a04902b0c8b1c92a8406e79e36331c873e37660914af35bd6c768aa262734f8d"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:requester",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-requester.md",
+      "status": "unchanged",
+      "hash": "6ea0e61cc33434355d8896573cda2a6930d2f90faa675cb237393d023d57ffb8"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:product-manager",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-product-manager.md",
+      "status": "unchanged",
+      "hash": "2d9559ff6c3b8f31ddb1ba12716530bd120b3873329c57d90914b82a22d46b46"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:product-manager",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-product-manager.md",
+      "status": "unchanged",
+      "hash": "56f03597e8485694af892db7e2323f10316b62628364550619a5d210f64a5cd2"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:analyst",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-analyst.md",
+      "status": "unchanged",
+      "hash": "e95688fc5b3c6676658fce467900cad1c60f08304859502d1be8f957f0a461bc"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:analyst",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-analyst.md",
+      "status": "unchanged",
+      "hash": "d885ca61545adb939bdbc6942f5cd9c01311305fb5afa608d29c0b3fb8fd2d4f"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:architect",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-architect.md",
+      "status": "unchanged",
+      "hash": "eb1b7314c8ccc17a5dcc66b6138efce8b32d8024d54835bdc9af5021e1d1d081"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:architect",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-architect.md",
+      "status": "unchanged",
+      "hash": "3ccf9b49e958a407dd98aad7107e811d5d649c253cc28527e19d987b053ab39e"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:implementation-planner",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-implementation-planner.md",
+      "status": "unchanged",
+      "hash": "6f23a34ce81f511c8f1d1dc0a952d59d5058291bebe47d3c10edff10d9481844"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:implementation-planner",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-implementation-planner.md",
+      "status": "unchanged",
+      "hash": "9b9f6d6cadf84abacc1b8956d71600b239364692d9c95b08555fbe89273a7aa8"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:developer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-developer.md",
+      "status": "unchanged",
+      "hash": "a284e15336782f2dd8b8d78b7016dd1638d197da0bae1d7e636906c711d7933e"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:developer",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-developer.md",
+      "status": "unchanged",
+      "hash": "1592e81337a3cc44f659225a66dd58e4e76d02577f77d8ff79768a7c46199934"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:tester",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-tester.md",
+      "status": "unchanged",
+      "hash": "1d596e330366c69051e56efa6bee35cd04c22f71124cc5207377210227aef5aa"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:tester",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-tester.md",
+      "status": "unchanged",
+      "hash": "4bb5067b6ea5a31237fb553390a308ba40d01151aa57f58088c83294dc49f854"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:reviewer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-reviewer.md",
+      "status": "unchanged",
+      "hash": "6a5ef9412de1700789f9f3ce9caa5478d268752aa5f682134ed17da48f525b58"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:reviewer",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-reviewer.md",
+      "status": "unchanged",
+      "hash": "f3220d74cd77af2acc8cb7a6a4db1a9bce66e4b7dfb54b5c5be924fd8f55a729"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:technical-writer",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-technical-writer.md",
+      "status": "unchanged",
+      "hash": "b4913c7fc9629def42774a453d21556c17c6561e0707eee1434cd315c090aef6"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:technical-writer",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-technical-writer.md",
+      "status": "unchanged",
+      "hash": "8367513fe5d0c7606d4235282ab9f65d30672d7458b09310bccb4414b49c6097"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:pr-readiness",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-pr-readiness.md",
+      "status": "unchanged",
+      "hash": "9efd4b4c030d5b0d3192608c910c3c2e8bd4d20a034ecaf30836ba778dd392a0"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:pr-readiness",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-pr-readiness.md",
+      "status": "unchanged",
+      "hash": "72d9eb4b65aebdb8cbbc39ace9c47936d2b24653cfaed7aead9d85b69ef179ea"
+    },
+    {
+      "harness": "pi",
+      "role": "agentflow:qa-expert",
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/roles/pi/agentflow-qa-expert.md",
+      "status": "unchanged",
+      "hash": "167ce8ceb464ea8862fc06672edb352d31f2c7878c0cc4e47ae9c198808d8670"
+    },
+    {
+      "harness": "pi:command",
+      "role": "agentflow:qa-expert",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/role-qa-expert.md",
+      "status": "unchanged",
+      "hash": "6b9f8e4519a332c71201544d8ec61dfa54ad6820361bfd74aafedba824c5e36f"
+    },
+    {
+      "harness": "shared",
+      "role": null,
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/role-catalog.json",
+      "status": "unchanged",
+      "hash": "bece70fb54fa46f249c0af376f6eacade4eeeb156c44addb00d133c0931aaa05"
+    },
+    {
+      "harness": "shared",
+      "role": null,
+      "target": "/home/sam/code/agent-otel-bridge/.agentflow/method-catalog.json",
+      "status": "unchanged",
+      "hash": "e438009f72865784ef99bd518c3a44cb496c9cbca7dd2bcadc855442aa4a6f13"
+    }
+  ]
+}

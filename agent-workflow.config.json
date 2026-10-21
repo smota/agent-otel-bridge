@@ -1,0 +1,215 @@
+{
+  "posture": "autonomous",
+  "ciCommands": [
+    "cargo check --workspace",
+    "cargo test --workspace"
+  ],
+  "bounded": {
+    "allowedExactPaths": [
+      "README.md"
+    ],
+    "allowedPathPrefixes": [
+      "docs/"
+    ],
+    "deniedPathFragments": [],
+    "defaultBase": "origin/main"
+  },
+  "branching": {
+    "trunk": "main",
+    "releaseCandidate": null,
+    "integration": "main",
+    "directEditDeniedBranches": [
+      "main"
+    ],
+    "defaultPrTarget": "main",
+    "promotionOrder": [
+      "main"
+    ],
+    "workBranchPrefixes": [
+      "work/",
+      "feature/",
+      "fix/",
+      "hotfix/",
+      "spike/",
+      "chore/"
+    ],
+    "compatibilityBranchPrefixes": [
+      "issue/",
+      "wt/",
+      "claude/"
+    ],
+    "requireBoundedWorkBranch": true
+  },
+  "integrationLifecycle": {
+    "integrationBranch": "main",
+    "trunkBranch": "main",
+    "referenceKeywords": [
+      "Implements",
+      "Refs"
+    ],
+    "addLabels": [
+      "integrated:main",
+      "awaiting-release"
+    ],
+    "closeIntegratedIssues": true
+  },
+  "routing": {
+    "defaultMode": "single-agent"
+  },
+  "collaboration": {
+    "defaultMode": "auto-minimal",
+    "sensitiveSurfaces": [
+      "security",
+      "auth",
+      "data",
+      "infra",
+      "billing"
+    ],
+    "councilDomainThreshold": 3,
+    "bilateralDomainThreshold": 2,
+    "councilOnPublicContract": true,
+    "councilOnMigration": true,
+    "maxReworkRounds": 2,
+    "councilHelpers": [
+      "risk-scout",
+      "implementation-strategist",
+      "testability-scout",
+      "docs-impact-scout"
+    ],
+    "discoveryHelpers": [
+      "requirements-scout",
+      "architecture-scout"
+    ],
+    "councilSeats": [
+      {
+        "role": "agentflow:architect",
+        "focus": "architecture and system boundaries",
+        "required": true
+      },
+      {
+        "role": "agentflow:developer",
+        "focus": "implementation feasibility",
+        "required": true
+      },
+      {
+        "role": "agentflow:tester",
+        "focus": "testability and failure evidence",
+        "required": true
+      },
+      {
+        "role": "agentflow:reviewer",
+        "focus": "risk and maintainability",
+        "required": true
+      }
+    ],
+    "fallbackModes": [
+      "sequential",
+      "manual"
+    ],
+    "maxDelegates": 4,
+    "maxDepth": 1,
+    "maxIterations": 3
+  },
+  "extensions": {
+    "enabledPacks": []
+  },
+  "delivery": {
+    "source": {
+      "kind": "local-preview"
+    },
+    "candidate": {
+      "inputs": []
+    }
+  },
+  "gateNotifications": {
+    "hookUrl": null
+  },
+  "executionTopology": {
+    "substrateTier": "auto",
+    "openrigSquadPreset": "lean-4-seat",
+    "compositeBuilderMaxRung": "P1",
+    "requireOrthogonalReviewFamily": true
+  },
+  "effortPolicy": {
+    "defaultLoopEffort": "medium",
+    "subagentSearchEffort": "low",
+    "highEffortMaxContextTokens": 40000,
+    "enforceCleanSubagentForHighEffort": true
+  },
+  "adapters": {
+    "openrig": {
+      "executionPolicy": {
+        "activation": "active"
+      }
+    }
+  },
+  "executionDistribution": {
+    "profile": "subscription-balanced-v1",
+    "profileDigest": "ee486327708eb3de6b1cb67c825358af8679d9e0d9a8b6ca0164f14c1cfe8fcc",
+    "overrides": {}
+  },
+  "steering": {
+    "version": 1,
+    "goalScope": "smota/agent-otel-bridge",
+    "steeringOwner": "steer.lead",
+    "returnRoute": "pm.manager",
+    "executionDistribution": {
+      "profile": "subscription-balanced-v1",
+      "profileDigest": "ee486327708eb3de6b1cb67c825358af8679d9e0d9a8b6ca0164f14c1cfe8fcc",
+      "selectionDigest": "d4d991ee9d77e1e5bdec230cd85414190b6dcfd83f15249ee15659240a84b3ed",
+      "steerLeadRoute": {
+        "default": {
+          "runtime": "codex",
+          "executionTarget": "codex-cli",
+          "providerRoute": "openai-codex",
+          "providerFamily": "openai",
+          "client": "codex",
+          "subscription": "openai",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        "fallbacks": [
+          {
+            "runtime": "pi",
+            "executionTarget": "pi-session",
+            "providerRoute": "antigravity",
+            "providerFamily": "google",
+            "client": "pi",
+            "subscription": "gemini",
+            "model": "gemini-3.1-pro",
+            "effort": "medium"
+          },
+          {
+            "runtime": "claude-code",
+            "executionTarget": "claude-cli",
+            "providerRoute": "anthropic",
+            "providerFamily": "anthropic",
+            "client": "claude",
+            "subscription": "claude",
+            "model": "claude-sonnet-5-5",
+            "effort": "medium"
+          }
+        ]
+      }
+    },
+    "reviewAndPublicationAuthority": "bounded-self-review-with-human-merge",
+    "quotaPolicy": {
+      "mode": "park-and-checkpoint",
+      "autoMonitoring": false
+    },
+    "checkpointsAndStopConditions": {
+      "checkpointBoundary": "phase-boundary",
+      "maxReworkRounds": 2,
+      "supervisorStaleTimeoutMs": 1800000,
+      "holdOnUnverifiedAuthority": true
+    },
+    "authorityBoundary": {
+      "conversationalConfirmationGrantsAuthority": false,
+      "bypassesSteeringBinding": false,
+      "bypassesMergeReadiness": false,
+      "fabricatesHostAuthentication": false,
+      "grantsPublicationOrMergePower": false
+    },
+    "confirmedDigest": "4a5856ad9fbd6d666e81d8d04d94116c27ae525caa0b30b3e25f794bf7d745d7"
+  }
+}

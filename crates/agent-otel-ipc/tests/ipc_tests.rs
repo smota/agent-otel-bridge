@@ -23,6 +23,7 @@ fn test_frame_encoding_and_decoding() {
     assert_eq!(&encoded[HEADER_LEN..], payload);
 }
 
+#[cfg(windows)]
 #[test]
 fn test_client_fails_open_when_no_server() {
     let non_existent = format!(
@@ -50,6 +51,7 @@ fn test_client_fails_open_when_no_server() {
     );
 }
 
+#[cfg(windows)]
 #[tokio::test]
 async fn test_ipc_roundtrip_named_pipe() {
     let pipe_name = format!(r"\\.\pipe\agy-otel-test-{}", std::process::id());

@@ -1,0 +1,37 @@
+# Meshloop configuration for agent-otel-bridge
+# Governed by AgentFlow SDLC and executed via Meshloop daemonless multi-agent DAGs.
+
+selected_harnesses = ["codex", "claude", "grok"]
+
+[limits]
+max_concurrent_workers = 2
+max_retries = 2
+task_timeout_seconds = 600
+probe_timeout_seconds = 15
+
+[verify]
+verify_command = ["cargo", "test", "--workspace"]
+
+[harnesses.codex]
+kind = "codex"
+executable = "codex"
+version_args = ["--version"]
+invoke_args_template = ["exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "{model_ref}"]
+model_ref = "gpt-6.1-sol"
+model_tier = "top"
+
+[harnesses.claude]
+kind = "claude"
+executable = "claude"
+version_args = ["--version"]
+invoke_args_template = ["--print", "--dangerously-skip-permissions", "{prompt_file}"]
+model_ref = "claude"
+model_tier = "top"
+
+[harnesses.grok]
+kind = "grok"
+executable = "grok"
+version_args = ["--version"]
+invoke_args_template = ["--model", "{model_ref}", "--reasoning-effort", "high", "--no-subagents", "--permission-mode", "default", "--prompt-file", "{prompt_file}"]
+model_ref = "grok-4.7"
+model_tier = "top"

@@ -1,0 +1,1046 @@
+{
+  "version": 2,
+  "namespace": "agentflow",
+  "entries": [
+    {
+      "skill": "agentflow-orchestrator",
+      "adapterName": "agentflow-orchestrator",
+      "qualifiedName": "agentflow-orchestrator",
+      "harness": "claude-code",
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-orchestrator/SKILL.md",
+      "status": "planned",
+      "hash": "5e6a582e4535974069e567294193876809c3f8c30adff5443965513a8c3ec489"
+    },
+    {
+      "skill": "agentflow-orchestrator",
+      "adapterName": "agentflow-orchestrator",
+      "qualifiedName": "agentflow-orchestrator",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-orchestrator.md",
+      "status": "unchanged",
+      "hash": "bdd70f1417f05dbf8804cd95e28283a790b245d899d079272e3f302ab673b1b7"
+    },
+    {
+      "skill": "agentflow-orchestrator",
+      "adapterName": "agentflow-orchestrator",
+      "qualifiedName": "agentflow-orchestrator",
+      "harness": "pi",
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-orchestrator/SKILL.md",
+      "status": "planned",
+      "hash": "5e6a582e4535974069e567294193876809c3f8c30adff5443965513a8c3ec489"
+    },
+    {
+      "skill": "agentflow-orchestrator",
+      "adapterName": "agentflow-orchestrator",
+      "qualifiedName": "agentflow-orchestrator",
+      "harness": "pi:command",
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-orchestrator.md",
+      "status": "unchanged",
+      "hash": "3486673c8e3e5ecaa6f0322e09eacdab6f4a052c56d5ca5ed8c9e7ff1cfa058a"
+    },
+    {
+      "skill": "agentflow-orchestrator",
+      "adapterName": "agentflow-orchestrator",
+      "qualifiedName": "agentflow-orchestrator",
+      "harness": "agy",
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-orchestrator/SKILL.md",
+      "status": "planned",
+      "hash": "5e6a582e4535974069e567294193876809c3f8c30adff5443965513a8c3ec489"
+    },
+    {
+      "skill": "agentflow-orchestrator",
+      "adapterName": "agentflow-orchestrator",
+      "qualifiedName": "agentflow-orchestrator",
+      "harness": "codex",
+      "source": "skills/agentflow-orchestrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-orchestrator/SKILL.md",
+      "status": "unchanged",
+      "hash": "5e6a582e4535974069e567294193876809c3f8c30adff5443965513a8c3ec489"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "claude-code",
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-collaborator/SKILL.md",
+      "status": "planned",
+      "hash": "89e5ec7e7f0e6c17e8ded816e8776f73f838cddd2beccd4c5ae0c2ad7785ba59"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-collaborator.md",
+      "status": "unchanged",
+      "hash": "89e211e2d01788e2565314099ae039cbafc9c475ae16433d1ad3d9a6be245d38"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "claude-code",
+      "source": "skills/agentflow-collaborator/references/bounded-environments.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-collaborator/references/bounded-environments.md",
+      "status": "planned",
+      "hash": "c5228d2f9af4d0de53add5749e1404614865e1d1c1cc3fb84d2a49e5ee5cab06"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "claude-code",
+      "source": "skills/agentflow-collaborator/references/collaboration-modes.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-collaborator/references/collaboration-modes.md",
+      "status": "planned",
+      "hash": "ae01486e528c4f6446b7a697933e68c0891db08dbe524b9539c0bfad7e9fb725"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "pi",
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-collaborator/SKILL.md",
+      "status": "planned",
+      "hash": "89e5ec7e7f0e6c17e8ded816e8776f73f838cddd2beccd4c5ae0c2ad7785ba59"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "pi:command",
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-collaborator.md",
+      "status": "unchanged",
+      "hash": "7302aaf99b456c8af5b151edc8a006e543eb0ca710df36985717c5f03df16530"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "pi",
+      "source": "skills/agentflow-collaborator/references/bounded-environments.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-collaborator/references/bounded-environments.md",
+      "status": "planned",
+      "hash": "c5228d2f9af4d0de53add5749e1404614865e1d1c1cc3fb84d2a49e5ee5cab06"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "pi",
+      "source": "skills/agentflow-collaborator/references/collaboration-modes.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-collaborator/references/collaboration-modes.md",
+      "status": "planned",
+      "hash": "ae01486e528c4f6446b7a697933e68c0891db08dbe524b9539c0bfad7e9fb725"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "agy",
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-collaborator/SKILL.md",
+      "status": "planned",
+      "hash": "89e5ec7e7f0e6c17e8ded816e8776f73f838cddd2beccd4c5ae0c2ad7785ba59"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "agy",
+      "source": "skills/agentflow-collaborator/references/bounded-environments.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-collaborator/references/bounded-environments.md",
+      "status": "planned",
+      "hash": "c5228d2f9af4d0de53add5749e1404614865e1d1c1cc3fb84d2a49e5ee5cab06"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "agy",
+      "source": "skills/agentflow-collaborator/references/collaboration-modes.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-collaborator/references/collaboration-modes.md",
+      "status": "planned",
+      "hash": "ae01486e528c4f6446b7a697933e68c0891db08dbe524b9539c0bfad7e9fb725"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "codex",
+      "source": "skills/agentflow-collaborator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-collaborator/SKILL.md",
+      "status": "unchanged",
+      "hash": "89e5ec7e7f0e6c17e8ded816e8776f73f838cddd2beccd4c5ae0c2ad7785ba59"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "codex",
+      "source": "skills/agentflow-collaborator/references/bounded-environments.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-collaborator/references/bounded-environments.md",
+      "status": "unchanged",
+      "hash": "c5228d2f9af4d0de53add5749e1404614865e1d1c1cc3fb84d2a49e5ee5cab06"
+    },
+    {
+      "skill": "agentflow-collaborator",
+      "adapterName": "agentflow-collaborator",
+      "qualifiedName": "agentflow-collaborator",
+      "harness": "codex",
+      "source": "skills/agentflow-collaborator/references/collaboration-modes.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-collaborator/references/collaboration-modes.md",
+      "status": "unchanged",
+      "hash": "ae01486e528c4f6446b7a697933e68c0891db08dbe524b9539c0bfad7e9fb725"
+    },
+    {
+      "skill": "agentflow-scanner",
+      "adapterName": "agentflow-scanner",
+      "qualifiedName": "agentflow-scanner",
+      "harness": "claude-code",
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-scanner/SKILL.md",
+      "status": "planned",
+      "hash": "311f4ebe9f1a9c6d12e2c15010a404308a027acdc70b662e15f1747613ceba47"
+    },
+    {
+      "skill": "agentflow-scanner",
+      "adapterName": "agentflow-scanner",
+      "qualifiedName": "agentflow-scanner",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-scanner.md",
+      "status": "unchanged",
+      "hash": "50ab234db826b4e1cdf694c5f36df9076d0dbb1cda6f96702bcf7db2669dc2c6"
+    },
+    {
+      "skill": "agentflow-scanner",
+      "adapterName": "agentflow-scanner",
+      "qualifiedName": "agentflow-scanner",
+      "harness": "pi",
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-scanner/SKILL.md",
+      "status": "planned",
+      "hash": "311f4ebe9f1a9c6d12e2c15010a404308a027acdc70b662e15f1747613ceba47"
+    },
+    {
+      "skill": "agentflow-scanner",
+      "adapterName": "agentflow-scanner",
+      "qualifiedName": "agentflow-scanner",
+      "harness": "pi:command",
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-scanner.md",
+      "status": "unchanged",
+      "hash": "7eede1efb1e45e2a4141651175392bbd3afd751533076c80dceae22ab197065c"
+    },
+    {
+      "skill": "agentflow-scanner",
+      "adapterName": "agentflow-scanner",
+      "qualifiedName": "agentflow-scanner",
+      "harness": "agy",
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-scanner/SKILL.md",
+      "status": "planned",
+      "hash": "311f4ebe9f1a9c6d12e2c15010a404308a027acdc70b662e15f1747613ceba47"
+    },
+    {
+      "skill": "agentflow-scanner",
+      "adapterName": "agentflow-scanner",
+      "qualifiedName": "agentflow-scanner",
+      "harness": "codex",
+      "source": "skills/agentflow-scanner/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-scanner/SKILL.md",
+      "status": "unchanged",
+      "hash": "311f4ebe9f1a9c6d12e2c15010a404308a027acdc70b662e15f1747613ceba47"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-designer/SKILL.md",
+      "status": "planned",
+      "hash": "4e4308ac3fec3b487d6b61841508850a8fa58a7ecb157b9a7b9f0982a278fddd"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-designer.md",
+      "status": "unchanged",
+      "hash": "9aaeff0c9c093a7fabee5bb2892f059048ea4e36cbc05fe7e2616af8e39e1064"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-designer/references/definition-completeness.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-designer/references/definition-completeness.md",
+      "status": "planned",
+      "hash": "2368972dcf4f9ee36574b9a61db3f04b7fa0f929a8d87d162e32f91c05d663e6"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "pi",
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-designer/SKILL.md",
+      "status": "planned",
+      "hash": "4e4308ac3fec3b487d6b61841508850a8fa58a7ecb157b9a7b9f0982a278fddd"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-designer.md",
+      "status": "unchanged",
+      "hash": "9231f148772b40bcd44f4409d8eb515835b9314404e1cd0fb2e922fd7e6b309d"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "pi",
+      "source": "skills/agentflow-designer/references/definition-completeness.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-designer/references/definition-completeness.md",
+      "status": "planned",
+      "hash": "2368972dcf4f9ee36574b9a61db3f04b7fa0f929a8d87d162e32f91c05d663e6"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "agy",
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-designer/SKILL.md",
+      "status": "planned",
+      "hash": "4e4308ac3fec3b487d6b61841508850a8fa58a7ecb157b9a7b9f0982a278fddd"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "agy",
+      "source": "skills/agentflow-designer/references/definition-completeness.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-designer/references/definition-completeness.md",
+      "status": "planned",
+      "hash": "2368972dcf4f9ee36574b9a61db3f04b7fa0f929a8d87d162e32f91c05d663e6"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "codex",
+      "source": "skills/agentflow-designer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-designer/SKILL.md",
+      "status": "unchanged",
+      "hash": "4e4308ac3fec3b487d6b61841508850a8fa58a7ecb157b9a7b9f0982a278fddd"
+    },
+    {
+      "skill": "agentflow-designer",
+      "adapterName": "agentflow-designer",
+      "qualifiedName": "agentflow-designer",
+      "harness": "codex",
+      "source": "skills/agentflow-designer/references/definition-completeness.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-designer/references/definition-completeness.md",
+      "status": "unchanged",
+      "hash": "2368972dcf4f9ee36574b9a61db3f04b7fa0f929a8d87d162e32f91c05d663e6"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "claude-code",
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-migrator/SKILL.md",
+      "status": "planned",
+      "hash": "9773dc16a95fc3bb39fa9c714f633620ee809acb0950ea8b071e9790bfd11bc0"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-migrator.md",
+      "status": "unchanged",
+      "hash": "03345a73e1b60c009828d6e22b2ccc36c966d621d0fd35c560301af25714db16"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "claude-code",
+      "source": "skills/agentflow-migrator/references/preflight.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-migrator/references/preflight.md",
+      "status": "planned",
+      "hash": "c6068fc3984a2493c8011ec5394c76de2f692b86be1144d0a0f490342b8152dd"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "pi",
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-migrator/SKILL.md",
+      "status": "planned",
+      "hash": "9773dc16a95fc3bb39fa9c714f633620ee809acb0950ea8b071e9790bfd11bc0"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "pi:command",
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-migrator.md",
+      "status": "unchanged",
+      "hash": "189af2e6333cc0998c5950f676401ef5a887169e13705be1841be42b02e15cb9"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "pi",
+      "source": "skills/agentflow-migrator/references/preflight.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-migrator/references/preflight.md",
+      "status": "planned",
+      "hash": "c6068fc3984a2493c8011ec5394c76de2f692b86be1144d0a0f490342b8152dd"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "agy",
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-migrator/SKILL.md",
+      "status": "planned",
+      "hash": "9773dc16a95fc3bb39fa9c714f633620ee809acb0950ea8b071e9790bfd11bc0"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "agy",
+      "source": "skills/agentflow-migrator/references/preflight.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-migrator/references/preflight.md",
+      "status": "planned",
+      "hash": "c6068fc3984a2493c8011ec5394c76de2f692b86be1144d0a0f490342b8152dd"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "codex",
+      "source": "skills/agentflow-migrator/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-migrator/SKILL.md",
+      "status": "unchanged",
+      "hash": "9773dc16a95fc3bb39fa9c714f633620ee809acb0950ea8b071e9790bfd11bc0"
+    },
+    {
+      "skill": "agentflow-migrator",
+      "adapterName": "agentflow-migrator",
+      "qualifiedName": "agentflow-migrator",
+      "harness": "codex",
+      "source": "skills/agentflow-migrator/references/preflight.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-migrator/references/preflight.md",
+      "status": "unchanged",
+      "hash": "c6068fc3984a2493c8011ec5394c76de2f692b86be1144d0a0f490342b8152dd"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "claude-code",
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-auditor/SKILL.md",
+      "status": "planned",
+      "hash": "e576f7d842b5d6304e63aa495bf07082939892e04d782bc2858774744973d0ab"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-auditor.md",
+      "status": "unchanged",
+      "hash": "4961e90540514a59e1a15b2189679b9738e79e52e1cf4ce263ef734e4bb14970"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "claude-code",
+      "source": "skills/agentflow-auditor/references/workflow-compliance.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-auditor/references/workflow-compliance.md",
+      "status": "planned",
+      "hash": "61c72c28fb7bd2e09db3058870fb7e7453ce5edff4d750178d4c2053225d92fd"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "pi",
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-auditor/SKILL.md",
+      "status": "planned",
+      "hash": "e576f7d842b5d6304e63aa495bf07082939892e04d782bc2858774744973d0ab"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "pi:command",
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-auditor.md",
+      "status": "unchanged",
+      "hash": "71f829f7c0690de7f96fc51cdad398d823d2f199eaa88c2f50302077e9270780"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "pi",
+      "source": "skills/agentflow-auditor/references/workflow-compliance.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-auditor/references/workflow-compliance.md",
+      "status": "planned",
+      "hash": "61c72c28fb7bd2e09db3058870fb7e7453ce5edff4d750178d4c2053225d92fd"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "agy",
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-auditor/SKILL.md",
+      "status": "planned",
+      "hash": "e576f7d842b5d6304e63aa495bf07082939892e04d782bc2858774744973d0ab"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "agy",
+      "source": "skills/agentflow-auditor/references/workflow-compliance.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-auditor/references/workflow-compliance.md",
+      "status": "planned",
+      "hash": "61c72c28fb7bd2e09db3058870fb7e7453ce5edff4d750178d4c2053225d92fd"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "codex",
+      "source": "skills/agentflow-auditor/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-auditor/SKILL.md",
+      "status": "unchanged",
+      "hash": "e576f7d842b5d6304e63aa495bf07082939892e04d782bc2858774744973d0ab"
+    },
+    {
+      "skill": "agentflow-auditor",
+      "adapterName": "agentflow-auditor",
+      "qualifiedName": "agentflow-auditor",
+      "harness": "codex",
+      "source": "skills/agentflow-auditor/references/workflow-compliance.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-auditor/references/workflow-compliance.md",
+      "status": "unchanged",
+      "hash": "61c72c28fb7bd2e09db3058870fb7e7453ce5edff4d750178d4c2053225d92fd"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/SKILL.md",
+      "status": "planned",
+      "hash": "fb86560ceb0c6e1cdccc7826e3514f117f5a4bbd3532474016dfe0027fb08bbd"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-steerer.md",
+      "status": "unchanged",
+      "hash": "894ef88ca58e66aa73c68c198a9006f332657941fbd1d49a14b1b34be1f53cee"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/assets/steer-state.yaml",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/assets/steer-state.yaml",
+      "status": "planned",
+      "hash": "6cbc12d6894cd63246a57009d3cb85cf0325b05c202f7671b8fa6b8f580c43c7"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/references/adapter-github.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/references/adapter-github.md",
+      "status": "planned",
+      "hash": "8550ba4514bb4147ab99eb757cf249a634b956ac0de8eb3f81f4cf6d3f6dacfb"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/references/adapter-openrig.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/references/adapter-openrig.md",
+      "status": "planned",
+      "hash": "8bcbfe29e08737168ad15c0a280100291a86301ab2c80499b751670e13b583d6"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/references/adapter-tmux.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/references/adapter-tmux.md",
+      "status": "planned",
+      "hash": "d96fdb7e0a6d4319af042cc0ae152131f5d83c6ad4d1ad05c53dcd712cc3d128"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/references/envelope.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/references/envelope.md",
+      "status": "planned",
+      "hash": "035bcfbd827e7260faf20ed752e1974a4de16f8b140628981816048931741024"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/references/heartbeat.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/references/heartbeat.md",
+      "status": "planned",
+      "hash": "b0cef02680516c86898a0869b3c7f4748a888cd4a8080cf90db42e143a8517fa"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-steerer/references/seam-rules.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-steerer/references/seam-rules.md",
+      "status": "planned",
+      "hash": "f9d83f3a0ada23999436d81c9aa34ce2425b35f592f787662817e41e5e389521"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/SKILL.md",
+      "status": "planned",
+      "hash": "fb86560ceb0c6e1cdccc7826e3514f117f5a4bbd3532474016dfe0027fb08bbd"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-steerer.md",
+      "status": "unchanged",
+      "hash": "4f26963f5f9a1380f0cab55d701cc7eda5d97f971c171c1393d9e211c2712df0"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/assets/steer-state.yaml",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/assets/steer-state.yaml",
+      "status": "planned",
+      "hash": "6cbc12d6894cd63246a57009d3cb85cf0325b05c202f7671b8fa6b8f580c43c7"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/references/adapter-github.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/references/adapter-github.md",
+      "status": "planned",
+      "hash": "8550ba4514bb4147ab99eb757cf249a634b956ac0de8eb3f81f4cf6d3f6dacfb"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/references/adapter-openrig.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/references/adapter-openrig.md",
+      "status": "planned",
+      "hash": "8bcbfe29e08737168ad15c0a280100291a86301ab2c80499b751670e13b583d6"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/references/adapter-tmux.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/references/adapter-tmux.md",
+      "status": "planned",
+      "hash": "d96fdb7e0a6d4319af042cc0ae152131f5d83c6ad4d1ad05c53dcd712cc3d128"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/references/envelope.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/references/envelope.md",
+      "status": "planned",
+      "hash": "035bcfbd827e7260faf20ed752e1974a4de16f8b140628981816048931741024"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/references/heartbeat.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/references/heartbeat.md",
+      "status": "planned",
+      "hash": "b0cef02680516c86898a0869b3c7f4748a888cd4a8080cf90db42e143a8517fa"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "pi",
+      "source": "skills/agentflow-steerer/references/seam-rules.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-steerer/references/seam-rules.md",
+      "status": "planned",
+      "hash": "f9d83f3a0ada23999436d81c9aa34ce2425b35f592f787662817e41e5e389521"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/SKILL.md",
+      "status": "planned",
+      "hash": "fb86560ceb0c6e1cdccc7826e3514f117f5a4bbd3532474016dfe0027fb08bbd"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/assets/steer-state.yaml",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/assets/steer-state.yaml",
+      "status": "planned",
+      "hash": "6cbc12d6894cd63246a57009d3cb85cf0325b05c202f7671b8fa6b8f580c43c7"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/references/adapter-github.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/adapter-github.md",
+      "status": "planned",
+      "hash": "8550ba4514bb4147ab99eb757cf249a634b956ac0de8eb3f81f4cf6d3f6dacfb"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/references/adapter-openrig.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/adapter-openrig.md",
+      "status": "planned",
+      "hash": "8bcbfe29e08737168ad15c0a280100291a86301ab2c80499b751670e13b583d6"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/references/adapter-tmux.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/adapter-tmux.md",
+      "status": "planned",
+      "hash": "d96fdb7e0a6d4319af042cc0ae152131f5d83c6ad4d1ad05c53dcd712cc3d128"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/references/envelope.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/envelope.md",
+      "status": "planned",
+      "hash": "035bcfbd827e7260faf20ed752e1974a4de16f8b140628981816048931741024"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/references/heartbeat.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/heartbeat.md",
+      "status": "planned",
+      "hash": "b0cef02680516c86898a0869b3c7f4748a888cd4a8080cf90db42e143a8517fa"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "agy",
+      "source": "skills/agentflow-steerer/references/seam-rules.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/seam-rules.md",
+      "status": "planned",
+      "hash": "f9d83f3a0ada23999436d81c9aa34ce2425b35f592f787662817e41e5e389521"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/SKILL.md",
+      "status": "unchanged",
+      "hash": "fb86560ceb0c6e1cdccc7826e3514f117f5a4bbd3532474016dfe0027fb08bbd"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/assets/steer-state.yaml",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/assets/steer-state.yaml",
+      "status": "unchanged",
+      "hash": "6cbc12d6894cd63246a57009d3cb85cf0325b05c202f7671b8fa6b8f580c43c7"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/references/adapter-github.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/adapter-github.md",
+      "status": "unchanged",
+      "hash": "8550ba4514bb4147ab99eb757cf249a634b956ac0de8eb3f81f4cf6d3f6dacfb"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/references/adapter-openrig.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/adapter-openrig.md",
+      "status": "unchanged",
+      "hash": "8bcbfe29e08737168ad15c0a280100291a86301ab2c80499b751670e13b583d6"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/references/adapter-tmux.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/adapter-tmux.md",
+      "status": "unchanged",
+      "hash": "d96fdb7e0a6d4319af042cc0ae152131f5d83c6ad4d1ad05c53dcd712cc3d128"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/references/envelope.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/envelope.md",
+      "status": "unchanged",
+      "hash": "035bcfbd827e7260faf20ed752e1974a4de16f8b140628981816048931741024"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/references/heartbeat.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/heartbeat.md",
+      "status": "unchanged",
+      "hash": "b0cef02680516c86898a0869b3c7f4748a888cd4a8080cf90db42e143a8517fa"
+    },
+    {
+      "skill": "agentflow-steerer",
+      "adapterName": "agentflow-steerer",
+      "qualifiedName": "agentflow-steerer",
+      "harness": "codex",
+      "source": "skills/agentflow-steerer/references/seam-rules.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-steerer/references/seam-rules.md",
+      "status": "unchanged",
+      "hash": "f9d83f3a0ada23999436d81c9aa34ce2425b35f592f787662817e41e5e389521"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "claude-code",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/skills/agentflow-maintainer/SKILL.md",
+      "status": "planned",
+      "hash": "ebf260613441a48940b14002920430df433caa6515a93699a5abf6dd5bf57e9b"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow-maintainer.md",
+      "status": "unchanged",
+      "hash": "979103e4f68864d8572fa76ffab158166bb5367c068c4c2b024e6e8ffb46adbd"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow/setup.md",
+      "status": "unchanged",
+      "hash": "0679a7dc90a3f159c4d73672dfcb38b3f0bef5d45d80fc4d13e267439046273c"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow/doctor.md",
+      "status": "unchanged",
+      "hash": "139000d2b48076020eb3769b06977f5279155b0b63ec84258e8aaad7df64e9c3"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow/repair.md",
+      "status": "unchanged",
+      "hash": "0a4f988c11fa2a999a624160ed8809de3c50b52cc50d1863c747f265a50f4d9d"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "claude-code:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.claude/commands/agentflow/undo.md",
+      "status": "unchanged",
+      "hash": "d7ab6404e8f9b7986a8705b2aeef1dba101288d2bed30b9953a983ff160c4ae1"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "pi",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/skills/agentflow-maintainer/SKILL.md",
+      "status": "planned",
+      "hash": "ebf260613441a48940b14002920430df433caa6515a93699a5abf6dd5bf57e9b"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow-maintainer.md",
+      "status": "unchanged",
+      "hash": "ea0183f7fcc24ee2f3bcc8114765ae3b10df384938b7b94b4a88ed66671c128b"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow/setup.md",
+      "status": "unchanged",
+      "hash": "0679a7dc90a3f159c4d73672dfcb38b3f0bef5d45d80fc4d13e267439046273c"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow/doctor.md",
+      "status": "unchanged",
+      "hash": "139000d2b48076020eb3769b06977f5279155b0b63ec84258e8aaad7df64e9c3"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow/repair.md",
+      "status": "unchanged",
+      "hash": "0a4f988c11fa2a999a624160ed8809de3c50b52cc50d1863c747f265a50f4d9d"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "pi:command",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.pi/commands/agentflow/undo.md",
+      "status": "unchanged",
+      "hash": "d7ab6404e8f9b7986a8705b2aeef1dba101288d2bed30b9953a983ff160c4ae1"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "agy",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-maintainer/SKILL.md",
+      "status": "planned",
+      "hash": "ebf260613441a48940b14002920430df433caa6515a93699a5abf6dd5bf57e9b"
+    },
+    {
+      "skill": "agentflow-maintainer",
+      "adapterName": "agentflow-maintainer",
+      "qualifiedName": "agentflow-maintainer",
+      "harness": "codex",
+      "source": "skills/agentflow-maintainer/SKILL.md",
+      "target": "/home/sam/code/agent-otel-bridge/.agents/skills/agentflow-maintainer/SKILL.md",
+      "status": "unchanged",
+      "hash": "ebf260613441a48940b14002920430df433caa6515a93699a5abf6dd5bf57e9b"
+    }
+  ]
+}

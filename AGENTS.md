@@ -145,3 +145,12 @@ Every pull request and modification MUST satisfy:
   - [ ] `cargo guardrails` passes with all green checks.
   - [ ] New semantic conventions are documented in `docs/TELEMETRY_DICTIONARY.md`.
   - [ ] Backward compatibility with existing dashboards is preserved.
+
+---
+
+## 6. Autonomous Delivery & Multi-Agent Execution (AgentFlow + Meshloop)
+
+- **AgentFlow SDLC Governance**: Repository lifecycle, work intake, role assignments, authority boundaries, and merge gates are declared in `sdlc.config.json` and `agent-workflow.config.json`. Autonomous delivery follows the confirmed operating agreement (`steering.reviewAndPublicationAuthority: bounded-self-review-with-human-merge`, `executionDistribution: subscription-balanced-v1`).
+- **Meshloop Multi-Agent Workflows**: Complex multi-agent parallel execution is configured via `meshloop.toml`. Meshloop operates daemonlessly on demand (`/meshloop:plan`, `/meshloop:run`, `/meshloop:accept`), executing role DAG tasks across isolated Git worktrees (`.meshloop-worktrees/*`) with native verification (`cargo test --workspace`) and station harnesses (`codex`, `claude`, `grok`).
+- **Coexistence Contract**: AgentFlow governs macro SDLC phase intake and publication/merge authority, while Meshloop provides micro-orchestration for parallel multi-agent worker trees. Telemetry from both systems traces back via standard W3C context propagation into `agent-otel-bridge`.
+

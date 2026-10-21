@@ -19,3 +19,6 @@ benchmarks/reports/
 .copilot/
 .gemini/
 .kimi-code/
+/.agentflow/transactions/
+.meshloop/
+.meshloop-worktrees/
