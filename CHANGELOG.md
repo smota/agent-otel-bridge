@@ -7,20 +7,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-02
+
+See the [release notes](docs/releases/v0.8.0.md).
+
 ### Added
 
 - The daemon pairs `PreToolUse` with `PostToolUse` into one `execute_tool` span and `PreInvocation` with `PostInvocation` or `Stop` into one `invoke_agent` span. Duration is the observed interval between those hook deliveries. Unpaired spans keep equal start and end and set `agent.span.paired` to false. Open spans stay in a bounded in-memory map (1024 entries, 60s TTL) with no disk store.
 - `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` opts trace spans into the experimental GenAI field set (conditional provider, finish-reason array, unset success status, `agent.lineage.*`, `vcs.ref.head.*`, and schema `1.41.0`). The default export is unchanged.
 - The daemon honors the OTLP/HTTP environment contract for signal endpoints, headers, gzip compression, timeouts, extra root certificates, `http/protobuf` selection, and `OTEL_SDK_DISABLED`.
 - Resource identity includes telemetry SDK and distro attributes, a process-stable `service.instance.id`, the full `OTEL_RESOURCE_ATTRIBUTES` list, and `os.type=darwin` on macOS. An empty deployment environment is omitted instead of defaulting to `homelab`.
+- Collector examples live in `contrib/collector/` (`local.yaml`, `team.yaml`, `span-metrics.yaml`). A Grafana dashboard is `contrib/dashboards/grafana/agent-otel-bridge.json`. A project registry snapshot is `semconv/registry.yaml`.
 
 ### Changed
 
-- When `OTEL_SEMCONV_STABILITY_OPT_IN` contains `gen_ai_latest_experimental`, bridge counters use unsuffixed names and the fleet token-rate gauge is `agent.fleet.token_rate` with unit `{token}/min` instead of `agent.fleet.token_rate_minute`; default names stay otherwise, both names are not emitted together, and PreToolUse echoes a safe inbound `TRACESTATE` without minting a span id.
+- When `OTEL_SEMCONV_STABILITY_OPT_IN` contains `gen_ai_latest_experimental`, bridge counters use unsuffixed names. Default names keep the `.total` suffix. Both forms are not emitted together. PreToolUse echoes an inbound `TRACEPARENT` and a safe inbound `TRACESTATE`. The hook does not mint a span id.
+- The fleet token-rate name helper selects `agent.fleet.token_rate` (unit `{token}/min`) when that opt-in is set, and `agent.fleet.token_rate_minute` otherwise. Quota export does not emit the gauge.
 - `user.email` defaults to the hook payload or `$USER_EMAIL`. Git config and `$GIT_AUTHOR_EMAIL` are used only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
 - `AGENT_OTEL_WORKSPACE_PATH` (`absolute`, `relative`, or `hash`) controls `workspace.path` and `workspace.project_root`. The default remains absolute paths.
 - Experimental GenAI error status messages are truncated to 160 bytes on a character boundary, with `…` appended when cut. `error.type` is not the raw message.
-- Collector examples live in `contrib/collector/` (`local.yaml`, `team.yaml`, `span-metrics.yaml`). `agent.span.calls` counts spans and does not publish a duration histogram. A Grafana dashboard is `contrib/dashboards/grafana/agent-otel-bridge.json`.
+- `agent.span.calls` counts spans and does not publish a duration histogram.
+
+### Known limitations
+
+- Desktop and IDE live sessions are not certified.
+- The hook does not mint a child traceparent. Paired duration is the daemon's observed interval between hook deliveries, not a harness CPU timer.
+- The fleet token-rate gauge is not exported. There is no gRPC exporter.
+- IPC admission loss under sustained stress remains open ([RES-004](docs/resilience-backlog.md)).
 
 ## [0.7.0] - 2026-11-02
 

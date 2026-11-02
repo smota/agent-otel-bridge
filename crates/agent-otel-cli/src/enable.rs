@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const PLUGIN_VERSION: &str = "0.7.0";
+const PLUGIN_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PLUGIN_DESCRIPTION: &str = "OpenTelemetry lifecycle hooks";
 
 pub trait ProcessRunner {
