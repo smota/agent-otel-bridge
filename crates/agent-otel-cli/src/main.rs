@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 mod doctor;
 mod emit_quota;
+mod enable;
 mod guardrails;
 mod hooks;
 mod local;
@@ -121,6 +122,18 @@ enum LocalAction {
         /// If set, updates agent lifecycle hooks after rollback
         #[arg(long, default_value_t = true)]
         update_hooks: bool,
+    },
+    /// Enables one application through its vendor command or owned config
+    Enable {
+        /// Application id: claude, codex, antigravity, grok, or pi
+        #[arg(long)]
+        app: String,
+    },
+    /// Disables one previously enabled application
+    Disable {
+        /// Application id: claude, codex, antigravity, grok, or pi
+        #[arg(long)]
+        app: String,
     },
     /// Uninstalls local runtime and optionally removes hooks
     Uninstall {
@@ -243,7 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .build()?;
             rt.block_on(emit_quota::run(ping))
         }
-        Commands::Start => run_start(),
+        Commands::Start => enable::ensure_daemon_running(),
         Commands::Stop => stop::run(),
         Commands::Local { action } => match action {
             LocalAction::Install {
@@ -256,6 +269,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             LocalAction::Status => local::run_status(),
             LocalAction::Rollback { update_hooks } => local::rollback_candidate(update_hooks),
+            LocalAction::Enable { app } => {
+                let home = enable::user_home()?;
+                let stage = local::get_plugins_stage_dir();
+                let binary = hooks::resolve_canonical_hook_binary(None)?;
+                enable::enable_app(
+                    &app,
+                    &home,
+                    &stage,
+                    &binary,
+                    &mut enable::ProductionProcess,
+                    || {
+                        agent_otel_ipc::client::try_send(
+                            agent_otel_ipc::frame::MsgType::HealthPing,
+                            &[],
+                        )
+                        .is_ok()
+                    },
+                    || enable::ensure_daemon_running().map_err(|err| err.to_string()),
+                )
+                .map_err(|err| -> Box<dyn std::error::Error> { err.into() })
+            }
+            LocalAction::Disable { app } => {
+                let home = enable::user_home()?;
+                enable::disable_app(&app, &home, &mut enable::ProductionProcess)
+                    .map_err(|err| -> Box<dyn std::error::Error> { err.into() })
+            }
             LocalAction::Uninstall {
                 purge,
                 remove_hooks,
@@ -368,37 +407,6 @@ fn run_benchmark(
             Ok(())
         }
     }
-}
-
-fn run_start() -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n=== Starting agent-otel-bridge daemon ===");
-
-    if agent_otel_ipc::client::try_send(agent_otel_ipc::frame::MsgType::HealthPing, &[]).is_ok() {
-        println!("  [ok] Daemon is already running and listening on named pipe.\n");
-        return Ok(());
-    }
-
-    agent_otel_ipc::client::spawn_daemon_detached();
-
-    let start = std::time::Instant::now();
-    let mut started = false;
-    while start.elapsed() < std::time::Duration::from_millis(1500) {
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        if agent_otel_ipc::client::try_send(agent_otel_ipc::frame::MsgType::HealthPing, &[]).is_ok()
-        {
-            started = true;
-            break;
-        }
-    }
-
-    if started {
-        println!("  [ok] Background daemon successfully launched and listening on named pipe!\n");
-    } else {
-        println!("  [warn] Spawn signal sent, but daemon has not yet responded on named pipe.");
-        println!("         Run 'agent-otel-bridge doctor' for pipeline diagnostics.\n");
-    }
-
-    Ok(())
 }
 
 fn run_fast_hook(event_str: &str) {

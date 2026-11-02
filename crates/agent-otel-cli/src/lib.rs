@@ -13,6 +13,7 @@
 
 pub mod doctor;
 pub mod emit_quota;
+pub mod enable;
 pub mod hooks;
 pub mod local;
 pub mod scanner;

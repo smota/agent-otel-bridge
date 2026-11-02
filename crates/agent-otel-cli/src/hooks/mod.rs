@@ -12,7 +12,9 @@ mod paths;
 mod pi;
 mod standard;
 
-pub use antigravity::{install_antigravity_hooks, uninstall_antigravity_hooks};
+pub use antigravity::{
+    antigravity_bridge_hooks, install_antigravity_hooks, uninstall_antigravity_hooks,
+};
 pub use claude::{install_claude_hooks, uninstall_claude_hooks};
 pub use codex::{
     format_codex_hook_command, install_codex_hooks, load_codex_hook_shell, CodexHookShell,

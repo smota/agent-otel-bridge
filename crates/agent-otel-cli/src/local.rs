@@ -68,6 +68,10 @@ pub fn get_canonical_bin_dir() -> PathBuf {
     get_canonical_local_dir().join("bin")
 }
 
+pub fn get_plugins_stage_dir() -> PathBuf {
+    get_canonical_local_dir().join("plugins-stage")
+}
+
 pub fn get_canonical_hook_path() -> PathBuf {
     let filename = if cfg!(windows) {
         "agent-hook.exe"
