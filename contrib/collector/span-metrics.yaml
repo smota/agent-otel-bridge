@@ -1,0 +1,50 @@
+# Span-metrics fragment for otelcol-contrib (connectors.spanmetrics).
+# Merge `connectors` into local.yaml or team.yaml and send traces to the
+# connector. local.yaml only prints signals with the debug exporter and has
+# no upstream. team.yaml forwards with otlphttp to
+# ${env:AGENT_OTEL_COLLECTOR_UPSTREAM}. Do not reuse the daemon's
+# OTEL_EXPORTER_OTLP_ENDPOINT (http://localhost:4318) as that upstream.
+# This file is not a second daemon exporter.
+#
+# The calls series is agent.span.calls (namespace + the connector calls sum).
+# Dimensions are gen_ai.operation.name and agent.tool.archetype only.
+# Built-in dimensions are excluded so they are not extra series labels.
+# The connector still requires resource attribute service.name to accept the
+# spans. That attribute is not a metric dimension here.
+#
+# histogram.disable is required. Leaving it off would emit a duration
+# histogram from span start and end. Hook spans currently have equal start
+# and end. They are not measured tool durations. durationNano is not tool
+# latency, so this fragment does not publish that histogram.
+# events stay at the connector default (off). No other metric is defined.
+
+connectors:
+  spanmetrics:
+    namespace: agent.span
+    aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+    metrics_flush_interval: 15s
+    histogram:
+      disable: true
+    dimensions:
+      - name: gen_ai.operation.name
+      - name: agent.tool.archetype
+    exclude_dimensions:
+      - service.name
+      - span.name
+      - span.kind
+      - status.code
+      - otel.status_code
+      - collector.instance.id
+    exemplars:
+      enabled: false
+
+# service:
+#   pipelines:
+#     traces:
+#       receivers: [otlp]
+#       processors: [memory_limiter, resourcedetection, batch]
+#       exporters: [debug, spanmetrics]  # team.yaml: [otlphttp, spanmetrics]
+#     metrics:
+#       receivers: [otlp, spanmetrics]
+#       processors: [memory_limiter, batch]
+#       exporters: [debug]  # team.yaml: [otlphttp]

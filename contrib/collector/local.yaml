@@ -1,0 +1,55 @@
+# Local otelcol-contrib config for one developer workstation.
+# The daemon points at http://localhost:4318
+# (OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318,
+# OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf). This file only prints signals.
+# No upstream endpoint.
+#
+# The daemon already exports OTLP/HTTP protobuf. Do not add batch, retry, or a
+# vendor exporter there. Auth, sampling, and vendor export belong in team.yaml.
+# This local file does not tail-sample. team.yaml does, and it does not key
+# off span duration.
+#
+# Hook spans currently have equal start and end. They are not measured tool
+# durations. Do not treat durationNano as tool latency, and do not add a
+# duration histogram here.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: localhost:4318
+
+processors:
+  # System attributes fill gaps only. Existing resource attributes stay.
+  resourcedetection:
+    detectors: [system]
+    override: false
+  # Redact the operator address. update does not create the key and does not
+  # drop the span or any other attribute.
+  attributes/redact_user_email:
+    actions:
+      - key: user.email
+        action: update
+        value: "REDACTED"
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  batch:
+    send_batch_size: 512
+    timeout: 1s
+
+exporters:
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, attributes/redact_user_email, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [debug]
