@@ -9,8 +9,9 @@
 # This local file does not tail-sample. team.yaml does, and it does not key
 # off span duration.
 #
-# Hook spans currently have equal start and end. They are not measured tool
-# durations. Do not treat durationNano as tool latency, and do not add a
+# A paired span's duration is the interval between Pre and Post hook
+# deliveries. Unpaired spans still have equal start and end. Do not treat
+# that field as a harness CPU timer, and do not add a
 # duration histogram here.
 
 receivers:

@@ -12,10 +12,10 @@
 # The connector still requires resource attribute service.name to accept the
 # spans. That attribute is not a metric dimension here.
 #
-# histogram.disable is required. Leaving it off would emit a duration
-# histogram from span start and end. Hook spans currently have equal start
-# and end. They are not measured tool durations. durationNano is not tool
-# latency, so this fragment does not publish that histogram.
+# histogram.disable is required. A paired span's duration is the interval
+# between Pre and Post hook deliveries, not a harness CPU timer. Unpaired
+# spans still have equal start and end. This fragment does not publish a
+# duration histogram.
 # events stay at the connector default (off). No other metric is defined.
 
 connectors:

@@ -344,6 +344,16 @@ groups:
         brief: "Opt-in head revision."
         examples: ['abc']
 
+  - id: registry.agent.span
+    type: attribute_group
+    brief: "Span pairing attributes. Project snapshot."
+    attributes:
+      - id: agent.span.paired
+        type: boolean
+        stability: development
+        brief: "True when a Pre hook was joined with a later Post or Stop hook."
+        examples: [true]
+
   - id: registry.agent.tool
     type: attribute_group
     brief: "Tool archetype attributes."

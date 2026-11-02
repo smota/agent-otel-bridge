@@ -110,7 +110,7 @@ The daemon exports OTLP/HTTP protobuf. Authentication, sampling, and vendor expo
 - [`contrib/collector/team.yaml`](../contrib/collector/team.yaml) — the same shape, plus tail sampling, path redaction, and an upstream `otlphttp` exporter. The upstream base URL is `AGENT_OTEL_COLLECTOR_UPSTREAM`. Do not reuse the daemon's `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - [`contrib/collector/README.md`](../contrib/collector/README.md) — validate command, upstream variable, and the span-metrics fragment.
 
-Hook spans have equal start and end, so the span-metrics fragment does not publish a duration histogram. The collector listens for the daemon on OTLP/HTTP. No gRPC receiver is required:
+A paired span's duration is the interval between the Pre and Post hook deliveries. Unpaired spans still have equal start and end. That interval is not a harness CPU timer, so the span-metrics fragment does not publish a duration histogram. The collector listens for the daemon on OTLP/HTTP. No gRPC receiver is required:
 
 ```yaml
 receivers:

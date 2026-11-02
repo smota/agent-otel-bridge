@@ -8,7 +8,7 @@ These files replace the inline collector recipe that used to live in `docs/CONFI
 | `team.yaml` | Same shape, plus tail sampling, redaction of `workspace.path` and `workspace.project_root`, and an `otlphttp` upstream. |
 | `span-metrics.yaml` | `spanmetrics` fragment. Counts spans as `agent.span.calls` by `gen_ai.operation.name` and `agent.tool.archetype` only. |
 
-Hook spans currently have equal start and end. They are not measured tool durations. Do not chart `durationNano` as tool latency. The span-metrics fragment disables the connector histogram for that reason. Team tail sampling uses status code and a 5% probabilistic policy. It does not use a latency policy.
+A paired span's duration is the interval between the Pre and Post hook deliveries. Unpaired spans still have equal start and end. Do not chart that field as a harness CPU timer. The span-metrics fragment disables the connector histogram for that reason. Team tail sampling uses status code and a 5% probabilistic policy. It does not use a latency policy.
 
 Quota gauges already emitted by the daemon stay named `agent.quota.*` and `agent.fleet.bottleneck_ratio`. This kit does not rename them.
 
