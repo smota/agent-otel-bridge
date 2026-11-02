@@ -1,0 +1,84 @@
+# Team otelcol-contrib config. Same shape as local.yaml, plus tail sampling
+# and path redaction.
+#
+# Auth, sampling, and vendor export belong here, not in the daemon.
+# The daemon already exports OTLP/HTTP protobuf. This file does not add a
+# gRPC receiver.
+#
+# Hook spans currently have equal start and end. They are not measured tool
+# durations. durationNano is not tool latency. The tail-sampling policies
+# below do not use the latency policy and do not key off span duration.
+# decision_wait is how long the collector waits for more spans on the same
+# trace. It is not a latency threshold.
+#
+# Policies are OR'd. A trace is kept when it has an error status, or when it
+# falls in the small probabilistic sample. Non-errors are not kept just
+# because a span was short or long.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: localhost:4318
+
+processors:
+  resourcedetection:
+    detectors: [system]
+    override: false
+  # Redact identity and local paths. update does not create missing keys and
+  # does not drop the span or any other attribute.
+  attributes/redact:
+    actions:
+      - key: user.email
+        action: update
+        value: "REDACTED"
+      - key: workspace.path
+        action: update
+        value: "REDACTED"
+      - key: workspace.project_root
+        action: update
+        value: "REDACTED"
+  # Not keyed off span duration. Error status is kept. Everything else is a
+  # 5% probabilistic sample.
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 100
+    policies:
+      - name: errors-by-status-code
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: small-probabilistic
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 5
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 512
+    timeout: 1s
+
+exporters:
+  otlphttp:
+    # Base URL only. The collector appends /v1/traces and /v1/metrics.
+    # Example:
+    #   export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.example.com
+    #   export OTEL_EXPORTER_OTLP_AUTH_HEADER='Bearer <token>'
+    # Do not hard-code a token in this file.
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:OTEL_EXPORTER_OTLP_AUTH_HEADER}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, attributes/redact, tail_sampling, batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlphttp]

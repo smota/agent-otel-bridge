@@ -1,0 +1,252 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Bridge dashboard for agent-otel-bridge. Span panels count hook spans from agent.span.calls. Hook spans have equal start and end, so they are not measured tool durations and this board has no duration percentile. Quota panels use agent.fleet.bottleneck_ratio, agent.quota.remaining_fraction, and agent.quota.seconds_to_reset with the bucket and group labels those gauges already emit. Queries are PromQL with the canonical metric names quoted. This is not a SigNoz board.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Rate of agent.span.calls. Labels are only gen_ai.operation.name and agent.tool.archetype. This is a call count. Hook spans have equal start and end, so the series is not tool latency.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (\"gen_ai.operation.name\", \"agent.tool.archetype\") (rate({\"agent.span.calls\"}[5m]))",
+          "legendFormat": "{{gen_ai.operation.name}} / {{agent.tool.archetype}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Span calls by operation and archetype",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Share of agent.span.calls by agent.tool.archetype over the selected range. Count only, not a duration.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (\"agent.tool.archetype\") (increase({\"agent.span.calls\"}[$__range]))",
+          "legendFormat": "{{agent.tool.archetype}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Span calls by archetype",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "agent.fleet.bottleneck_ratio as emitted. The gauge already carries bucket and group. No extra labels are assumed.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "{\"agent.fleet.bottleneck_ratio\"}",
+          "legendFormat": "{{group}} / {{bucket}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Fleet bottleneck ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "agent.quota.remaining_fraction grouped by the emitted bucket and group labels.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "{\"agent.quota.remaining_fraction\"}",
+          "legendFormat": "{{group}} / {{bucket}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Quota remaining fraction",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "agent.quota.seconds_to_reset grouped by the emitted bucket and group labels.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "{\"agent.quota.seconds_to_reset\"}",
+          "legendFormat": "{{group}} / {{bucket}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Quota seconds to reset",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "agent-otel-bridge",
+    "opentelemetry"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "label": "Metrics datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "agent-otel-bridge",
+  "uid": "agent-otel-bridge",
+  "version": 1
+}

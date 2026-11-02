@@ -100,54 +100,22 @@ export TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 ---
 
-## 3. OpenTelemetry Collector Recipe (`config.yaml`)
+## 3. OpenTelemetry Collector Recipe
 
-Below is a production-tested OpenTelemetry Collector configuration supporting traces and metrics export to **SigNoz**, **Jaeger**, and **Prometheus**:
+The daemon exports OTLP/HTTP protobuf. Authentication, sampling, and vendor export belong in the collector, not in the daemon. The maintained configs replace the old inline recipe:
+
+- [`contrib/collector/local.yaml`](../contrib/collector/local.yaml) — workstation `otelcol-contrib` config.
+- [`contrib/collector/team.yaml`](../contrib/collector/team.yaml) — the same shape, plus tail sampling and path redaction.
+- [`contrib/collector/README.md`](../contrib/collector/README.md) — validate command, header environment, and the span-metrics fragment.
+
+Hook spans have equal start and end, so the span-metrics fragment does not publish a duration histogram. The collector listens for the daemon on OTLP/HTTP. No gRPC receiver is required:
 
 ```yaml
 receivers:
   otlp:
     protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
       http:
-        endpoint: 0.0.0.0:4318
-
-processors:
-  batch:
-    send_batch_size: 100
-    timeout: 1s
-  memory_limiter:
-    check_interval: 1s
-    limit_percentage: 75
-    spike_limit_percentage: 20
-
-exporters:
-  # Export traces & metrics to local SigNoz instance
-  otlp/signoz:
-    endpoint: localhost:4317
-    tls:
-      insecure: true
-
-  # Export metrics to Prometheus scraper endpoint
-  prometheus:
-    endpoint: 0.0.0.0:8889
-    namespace: agent_otel
-
-  # Debug exporter (useful for testing)
-  debug:
-    verbosity: basic
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [otlp/signoz, debug]
-    metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [otlp/signoz, prometheus]
+        endpoint: localhost:4318
 ```
 
 ---
