@@ -1,10 +1,6 @@
-/* Copyright The OpenTelemetry Authors
+/* Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0 */
-use crate::{
-    batch::ExportBatch,
-    diagnostics::Diagnostics,
-    exporter::{OtlpExporter, EXPORT_DEADLINE},
-};
+use crate::{batch::ExportBatch, diagnostics::Diagnostics, exporter::OtlpExporter};
 use std::sync::{atomic::Ordering, Arc};
 use tokio::sync::{mpsc, OwnedSemaphorePermit, Semaphore};
 
@@ -105,7 +101,7 @@ pub async fn export_worker(
         let report = exporter
             .export_traces_until(
                 &item.batch.request,
-                tokio::time::Instant::now() + EXPORT_DEADLINE,
+                tokio::time::Instant::now() + exporter.traces_deadline(),
             )
             .await;
         stats.record_export(item.batch.count, &report);

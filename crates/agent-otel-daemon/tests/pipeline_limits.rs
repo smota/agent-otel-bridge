@@ -1,4 +1,5 @@
 use agent_otel_core::model::{ClientKind, HookEvent, WireHeader};
+use agent_otel_daemon::config::SignalExportConfig;
 use agent_otel_daemon::diagnostics::Diagnostics;
 use agent_otel_daemon::{Daemon, DaemonConfig};
 use agent_otel_ipc::frame::{encode_frame, MsgType};
@@ -102,6 +103,17 @@ async fn blocked_exporter_does_not_block_transform_and_shutdown_reconciles() {
         quota_interval: Duration::from_secs(60),
         idle_timeout: Duration::MAX,
         emit_legacy_aliases: false,
+        traces: SignalExportConfig::http_protobuf(format!(
+            "{}/v1/traces",
+            collector.endpoint.trim_end_matches('/')
+        )),
+        metrics: SignalExportConfig::http_protobuf(format!(
+            "{}/v1/metrics",
+            collector.endpoint.trim_end_matches('/')
+        )),
+        sdk_disabled: false,
+        resource_attributes: Vec::new(),
+        service_instance_id: "00112233445566778899aabbccddeeff".to_string(),
     };
     let daemon = Daemon::new(config, shutdown.clone()).expect("construct isolated daemon");
     let daemon_diagnostics = Arc::clone(&diagnostics);

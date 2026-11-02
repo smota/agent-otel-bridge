@@ -1,11 +1,12 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 use agent_otel_core::model::{AntigravityHookInput, HookEvent};
 use agent_otel_core::otlp::{
-    build_resource, build_span_from_hook, build_span_from_hook_opts, build_trace_request,
+    build_resource, build_resource_with, build_span_from_hook, build_span_from_hook_opts,
+    build_trace_request, semantic_os_type,
 };
 use agent_otel_core::quota::{
     build_quota_metrics_request, build_quota_metrics_request_opts, QuotaSnapshot,
@@ -523,4 +524,92 @@ fn test_v051_expanded_archetype_enrichment() {
             "Command `{cmd}` was not classified as `{expected_archetype}`"
         );
     }
+}
+
+fn resource_string<'a>(
+    resource: &'a opentelemetry_proto::tonic::resource::v1::Resource,
+    key: &str,
+) -> Option<&'a str> {
+    use opentelemetry_proto::tonic::common::v1::any_value;
+    resource
+        .attributes
+        .iter()
+        .find(|kv| kv.key == key)
+        .and_then(|kv| kv.value.as_ref())
+        .and_then(|value| match &value.value {
+            Some(any_value::Value::StringValue(text)) => Some(text.as_str()),
+            _ => None,
+        })
+}
+
+#[test]
+fn resource_identity_omits_empty_environment_and_maps_os_type() {
+    assert_eq!(semantic_os_type("macos"), "darwin");
+    assert_eq!(semantic_os_type("linux"), "linux");
+
+    let legacy = build_resource("agent-otel-bridge", "homelab", "0.1.0");
+    assert_eq!(
+        resource_string(&legacy, DEPLOYMENT_ENVIRONMENT),
+        Some("homelab")
+    );
+    assert_eq!(resource_string(&legacy, DEPLOYMENT_ENVIRONMENT_NAME), None);
+    assert_eq!(
+        resource_string(&legacy, TELEMETRY_SDK_NAME),
+        Some("agent-otel-bridge")
+    );
+    assert_eq!(
+        resource_string(&legacy, TELEMETRY_SDK_LANGUAGE),
+        Some("rust")
+    );
+    assert_eq!(
+        resource_string(&legacy, TELEMETRY_SDK_VERSION),
+        Some("0.1.0")
+    );
+    assert_eq!(
+        resource_string(&legacy, TELEMETRY_DISTRO_NAME),
+        Some("agent-otel-bridge")
+    );
+    assert_eq!(
+        resource_string(&legacy, TELEMETRY_DISTRO_VERSION),
+        Some("0.1.0")
+    );
+    assert_eq!(resource_string(&legacy, SERVICE_INSTANCE_ID), None);
+    assert_eq!(
+        resource_string(&legacy, OS_TYPE),
+        Some(semantic_os_type(std::env::consts::OS))
+    );
+
+    let rich = build_resource_with(
+        "explicit",
+        "",
+        "9.9.9",
+        "generated-instance",
+        &[
+            ("service.name", "from-attrs"),
+            ("deployment.environment.name", "prod"),
+            ("telemetry.sdk.name", "opentelemetry"),
+            ("telemetry.distro.version", "0.0.1"),
+            ("service.instance.id", "operator-choice"),
+            ("service.version", "from-attrs"),
+        ],
+    );
+    assert_eq!(resource_string(&rich, SERVICE_NAME), Some("explicit"));
+    assert_eq!(resource_string(&rich, DEPLOYMENT_ENVIRONMENT), None);
+    assert_eq!(
+        resource_string(&rich, DEPLOYMENT_ENVIRONMENT_NAME),
+        Some("prod")
+    );
+    assert_eq!(
+        resource_string(&rich, TELEMETRY_SDK_NAME),
+        Some("agent-otel-bridge")
+    );
+    assert_eq!(
+        resource_string(&rich, TELEMETRY_DISTRO_VERSION),
+        Some("9.9.9")
+    );
+    assert_eq!(resource_string(&rich, SERVICE_VERSION), Some("from-attrs"));
+    assert_eq!(
+        resource_string(&rich, SERVICE_INSTANCE_ID),
+        Some("operator-choice")
+    );
 }

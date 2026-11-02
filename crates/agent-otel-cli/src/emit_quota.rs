@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -38,7 +38,7 @@ pub async fn run(ping: bool) -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let exporter = OtlpExporter::new(config.traces_url(), config.metrics_url())?;
+    let exporter = OtlpExporter::from_config(&config)?;
     let request = build_multi_quota_metrics_request_opts(
         config.resource(),
         &snapshots,

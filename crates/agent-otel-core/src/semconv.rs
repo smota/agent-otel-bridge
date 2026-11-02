@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -36,9 +36,16 @@ pub const GEN_AI_RESPONSE_FINISH_REASONS: &str = "gen_ai.response.finish_reasons
 // --- Standard Resource Attributes ---
 pub const SERVICE_NAME: &str = "service.name";
 pub const DEPLOYMENT_ENVIRONMENT: &str = "deployment.environment";
+pub const DEPLOYMENT_ENVIRONMENT_NAME: &str = "deployment.environment.name";
 pub const SERVICE_VERSION: &str = "service.version";
+pub const SERVICE_INSTANCE_ID: &str = "service.instance.id";
 pub const HOST_NAME: &str = "host.name";
 pub const OS_TYPE: &str = "os.type";
+pub const TELEMETRY_SDK_NAME: &str = "telemetry.sdk.name";
+pub const TELEMETRY_SDK_LANGUAGE: &str = "telemetry.sdk.language";
+pub const TELEMETRY_SDK_VERSION: &str = "telemetry.sdk.version";
+pub const TELEMETRY_DISTRO_NAME: &str = "telemetry.distro.name";
+pub const TELEMETRY_DISTRO_VERSION: &str = "telemetry.distro.version";
 
 // --- Identity & Environment Attributes ---
 pub const USER_EMAIL: &str = "user.email";

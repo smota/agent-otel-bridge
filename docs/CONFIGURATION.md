@@ -10,9 +10,23 @@ All environment variables follow standard OpenTelemetry conventions with project
 
 | Environment Variable | Default Value | Description |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` | Base URL for OTLP HTTP/Protobuf exports (`/v1/traces` and `/v1/metrics`). |
-| `OTEL_SERVICE_NAME` | `agent-otel-bridge` | Service name stamped on all traces and resource metrics. |
-| `OTEL_RESOURCE_ATTRIBUTES` | *(Empty)* | Comma-separated key-value resource attributes (e.g., `deployment.environment=homelab,host.id=ws-01`). |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` | Base URL for OTLP/HTTP protobuf. One trailing slash is removed, then `/v1/traces` and `/v1/metrics` are appended. A base that already contains those paths is not special-cased. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | *(unset)* | Exact trace URL. When set and non-empty, `/v1/traces` is not appended. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | *(unset)* | Exact metrics URL. When set and non-empty, `/v1/metrics` is not appended. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Only `http/protobuf` is exported. `grpc` or any other value disables that signal. |
+| `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` / `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` | *(inherit)* | Signal-specific protocol. Overrides the general protocol for that signal only. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | *(empty)* | Comma-separated `key=value` headers. Values are percent-decoded. Invalid names or values are skipped. |
+| `OTEL_EXPORTER_OTLP_TRACES_HEADERS` / `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | *(inherit)* | Merged over the general headers. The same key, ignoring case, uses the signal value. |
+| `OTEL_EXPORTER_OTLP_COMPRESSION` | `none` | `none` sends the protobuf body unchanged. `gzip` compresses it with `Content-Encoding: gzip`. Any other value disables that signal. |
+| `OTEL_EXPORTER_OTLP_TRACES_COMPRESSION` / `OTEL_EXPORTER_OTLP_METRICS_COMPRESSION` | *(inherit)* | Signal-specific compression. |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | `5000` | Request timeout in milliseconds. A value that does not parse is treated as 5000. |
+| `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT` / `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` | *(inherit)* | Signal-specific timeout. The export deadline is at least this timeout. |
+| `OTEL_EXPORTER_OTLP_CERTIFICATE` | *(unset)* | PEM file of extra root CAs. A missing or invalid file prevents the daemon from starting. |
+| `OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE` / `OTEL_EXPORTER_OTLP_METRICS_CERTIFICATE` | *(inherit)* | Signal-specific CA file. Both are loaded when they differ. |
+| `OTEL_SDK_DISABLED` | `false` | `true` (any case) accepts exports locally and performs no HTTP. The process still starts. |
+| `OTEL_SERVICE_NAME` | `agent-otel-bridge` | `service.name`. Wins over the same key in `OTEL_RESOURCE_ATTRIBUTES`. |
+| `OTEL_SERVICE_VERSION` | crate version | `service.version` and the telemetry SDK/distro version when set and non-empty. |
+| `OTEL_RESOURCE_ATTRIBUTES` | *(empty)* | Full baggage list (`key=value`, percent-decoded). Merged onto detected resource attributes. Empty does not invent `deployment.environment`. |
 | `AGENT_OTEL_PIPE` | `\\.\pipe\agent-otel` | Primary Win32 Named Pipe path used for IPC between `agent-hook` and the daemon. |
 | `AGY_OTEL_PIPE` | `\\.\pipe\agy-otel` | Backward-compatibility fallback Named Pipe path. |
 | `AGENT_OTEL_BATCH_SIZE` | `50` | Maximum number of spans held in memory before forcing an immediate OTLP export flush. |
@@ -21,6 +35,20 @@ All environment variables follow standard OpenTelemetry conventions with project
 | `AGENT_OTEL_QUOTA_INTERVAL_SECS` | `60` | Ticker interval in seconds for broadcasting model quota gauges to the collector. |
 | `AGENT_OTEL_QUOTA_FILE` | *(Auto-discovered)* | Custom file path to read quota state JSON. Defaults to auto-discovering in `~/.state/quota.json`, `~/.gemini/quota.json`, or `~/.agent-otel/quota.json`. |
 | `AGENT_OTEL_LEGACY_ATTRIBUTES` | `false` | When set to `true`, emits legacy `agy.*` aliases alongside canonical OpenTelemetry `gen_ai.*` and `agent.*` conventions for backward compatibility. |
+
+### OTLP/HTTP export
+
+The daemon exports OTLP protobuf over HTTP. `Content-Type` is always `application/x-protobuf`; user headers cannot replace it. `Content-Encoding: gzip` is set only when that signal's compression is `gzip`. Retry, partial success, the 1 MiB request limit, and the 4 MiB response limit are unchanged. A disabled signal returns without opening a connection. `OTEL_SDK_DISABLED=true` reports the batch accepted with zero attempts.
+
+Signal-specific variables override the general `OTEL_EXPORTER_OTLP_*` variable for that signal. The daemon and direct `emit-quota` export both use this contract. `OtlpExporter::new(traces_url, metrics_url)` remains a compatibility client and does not read environment variables.
+
+### Resource identity
+
+Detected attributes are `service.name`, `service.version`, `host.name`, `os.type`, `telemetry.sdk.name=agent-otel-bridge`, `telemetry.sdk.language=rust`, `telemetry.sdk.version`, `telemetry.distro.name=agent-otel-bridge`, `telemetry.distro.version`, and a process-stable `service.instance.id`. `os.type` is `darwin` when the Rust OS name is `macos`.
+
+`deployment.environment` is emitted only when that key is present in `OTEL_RESOURCE_ATTRIBUTES`. `deployment.environment.name` is emitted only when that key is present. Neither is copied from the other, and neither defaults to `homelab`.
+
+`OTEL_RESOURCE_ATTRIBUTES` overrides detected attributes except `service.name` and the `telemetry.sdk.*` / `telemetry.distro.*` identity. An explicit `service.instance.id` in the list replaces the generated id.
 
 ---
 

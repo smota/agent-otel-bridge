@@ -1,11 +1,11 @@
-/* Copyright The OpenTelemetry Authors
+/* Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0 */
 use crate::{
     batch::SpanBatcher,
     config::DaemonConfig,
     context_cache::ContextCache,
     diagnostics::Diagnostics,
-    exporter::{OtlpExporter, EXPORT_DEADLINE},
+    exporter::{ExporterBuildError, OtlpExporter},
     pipeline::{export_worker, ExportQueue},
     quota_worker::QuotaWorker,
 };
@@ -24,8 +24,11 @@ pub struct Daemon {
     shutdown: CancellationToken,
 }
 impl Daemon {
-    pub fn new(config: DaemonConfig, shutdown: CancellationToken) -> Result<Self, reqwest::Error> {
-        let exporter = OtlpExporter::new(config.traces_url(), config.metrics_url())?;
+    pub fn new(
+        config: DaemonConfig,
+        shutdown: CancellationToken,
+    ) -> Result<Self, ExporterBuildError> {
+        let exporter = OtlpExporter::from_config(&config)?;
         Ok(Self {
             config,
             exporter,
@@ -131,7 +134,10 @@ impl Daemon {
                     &metrics_contexts.stats(Instant::now()),
                 );
                 let _ = metrics_exporter
-                    .export_metrics_until(&request, tokio::time::Instant::now() + EXPORT_DEADLINE)
+                    .export_metrics_until(
+                        &request,
+                        tokio::time::Instant::now() + metrics_exporter.metrics_deadline(),
+                    )
                     .await;
             }
         });
