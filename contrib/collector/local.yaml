@@ -1,9 +1,11 @@
 # Local otelcol-contrib config for one developer workstation.
-# Point the daemon at this collector: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-# and OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf. The daemon already exports
-# OTLP/HTTP protobuf. Do not add batch, retry, or a vendor exporter there.
+# The daemon points at http://localhost:4318
+# (OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318,
+# OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf). This file only prints signals.
+# No upstream endpoint.
 #
-# Auth, sampling, and vendor export belong in this file.
+# The daemon already exports OTLP/HTTP protobuf. Do not add batch, retry, or a
+# vendor exporter there. Auth, sampling, and vendor export belong in team.yaml.
 # This local file does not tail-sample. team.yaml does, and it does not key
 # off span duration.
 #
@@ -38,23 +40,16 @@ processors:
     timeout: 1s
 
 exporters:
-  otlphttp:
-    # Base URL only. The collector appends /v1/traces and /v1/metrics.
-    # Example:
-    #   export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.example.com
-    #   export OTEL_EXPORTER_OTLP_AUTH_HEADER='Bearer <token>'
-    # Do not hard-code a token in this file.
-    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
-    headers:
-      Authorization: ${env:OTEL_EXPORTER_OTLP_AUTH_HEADER}
+  debug:
+    verbosity: basic
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, attributes/redact_user_email, batch]
-      exporters: [otlphttp]
+      exporters: [debug]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, batch]
-      exporters: [otlphttp]
+      exporters: [debug]

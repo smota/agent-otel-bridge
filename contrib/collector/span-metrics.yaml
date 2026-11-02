@@ -1,7 +1,10 @@
 # Span-metrics fragment for otelcol-contrib (connectors.spanmetrics).
-# Merge `connectors` into local.yaml or team.yaml, send traces to the
-# connector, and export the metrics pipeline it receives. This file is not a
-# second daemon exporter.
+# Merge `connectors` into local.yaml or team.yaml and send traces to the
+# connector. local.yaml only prints signals with the debug exporter and has
+# no upstream. team.yaml forwards with otlphttp to
+# ${env:AGENT_OTEL_COLLECTOR_UPSTREAM}. Do not reuse the daemon's
+# OTEL_EXPORTER_OTLP_ENDPOINT (http://localhost:4318) as that upstream.
+# This file is not a second daemon exporter.
 #
 # The calls series is agent.span.calls (namespace + the connector calls sum).
 # Dimensions are gen_ai.operation.name and agent.tool.archetype only.
@@ -40,8 +43,8 @@ connectors:
 #     traces:
 #       receivers: [otlp]
 #       processors: [memory_limiter, resourcedetection, batch]
-#       exporters: [otlphttp, spanmetrics]
+#       exporters: [debug, spanmetrics]  # team.yaml: [otlphttp, spanmetrics]
 #     metrics:
 #       receivers: [otlp, spanmetrics]
 #       processors: [memory_limiter, batch]
-#       exporters: [otlphttp]
+#       exporters: [debug]  # team.yaml: [otlphttp]

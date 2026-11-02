@@ -104,9 +104,9 @@ export TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 The daemon exports OTLP/HTTP protobuf. Authentication, sampling, and vendor export belong in the collector, not in the daemon. The maintained configs replace the old inline recipe:
 
-- [`contrib/collector/local.yaml`](../contrib/collector/local.yaml) — workstation `otelcol-contrib` config.
-- [`contrib/collector/team.yaml`](../contrib/collector/team.yaml) — the same shape, plus tail sampling and path redaction.
-- [`contrib/collector/README.md`](../contrib/collector/README.md) — validate command, header environment, and the span-metrics fragment.
+- [`contrib/collector/local.yaml`](../contrib/collector/local.yaml) — workstation config. The daemon points at `http://localhost:4318`. This file only prints signals with the `debug` exporter. No upstream endpoint.
+- [`contrib/collector/team.yaml`](../contrib/collector/team.yaml) — the same shape, plus tail sampling, path redaction, and an upstream `otlphttp` exporter. The upstream base URL is `AGENT_OTEL_COLLECTOR_UPSTREAM`. Do not reuse the daemon's `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- [`contrib/collector/README.md`](../contrib/collector/README.md) — validate command, upstream variable, and the span-metrics fragment.
 
 Hook spans have equal start and end, so the span-metrics fragment does not publish a duration histogram. The collector listens for the daemon on OTLP/HTTP. No gRPC receiver is required:
 

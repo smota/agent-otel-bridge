@@ -1,6 +1,8 @@
-# Team otelcol-contrib config. Same shape as local.yaml, plus tail sampling
-# and path redaction.
+# Team otelcol-contrib config. Same shape as local.yaml, plus tail sampling,
+# path redaction, and an upstream exporter.
 #
+# The daemon's OTEL_EXPORTER_OTLP_ENDPOINT stays on this local collector
+# (http://localhost:4318). That variable must not be reused as the upstream.
 # Auth, sampling, and vendor export belong here, not in the daemon.
 # The daemon already exports OTLP/HTTP protobuf. This file does not add a
 # gRPC receiver.
@@ -64,11 +66,13 @@ processors:
 exporters:
   otlphttp:
     # Base URL only. The collector appends /v1/traces and /v1/metrics.
+    # The daemon's OTEL_EXPORTER_OTLP_ENDPOINT stays on this local collector
+    # (http://localhost:4318) and must not be reused as the upstream.
     # Example:
-    #   export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.example.com
+    #   export AGENT_OTEL_COLLECTOR_UPSTREAM=https://otlp.example.com
     #   export OTEL_EXPORTER_OTLP_AUTH_HEADER='Bearer <token>'
     # Do not hard-code a token in this file.
-    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+    endpoint: ${env:AGENT_OTEL_COLLECTOR_UPSTREAM}
     headers:
       Authorization: ${env:OTEL_EXPORTER_OTLP_AUTH_HEADER}
 
