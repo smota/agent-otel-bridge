@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `user.email` defaults to the hook payload or `$USER_EMAIL`. Git config and `$GIT_AUTHOR_EMAIL` are used only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
 - `AGENT_OTEL_WORKSPACE_PATH` (`absolute`, `relative`, or `hash`) controls `workspace.path` and `workspace.project_root`. The default remains absolute paths.
 - Experimental GenAI error status messages are truncated to 160 bytes on a character boundary, with `…` appended when cut. `error.type` is not the raw message.
+- Collector examples live in `contrib/collector/` (`local.yaml`, `team.yaml`, `span-metrics.yaml`). `agent.span.calls` counts spans and does not publish a duration histogram. A Grafana dashboard is `contrib/dashboards/grafana/agent-otel-bridge.json`.
 
 ## [0.7.0] - 2026-11-02
 

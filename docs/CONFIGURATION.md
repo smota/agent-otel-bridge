@@ -31,11 +31,13 @@ All environment variables follow standard OpenTelemetry conventions with project
 | `AGY_OTEL_PIPE` | `\\.\pipe\agy-otel` | Backward-compatibility fallback Named Pipe path. |
 | `AGENT_OTEL_BATCH_SIZE` | `50` | Maximum number of spans held in memory before forcing an immediate OTLP export flush. |
 | `AGENT_OTEL_BATCH_TIMEOUT_MS` | `200` | Maximum time in milliseconds to wait before flushing buffered spans if batch size is not reached. |
-| `AGENT_OTEL_IDLE_TIMEOUT_SECS` | `1800` | Idle timeout in seconds (30 minutes). If no events or IPC connections occur, the daemon exits cleanly to conserve memory. Set to `0` to disable idle timeout. |
+| `AGENT_OTEL_IDLE_TIMEOUT_SECS` | `0` | Idle timeout in seconds. `0` keeps the daemon running. A positive value exits after that many seconds without events. |
 | `AGENT_OTEL_QUOTA_INTERVAL_SECS` | `60` | Ticker interval in seconds for broadcasting model quota gauges to the collector. |
 | `AGENT_OTEL_QUOTA_FILE` | *(Auto-discovered)* | Custom file path to read quota state JSON. Defaults to auto-discovering in `~/.state/quota.json`, `~/.gemini/quota.json`, or `~/.agent-otel/quota.json`. |
 | `AGENT_OTEL_LEGACY_ATTRIBUTES` | `false` | When set to `true`, emits legacy `agy.*` aliases alongside canonical OpenTelemetry `gen_ai.*` and `agent.*` conventions for backward compatibility. |
 | `OTEL_SEMCONV_STABILITY_OPT_IN` | *(unset)* | Comma-separated tokens. Span export changes only when a token equals `gen_ai_latest_experimental` after trimming. The match is case-sensitive. Any other token is ignored. Unset leaves the default export unchanged. |
+| `AGENT_OTEL_ENRICH_EMAIL` | `false` | `true` or `1` also reads `$GIT_AUTHOR_EMAIL` and git config for `user.email`. Otherwise only the hook payload and `$USER_EMAIL` are used. |
+| `AGENT_OTEL_WORKSPACE_PATH` | `absolute` | `absolute` emits full paths. `relative` emits a path under the project root, or omits it. `hash` emits a stable SHA-256 hex of the absolute path. |
 
 ### OTLP/HTTP export
 
