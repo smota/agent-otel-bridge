@@ -53,11 +53,11 @@ graph LR
 | Capability Dimension | Native Harness Telemetry (Ad-Hoc) | `agent-otel-bridge` | Architectural Impact |
 |:---|:---|:---|:---|
 | **Multi-Agent Unification** | ❌ **Siloed**: Each tool emits incompatible formats to different locations. | ✅ **Unified**: Single OTLP collector endpoint for all agents on the workstation. | Eliminates tool-specific dashboard sprawl; unifies developer observability into a single pane of glass. |
-| **Semantic Standards** | ❌ **Proprietary**: Vendor-specific schemas, inconsistent attribute naming. | ✅ **CNCF OpenTelemetry GenAI v1.28+**: Canonical `execute_tool`, `invoke_agent`, `gen_ai.usage.*`. | Guarantees vendor independence and out-of-the-box compatibility with SigNoz, Datadog, and Honeycomb. |
+| **Semantic Standards** | ❌ **Proprietary**: Vendor-specific schemas, inconsistent attribute naming. | ✅ **Bridge span names**: Emits `execute_tool` and `invoke_agent` spans and its own capability, archetype, and quota attributes. Not a certified GenAI v1.28 conformance claim. | OTLP export still targets SigNoz, Datadog, and Honeycomb. Attribute names are the bridge's, not a certified GenAI profile. |
 | **Tool Intelligence & Archetypes** | ❌ **Opaque**: Tool execution is labeled as generic `bash` or `exec` with a raw string. | ✅ **Behavioral Archetypes**: Classified as `FilterCompressor`, `StructuredParser`, `InspectorDiff`, `BuildTestVerify`. | Identifies what the agent is *actually doing* (testing vs. filtering vs. diffing) without human inspection. |
-| **Tokenomics & Prompt Waste** | ❌ **Absent**: Only logs total input/output tokens per session. | ✅ **Token Waste Metrics**: Emits `tool.tokens_saved_estimate`, `tool.compression_ratio`, and schema bloat waste. | Reveals whether tools like `rtk` or `jq` are saving context tokens or if verbose commands are bloating LLM costs. |
+| **Tokenomics & Prompt Waste** | ❌ **Absent**: Only logs total input/output tokens per session. | ✅ **Token Waste Metrics**: Emits `agent.tool.tokens_saved`, `agent.tool.compression_ratio`, and schema bloat waste. | Reveals whether tools like `rtk` or `jq` are saving context tokens or if verbose commands are bloating LLM costs. |
 | **Capability Decomposition** | ❌ **Flat**: MCP tools, skills, and subagents are treated as identical flat tool names. | ✅ **Decomposed**: Hierarchical extraction into `capability.kind` (`mcp`, `skill`, `subagent`, `native`) and namespace. | Enables precise monitoring of MCP server reliability, subagent recursion depth, and skill failure rates. |
-| **Cross-Agent Lineage** | ❌ **Zero**: When Agent A invokes CLI Agent B, distributed trace context is lost. | ✅ **W3C Distributed Tracing**: Auto-propagates `$env:TRACEPARENT` across child processes and subagents. | End-to-end distributed traces across parent agents, delegated subagents, and background scripts. |
+| **Cross-Agent Lineage** | ❌ **Zero**: When Agent A invokes CLI Agent B, distributed trace context is lost. | ✅ **Inbound W3C context**: Honors `TRACEPARENT` when the harness passes it. A conversation id hashes to a fallback trace id. Parent/child span linking across process spawn is not implemented. | A shared trace id arrives only if the harness already set it. The bridge does not attach child processes under the current span. |
 | **Quota & Headroom Visibility** | ❌ **Reactive**: Developer only finds out about rate limits after receiving HTTP 429 errors. | ✅ **Proactive Fleet Intelligence**: Real-time remaining fractions, reset countdowns, and fleet bottleneck gauge. | Prevents pipeline halts by forecasting quota exhaustion across OpenAI, Anthropic, Google, and xAI. |
 | **Execution Hot-Path SLA** | ⚠️ **150ms – 1,200ms**: Custom Python/Node.js hook scripts cause noticeable agent hesitation. | ⚡ **< 1.0 ms**: Static native PE32 binary (`agent-hook.exe`, 145 KB) with 3ms hardware watchdog. | Zero developer perceptible latency. Complete fail-open safety guarantee. |
 
@@ -76,7 +76,7 @@ In traditional dashboards, this appears as an unindexable string. `agent-otel-br
 - `agent.tool.binary`: `"git"`
 - `agent.tool.wrapped_binary`: `"grep"`
 - `agent.tool.pipeline_depth`: `3`
-- `tool.tokens_saved_estimate`: `1450`
+- `agent.tool.tokens_saved`: `1450`
 
 Architects can instantly query: *"What percentage of our agents' tool executions are verifying builds vs. searching code?"*
 
@@ -87,17 +87,18 @@ In modern workflows, agents invoke other agents:
 3. The subagent executes a CLI command that triggers Claude Code or Codex CLI.
 
 Without `agent-otel-bridge`, this produces **three disconnected traces** with no causal relationship.  
-With `agent-otel-bridge`, tracing context propagates seamlessly:
-- The bridge injects standard W3C `TRACEPARENT` environment variables (`00-{trace_id}-{span_id}-01`).
-- Child processes automatically adopt the parent's `trace_id` and attach under the correct `parent_span_id`.
-- The collector renders a single, unified flamegraph showing the full agent lineage tree (`gen_ai.agent.depth`, `gen_ai.agent.parent_name`, `gen_ai.agent.root_id`).
+With `agent-otel-bridge`, inbound context is recorded; spawn-time linking is not:
+- Inbound W3C `TRACEPARENT` is honored when the harness passes it.
+- A conversation id hashes to a fallback trace id.
+- Parent/child span linking across process spawn is not implemented.
+- `gen_ai.agent.depth`, `gen_ai.agent.parent_name`, and `gen_ai.agent.root_id` are project extensions on the span. They do not produce a unified collector flamegraph.
 
 ### Pillar 3: Machine-Adaptive Quota Intelligence
 Traditional monitoring either tracks nothing or emits hardcoded synthetic numbers.  
 `agent-otel-bridge` introduces **Machine-Adaptive Quota Monitoring**:
 - The daemon detects which AI harnesses actually exist on the developer's machine (`is_installed`).
 - If you only use Claude Code and Antigravity, **only Claude and Gemini metrics are emitted**. You will never see phantom gauges for absent tools.
-- Emits `gen_ai.client.quota.fleet_bottleneck_ratio`, giving team leads an immediate gauge of the most constrained provider in their developer fleet.
+- Emits `agent.fleet.bottleneck_ratio`, giving team leads an immediate gauge of the most constrained provider in their developer fleet.
 
 ### Pillar 4: Universal Capability Decomposition & Waste Detection
 With the explosion of Model Context Protocol (MCP) servers and reusable agent skills, prompt schemas are growing exponentially. `agent-otel-bridge` decomposes tool calls:
@@ -138,8 +139,8 @@ flowchart TD
 
 | Architectural Need | With Native Telemetry | With `agent-otel-bridge` |
 |:---|:---|:---|
-| **Fleet Standardization** | High custom maintenance | Out-of-the-box CNCF GenAI v1.28+ |
+| **Fleet Standardization** | High custom maintenance | `execute_tool` / `invoke_agent` spans and bridge-owned attributes (not certified GenAI v1.28) |
 | **Developer Turn Latency** | Degraded by slow custom scripts | Sub-millisecond (< 1.0 ms), zero impact |
-| **Distributed Lineage** | Broken at process boundaries | Full W3C distributed trace tree |
+| **Distributed Lineage** | Broken at process boundaries | Inbound `TRACEPARENT` when the harness passes it; conversation-id fallback trace id. Spawn-time parent/child links are not implemented. |
 | **Token Optimization** | Invisible | Precise tokenomics & compression metrics |
 | **Rate Limit Prevention** | Reactive 429 errors | Proactive multi-provider headroom gauges |

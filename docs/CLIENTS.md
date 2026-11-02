@@ -26,22 +26,17 @@ Every AI harness has a distinct configuration resolution model when resolving us
 ## 2. Automated Hook Registration & Workspace Synchronization
 
 ### 2.1 Global Machine Configuration
-The fastest way to configure all installed AI agents on your machine:
+The supported registration path is one application at a time:
 
 ```powershell
-# Automatically detect installed agents and register global hooks
-agent-otel-bridge install-hooks
-
-# Or target a specific client
-agent-otel-bridge install-hooks --client antigravity
-agent-otel-bridge install-hooks --client claude
-agent-otel-bridge install-hooks --client codex
-agent-otel-bridge install-hooks --client grok
-agent-otel-bridge install-hooks --client pi
-
-# Force configure all 5 clients
-agent-otel-bridge install-hooks --client all
+agent-otel-bridge local enable --app antigravity
+agent-otel-bridge local enable --app claude
+agent-otel-bridge local enable --app codex
+agent-otel-bridge local enable --app grok
+agent-otel-bridge local enable --app pi
 ```
+
+`agent-otel-bridge install-hooks` without `--legacy-config` does not write configuration. It tells you to run `local enable` and exits 2. `--legacy-config` keeps the previous JSON merger.
 
 ### 2.2 Workspace Synchronization (`hooks sync`)
 When working in repositories that define project-level configurations (such as repositories with custom `.claude/settings.json` validation scripts), global hooks are shadowed by design in Claude Code.

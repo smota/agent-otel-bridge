@@ -75,13 +75,13 @@ The table below details all attributes captured, enriched, and emitted by `agent
 | **Agent Lifecycle** | `agent.execution.num` | Span Attr | `int64` | **Yes** | *Optional* | *Optional* | *Optional* | *Optional* | Monotonic execution counter within an agent loop pass. |
 | **Agent Lifecycle** | `agent.fully_idle` | Span Attr | `bool` | **Yes** | *Optional* | *Optional* | *Optional* | *Optional* | Flag indicating agent reached complete quiescence without pending background tasks. |
 | **Turn Outcomes** | `agent.termination_reason` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Completion reason: `NO_TOOL_CALL`, `model_stop`, `USER_INTERRUPT`, `TURN_LIMIT`. |
-| **Turn Outcomes** | `gen_ai.response.finish_reasons` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | OTel GenAI standard finish reasons (`stop`, `length`, `tool_calls`, `error`). |
+| **Turn Outcomes** | `gen_ai.response.finish_reasons` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Harness termination string when present (same value as `agent.termination_reason`). Not mapped to the GenAI finish-reason enum, and not emitted as a string array. |
 | **Turn Outcomes** | `agent.decision` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | *Optional* | *Optional* | Policy/Human-in-the-loop decision: `allow`, `deny`, `ask`. |
 | **Turn Outcomes** | `agent.success` | Span Attr | `bool` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Boolean turn success derived from span status and exit codes. |
 | **Tool Invocations** | `gen_ai.operation.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | `execute_tool`, `invoke_agent`, or `chat`. |
 | **Tool Invocations** | `gen_ai.tool.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Specific tool name (`run_command`, `Bash`, `view_file`, `grep_search`, etc.). |
 | **Tool Invocations** | `gen_ai.tool.call.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | *Optional* | Unique call ID associated with the specific tool execution. |
-| **Tool Invocations** | `durationNano` / `duration_ms` | Span Field | `int64` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Precise execution duration of the tool or invocation span. |
+| **Tool Invocations** | `durationNano` / `duration_ms` | Span Field | `int64` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Not a measured tool duration. See §5.6: today start and end are equal when the hook payload supplies no execution interval. |
 | **Model & Provider** | `gen_ai.provider.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Provider inferred from model: `google`, `anthropic`, `openai`, `xai`, `pi`. |
 | **Model & Provider** | `gen_ai.request.model` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Active model identifier (`gemini-2.5-pro`, `claude-3-7-sonnet`, `o3-mini`, etc.). |
 | **Economics & Quota** | `gen_ai.usage.input_tokens` | Span Attr | `int64` | *Wrapper* | **Yes** | **Yes** | **Yes** | *Optional* | Input / prompt token consumption count per turn. |
@@ -153,7 +153,7 @@ In the Antigravity agent architecture:
 - In other harnesses:
   - Claude Code emits `model_stop` or `end_turn`.
   - OpenAI Codex emits `stop` or `success`.
-- Under canonical OpenTelemetry GenAI semantic conventions, `NO_TOOL_CALL` maps directly to `gen_ai.response.finish_reasons = ["stop"]`.
+- When a termination reason is present, the bridge copies that harness string into `gen_ai.response.finish_reasons`. It does not map `NO_TOOL_CALL` to `["stop"]`, and it does not emit a string array.
 
 ---
 

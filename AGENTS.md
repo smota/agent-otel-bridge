@@ -16,7 +16,7 @@
 3. **Zero LLM Prompt Pollution**: Distributed tracing context MUST propagate via process environment variables (`$env:TRACEPARENT`). Agents and LLMs must **never** be instructed to append `--traceparent` CLI flags or pollute tool schemas with tracing plumbing.
 4. **Non-Blocking Context Lookup**: The daemon's event path uses workspace-scoped snapshots without filesystem access or waiting for refresh. Misses schedule bounded asynchronous harvesting; events may export with explicitly missing context. Direct harvest latency is diagnostic, not the retired <150 µs release gate. **NEVER spawn external processes (like `git.exe` or `bash`) on the telemetry path.** Validate lookup, freshness and limits against [current acceptance contracts](dev/fleet-smoke/production-path-round.md).
 5. **Preference-Agnostic Tool Modeling**: Never hardcode developer-specific tool choices (`rtk`, `jq`, `bat`, `delta`) in the core engine. All commands are modeled as **Behavioral Execution Archetypes** (`FilterCompressor`, `StructuredParser`, `InspectorDiff`, `SearchRetrieval`, `BuildTestVerify`, `GenericExec`).
-6. **Objective Telemetry Only in Core**: The Rust core engine measures and emits raw facts (`capability.schema_tokens`, `tool.tokens_saved_estimate`). Alert thresholds and policy decisions belong in downstream observability platforms (SigNoz, Prometheus).
+6. **Objective Telemetry Only in Core**: The Rust core engine measures and emits raw facts (`capability.schema_tokens`, `agent.tool.tokens_saved`). Alert thresholds and policy decisions belong in downstream observability platforms (SigNoz, Prometheus).
 7. **Zero Hot-Path Disk I/O**: `agent-hook` MUST NOT read configuration files from disk. Common tool mappings are compiled directly into the binary; custom overrides are cached in-memory by the long-running daemon at startup.
 
 ---
@@ -55,7 +55,7 @@ crates/
 * **No `protoc` Requirement**: Protobuf serialization is handled via `prost` with pre-generated structures or minimal handwritten encoders. Contributors must not need `protoc` installed.
 
 ### 3.2 Semantic Convention Rules
-* Adhere strictly to **CNCF OpenTelemetry GenAI & Agent Semantic Conventions v1.28+**:
+* Emit operation names `execute_tool` and `invoke_agent`. Do not add new attributes under `gen_ai.*`. The current attribute set is the bridge's own, not a certified GenAI v1.28 conformance claim.
   - `execute_tool {tool_name}` for tool executions.
   - `invoke_agent {agent_name}` for agent orchestrations.
   - `agent.hook.event`, `agent.step.index`, `agent.execution.mode`.
@@ -63,7 +63,7 @@ crates/
   - Context: `workspace.path`, `workspace.project_name`, `workspace.project_root`, `workspace.project_type`, `vcs.system`, `vcs.branch.name`.
   - Archetypes: `agent.tool.archetype`, `agent.tool.binary`, `agent.tool.pipeline_depth`.
   - Capabilities: `capability.kind`, `capability.namespace`, `capability.name`, `capability.schema_tokens`.
-  - Lineage: `gen_ai.agent.depth`, `gen_ai.agent.parent_name`, `gen_ai.agent.root_id`, `gen_ai.agent.is_root`.
+  - Lineage: `gen_ai.agent.depth`, `gen_ai.agent.parent_name`, `gen_ai.agent.root_id`, `gen_ai.agent.is_root`. These are project extensions currently emitted under that prefix and must not gain new siblings.
   - Error categories: `agent.error.category`.
 * **Backward Compatibility**: Never rename or delete an existing attribute constant without providing a deprecated fallback alias.
 
@@ -82,9 +82,8 @@ When harvesting context:
   2. `$env:TRACEPARENT`.
   3. Deterministic fallback hash of conversation ID.
 * Egress:
-  - When spawning a subagent or running child commands, inject `$env:TRACEPARENT` with format:
-    `00-{trace_id:32hex}-{current_span_id:16hex}-01`.
-  - Child processes automatically adopt the parent's `trace_id` and attach under `parent_span_id`.
+  - Context is read from the environment and the hook payload. Agents must not be told to pass `--traceparent` flags or to add tracing fields to tool schemas.
+  - Egress of a fresh traceparent for the current span is not implemented. Do not document it as a requirement until a measured hook change lands.
 
 ### 3.5 Local Runtime & Station Installation Contract
 Ao alterar cliente, daemon, IPC, hooks, adaptadores CLI/desktop, instalação, atualização ou ativação de builds locais, leia e cumpra [`docs/local-runtime-contract.md`](file:///C:/Users/samue/code/agent-otel-bridge/docs/local-runtime-contract.md). Valide as superfícies afetadas e registre separadamente testes do candidato e da instalação ativa.
