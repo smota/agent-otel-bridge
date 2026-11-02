@@ -423,9 +423,11 @@ fn test_codex_grok_pi_hooks_install_and_uninstall() {
     fs::create_dir_all(third_party_ext.parent().unwrap()).unwrap();
     fs::write(&third_party_ext, "// retain me").unwrap();
 
+    let pi_before = fs::read(&pi_path).unwrap();
     install_codex_hooks(&codex_path, "agent-hook", Some("codex")).unwrap();
     install_grok_hooks(&grok_path, "agent-hook", Some("grok")).unwrap();
     install_pi_hooks(&pi_path, "agent-hook", Some("pi")).unwrap();
+    assert_eq!(fs::read(&pi_path).unwrap(), pi_before);
 
     assert_bridge_commands(
         &codex_path,
@@ -439,11 +441,6 @@ fn test_codex_grok_pi_hooks_install_and_uninstall() {
         &grok_path,
         ["PreToolUse", "PostToolUse", "Stop"]
             .map(|event| format_grok_hook_command("agent-hook", event, Some("grok"))),
-    );
-    assert_bridge_commands(
-        &pi_path,
-        ["PreToolUse", "PostToolUse", "Stop"]
-            .map(|event| format_hook_command("agent-hook", event, Some("pi"))),
     );
     let extension_text = fs::read_to_string(&extension).unwrap();
     assert!(extension_text.starts_with("// Managed by agent-otel-bridge."));

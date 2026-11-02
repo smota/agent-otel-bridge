@@ -23,15 +23,31 @@ fn pi_extension_install_is_owned_idempotent_and_reversible() {
     fs::write(&third_party, "// retain me").unwrap();
     let binary = r"C:\Program Files\Bridge\agent-hook.exe";
     agent_otel_bridge::hooks::install_pi_hooks(&path, binary, Some("pi")).unwrap();
+    assert!(!path.exists());
     let first = fs::read(&extension).unwrap();
     agent_otel_bridge::hooks::install_pi_hooks(&path, binary, Some("pi")).unwrap();
     assert_eq!(first, fs::read(&extension).unwrap());
+    assert!(!path.exists());
     assert!(!String::from_utf8(first)
         .unwrap()
         .contains("__AGENT_OTEL_HOOK_PATH__"));
     agent_otel_bridge::hooks::uninstall_pi_hooks(&path, binary).unwrap();
     assert!(!extension.exists());
     assert_eq!(fs::read_to_string(&third_party).unwrap(), "// retain me");
+    fs::write(
+        &path,
+        r#"{"custom":true,"hooks":{"PreToolUse":[{"hooks":[{"command":"agent-hook PreToolUse"}]},{"hooks":[{"command":"herdr status"}]}]}}"#,
+    )
+    .unwrap();
+    fs::write(&extension, "// Managed by agent-otel-bridge.\n").unwrap();
+    assert!(agent_otel_bridge::hooks::uninstall_pi_hooks(&path, binary).unwrap());
+    assert!(!extension.exists());
+    let legacy: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(legacy["custom"], true);
+    assert_eq!(
+        legacy["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        "herdr status"
+    );
     fs::write(&extension, "// user owned").unwrap();
     assert!(agent_otel_bridge::hooks::install_pi_hooks(&path, binary, Some("pi")).is_err());
     assert_eq!(fs::read_to_string(&extension).unwrap(), "// user owned");

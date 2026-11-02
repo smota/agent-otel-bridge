@@ -3,15 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use super::command::format_hook_command;
-use super::standard::{install_hooks_with_command_formatter, uninstall_standard_hooks};
+use super::standard::uninstall_standard_hooks;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn install_pi_hooks(
     path: &Path,
     binary: &str,
-    client_tag: Option<&str>,
+    _client_tag: Option<&str>,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let extension = pi_extension_path(path)?;
     if extension.exists()
@@ -25,7 +24,7 @@ pub fn install_pi_hooks(
         &serde_json::to_string(binary.trim_matches('"'))?,
     );
     fs::write(extension, content)?;
-    install_hooks_with_command_formatter(path, binary, client_tag, format_hook_command)
+    Ok(true)
 }
 
 pub(crate) fn pi_extension_path(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
