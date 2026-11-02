@@ -22,5 +22,6 @@ bytes = "1"
 httpdate = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 flate2 = "1"
 getrandom = "0.2"

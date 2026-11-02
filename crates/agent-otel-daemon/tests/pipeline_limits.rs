@@ -104,6 +104,8 @@ async fn blocked_exporter_does_not_block_transform_and_shutdown_reconciles() {
         idle_timeout: Duration::MAX,
         emit_legacy_aliases: false,
         gen_ai_latest_experimental: false,
+        enrich_email: false,
+        workspace_path_mode: agent_otel_daemon::config::WorkspacePathMode::Absolute,
         traces: SignalExportConfig::http_protobuf(format!(
             "{}/v1/traces",
             collector.endpoint.trim_end_matches('/')
