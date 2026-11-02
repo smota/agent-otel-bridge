@@ -81,7 +81,7 @@ The table below details all attributes captured, enriched, and emitted by `agent
 | **Tool Invocations** | `gen_ai.operation.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | `execute_tool`, `invoke_agent`, or `chat`. |
 | **Tool Invocations** | `gen_ai.tool.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Specific tool name (`run_command`, `Bash`, `view_file`, `grep_search`, etc.). |
 | **Tool Invocations** | `gen_ai.tool.call.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | *Optional* | Unique call ID associated with the specific tool execution. |
-| **Tool Invocations** | `durationNano` / `duration_ms` | Span Field | `int64` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Not a measured tool duration. See §5.6: today start and end are equal when the hook payload supplies no execution interval. |
+| **Tool Invocations** | `durationNano` / `duration_ms` | Span Field | `int64` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Observed interval between paired hook deliveries, not a harness CPU timer. See §5.6. Unpaired spans still have equal start and end. |
 | **Model & Provider** | `gen_ai.provider.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Provider inferred from model: `google`, `anthropic`, `openai`, `xai`, `pi`. |
 | **Model & Provider** | `gen_ai.request.model` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Active model identifier (`gemini-2.5-pro`, `claude-3-7-sonnet`, `o3-mini`, etc.). |
 | **Economics & Quota** | `gen_ai.usage.input_tokens` | Span Attr | `int64` | *Wrapper* | **Yes** | **Yes** | **Yes** | *Optional* | Input / prompt token consumption count per turn. |
@@ -108,7 +108,7 @@ The OpenAI Codex dashboard (`codex-dashboard.json`) in SigNoz is recognized as o
 | 2 | **Conversations Over Time** | `conversation.id` over time | `gen_ai.conversation.id` over time | **Full Coverage** | Time series aggregation over `agent.stop` or `agent.hook.event`. |
 | 3 | **Conversation Distribution By User** | `user.email` | `user.email` | **Full Coverage** | Emitted from the payload or `$USER_EMAIL`. Git-config enrichment is off unless `AGENT_OTEL_ENRICH_EMAIL` is set. |
 | 4 | **Conversations by Terminal Type** | `terminal.type` | `terminal.type` | **Full Coverage** | Emitted from payload or enriched via `$WT_SESSION` / `$TERM_PROGRAM` / `$TERM`. |
-| 5 | **Conversation Details** | `conversation.id`, `sum(duration_ms)`, `count_distinct(call_id)` | `gen_ai.conversation.id`, `sum(durationNano)`, `count_distinct(gen_ai.tool.call.id)` | **Unmeasured** | Hook spans currently have equal start and end, so sums of that field are not tool latency. |
+| 5 | **Conversation Details** | `conversation.id`, `sum(duration_ms)`, `count_distinct(call_id)` | `gen_ai.conversation.id`, `sum(durationNano)`, `count_distinct(gen_ai.tool.call.id)` | **Unmeasured** | Paired duration is the daemon's observed interval between hook deliveries, not harness CPU time. See §5.6. |
 | 6 | **Tool Call Distribution** | `tool_name` | `gen_ai.tool.name` | **Full Coverage** | Captured for all tools across all 5 harnesses. |
 | 7 | **Model Calls** | `count_distinct(call_id)` | `count_distinct(gen_ai.tool.call.id)` or span count | **Full Coverage** | Corresponds to `PostInvocation` or tool execution spans. |
 | 8 | **Model Call Distribution** | `model` | `gen_ai.request.model` | **Full Coverage** | Grouped by canonical model identifier. |
@@ -118,7 +118,7 @@ The OpenAI Codex dashboard (`codex-dashboard.json`) in SigNoz is recognized as o
 | 12 | **Cache Utilization Rate** | `(cached / input) * 100` | `(cache_read_tokens / input_tokens) * 100` | **Full Coverage** | Supported via composite query formula `(B / A) * 100`. |
 | 13 | **Token Usage Over Time** | `input + output` | `input_tokens + output_tokens` | **Full Coverage** | Composite time series formula `A + B`. |
 | 14 | **Token Distribution By Model** | `input + output` by `model` | `input_tokens + output_tokens` by `gen_ai.request.model` | **Full Coverage** | Composite query grouped by model. |
-| 15 | **Request Duration (P95)** | `P95(duration_ms)` | `quantile(0.95)(durationNano)` | **Unmeasured** | Hook spans currently have equal start and end, so a P95 of that field is not tool latency. |
+| 15 | **Request Duration (P95)** | `P95(duration_ms)` | `quantile(0.95)(durationNano)` | **Unmeasured** | Paired duration is the daemon's observed interval between hook deliveries, not harness CPU time. See §5.6. |
 | 16 | **Success Rate** | `count()` by `success` | `count()` by `agent.success` or `status.code` | **Full Coverage** | Captured directly in span status (`StatusCode::Ok` vs `StatusCode::Error`). |
 | 17 | **User Decision** | `count()` by `decision` | `count()` by `agent.decision` | **Full Coverage** | Captured from `PreToolUse` hooks (`allow`, `deny`, `ask`). |
 
@@ -223,7 +223,7 @@ Links heterogeneous subagent sessions into a single distributed trace tree. A ho
 
 #### Opt-in gen_ai_latest_experimental
 
-Unset `OTEL_SEMCONV_STABILITY_OPT_IN` keeps the default names in the tables above. When the value contains the token `gen_ai_latest_experimental`, lineage and VCS attributes use the names below instead. The bridge does not emit both the old and new name for the same value. `agent.step.index` stays. `gen_ai.agent.step_index` is omitted. `gen_ai.response.finish_reasons` is a one-element string array of the raw harness termination string, including `NO_TOOL_CALL`. This opt-in does not pair Pre and Post spans and does not change duration.
+Unset `OTEL_SEMCONV_STABILITY_OPT_IN` keeps the default names in the tables above. When the value contains the token `gen_ai_latest_experimental`, lineage and VCS attributes use the names below instead. The bridge does not emit both the old and new name for the same value. `agent.step.index` stays. `gen_ai.agent.step_index` is omitted. `gen_ai.response.finish_reasons` is a one-element string array of the raw harness termination string, including `NO_TOOL_CALL`. This opt-in does not control span pairing and does not change duration. Pairing is described in §5.6.
 
 | Attribute | Type | Replaces |
 | :--- | :--- | :--- |
@@ -249,7 +249,7 @@ Replaces ambiguous binary errors with actionable diagnostic categories:
 
 Bridge diagnostics are process-scoped operational facts. Counters are monotonic and cumulative until the daemon restarts; gauges are instantaneous snapshots. Labels use the finite values below. They never contain workspace paths, user identities, trace/span IDs, prompts, payloads, or error messages. Alert thresholds remain a backend policy.
 
-Hook-derived spans currently represent the daemon observation instant: start and end are equal when the hook payload supplies no authoritative execution interval. Their zero duration is **not** a measured tool duration and must not be included in tool-latency SLA distributions. The former synthetic 1 ms interval is no longer emitted. Internal hook execution is measured separately by the candidate observer; that interval is not tool execution time. Native spans with authoritative start/end timestamps retain their own duration semantics.
+A paired span's duration is the daemon's observed interval between the two hook deliveries (`PreToolUse` then `PostToolUse`, or `PreInvocation` then `PostInvocation` or `Stop`). It is not a harness CPU timer and must not be treated as a tool-latency SLA measurement. Every span the assembler emits sets `agent.span.paired`: `true` only when a Pre was joined with that later hook, `false` otherwise. Unpaired spans, including `Unknown` events and Pre hooks that expire, are evicted, or never see a match, still have equal start and end. The former synthetic 1 ms interval is no longer emitted. Internal hook execution is measured separately by the candidate observer; that interval is not tool execution time. Native spans with authoritative start/end timestamps retain their own duration semantics.
 
 | Metric | OTLP aggregation | Unit | Labels | Meaning |
 | :--- | :--- | :--- | :--- | :--- |
