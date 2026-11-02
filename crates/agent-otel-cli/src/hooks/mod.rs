@@ -21,7 +21,7 @@ pub use command::{
     check_binary_in_path, claude_imported_grok_guard_script, find_binary_in_path,
     format_antigravity_hook_command, format_claude_hook_command,
     format_claude_windows_hook_command, format_cmd_hook_command, format_grok_hook_command,
-    format_hook_command, format_powershell_hook_command, is_bridge_command,
+    format_hook_command, format_powershell_hook_command, has_bridge_command, is_bridge_command,
     resolve_canonical_hook_binary,
 };
 pub use grok::install_grok_hooks;
@@ -33,7 +33,6 @@ pub use paths::{
 pub use pi::{install_pi_hooks, uninstall_pi_hooks};
 pub use standard::{install_standard_hooks, uninstall_standard_hooks};
 
-use command::has_bridge_command;
 use pi::pi_extension_path;
 use serde_json::Value;
 use std::fs;

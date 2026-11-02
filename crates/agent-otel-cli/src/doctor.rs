@@ -6,6 +6,9 @@
 use agent_otel_ipc::client::try_send;
 use agent_otel_ipc::frame::MsgType;
 use reqwest::{StatusCode, Url};
+use serde_json::Value;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const MAX_OTLP_RESPONSE_BYTES: usize = 64 * 1024;
@@ -220,6 +223,167 @@ async fn send_otlp_probe(
     Ok((status, content_type, body))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceState {
+    NotDetected,
+    Detected,
+    Registered,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceRow {
+    pub id: &'static str,
+    pub state: SurfaceState,
+    pub detail: String,
+}
+
+impl SurfaceRow {
+    fn plain(id: &'static str, state: SurfaceState) -> Self {
+        Self {
+            id,
+            state,
+            detail: String::new(),
+        }
+    }
+}
+
+pub fn inspect_surfaces_under(home: &Path) -> Vec<SurfaceRow> {
+    vec![
+        antigravity_cli_row(home),
+        antigravity_ide_row(home),
+        claude_row(home),
+        codex_row(home),
+        grok_row(home),
+        pi_row(home),
+    ]
+}
+
+fn child_exists(home: &Path, name: &str) -> bool {
+    home.join(name).exists()
+}
+
+fn read_text(path: &Path) -> Option<String> {
+    fs::read_to_string(path).ok()
+}
+
+fn antigravity_cli_row(home: &Path) -> SurfaceRow {
+    if !child_exists(home, ".gemini") {
+        return SurfaceRow::plain("antigravity-cli", SurfaceState::NotDetected);
+    }
+    let registered = home
+        .join(".gemini/antigravity-cli/plugins/agent-otel-bridge/plugin.json")
+        .is_file()
+        || home
+            .join(".gemini/config/plugins/agent-otel-bridge/plugin.json")
+            .is_file();
+    SurfaceRow::plain(
+        "antigravity-cli",
+        if registered {
+            SurfaceState::Registered
+        } else {
+            SurfaceState::Detected
+        },
+    )
+}
+
+fn antigravity_ide_row(home: &Path) -> SurfaceRow {
+    if !child_exists(home, ".gemini") {
+        return SurfaceRow::plain("antigravity-ide", SurfaceState::NotDetected);
+    }
+    let registered = read_text(&home.join(".gemini/config/hooks.json"))
+        .is_some_and(|text| text.contains("agent-hook") || text.contains("agent-otel-bridge"));
+    SurfaceRow::plain(
+        "antigravity-ide",
+        if registered {
+            SurfaceState::Registered
+        } else {
+            SurfaceState::Detected
+        },
+    )
+}
+
+fn claude_row(home: &Path) -> SurfaceRow {
+    if !child_exists(home, ".claude") {
+        return SurfaceRow::plain("claude", SurfaceState::NotDetected);
+    }
+    let registered = read_text(&home.join(".claude/settings.json")).is_some_and(|text| {
+        serde_json::from_str::<Value>(&text).is_ok_and(|value| {
+            crate::hooks::has_bridge_command(&value) || enabled_plugins_mention_bridge(&value)
+        })
+    });
+    SurfaceRow::plain(
+        "claude",
+        if registered {
+            SurfaceState::Registered
+        } else {
+            SurfaceState::Detected
+        },
+    )
+}
+
+fn enabled_plugins_mention_bridge(value: &Value) -> bool {
+    value
+        .get("enabledPlugins")
+        .is_some_and(|plugins| plugins.to_string().contains("agent-otel-bridge"))
+}
+
+fn codex_row(home: &Path) -> SurfaceRow {
+    if !child_exists(home, ".codex") {
+        return SurfaceRow::plain("codex", SurfaceState::NotDetected);
+    }
+    let registered = read_text(&home.join(".codex/hooks.json")).is_some_and(|text| {
+        serde_json::from_str::<Value>(&text)
+            .is_ok_and(|value| crate::hooks::has_bridge_command(&value))
+    });
+    if registered {
+        SurfaceRow {
+            id: "codex",
+            state: SurfaceState::Registered,
+            detail: "trust review remains with Codex".to_string(),
+        }
+    } else {
+        SurfaceRow::plain("codex", SurfaceState::Detected)
+    }
+}
+
+fn grok_row(home: &Path) -> SurfaceRow {
+    if !child_exists(home, ".grok") {
+        return SurfaceRow::plain("grok", SurfaceState::NotDetected);
+    }
+    let registered = read_text(&home.join(".grok/hooks/agent-otel.json"))
+        .is_some_and(|text| text.contains("agent-hook"));
+    SurfaceRow::plain(
+        "grok",
+        if registered {
+            SurfaceState::Registered
+        } else {
+            SurfaceState::Detected
+        },
+    )
+}
+
+fn pi_row(home: &Path) -> SurfaceRow {
+    if !child_exists(home, ".pi") {
+        return SurfaceRow::plain("pi", SurfaceState::NotDetected);
+    }
+    let registered = read_text(&home.join(".pi/agent/extensions/agent-otel-bridge.ts"))
+        .is_some_and(|text| text.starts_with("// Managed by agent-otel-bridge."));
+    SurfaceRow::plain(
+        "pi",
+        if registered {
+            SurfaceState::Registered
+        } else {
+            SurfaceState::Detected
+        },
+    )
+}
+
+fn user_home() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+}
+
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== agent-otel-bridge doctor ===");
     println!("Diagnosing station telemetry pipeline & OpenTelemetry invariants\n");
@@ -378,6 +542,25 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    println!("\n  Application surfaces:");
+    match user_home() {
+        Some(home) => {
+            for row in inspect_surfaces_under(&home) {
+                match row.state {
+                    SurfaceState::NotDetected => println!("  {}: not detected", row.id),
+                    SurfaceState::Detected => println!("  {}: detected, not registered", row.id),
+                    SurfaceState::Registered if row.detail.is_empty() => {
+                        println!("  {}: registered", row.id)
+                    }
+                    SurfaceState::Registered => {
+                        println!("  {}: registered; {}", row.id, row.detail)
+                    }
+                }
+            }
+        }
+        None => println!("  [info] home directory unset; application surfaces not detected"),
+    }
+
     // Workspace shadowing diagnostic for current directory
     if let Ok(current_dir) = std::env::current_dir() {
         for adapter in crate::hooks::CLIENT_ADAPTERS {
@@ -404,6 +587,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
@@ -551,5 +735,120 @@ mod tests {
             OtlpProbeResult::Accepted
         );
         receiver.await.unwrap();
+    }
+
+    #[test]
+    fn surfaces_report_detection_and_registration_without_writing() {
+        let home = std::env::temp_dir().join(format!(
+            "doctor_surfaces_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        let missing = inspect_surfaces_under(&home);
+        assert!(missing
+            .iter()
+            .all(|row| row.state == SurfaceState::NotDetected));
+        assert_eq!(
+            missing.iter().map(|row| row.id).collect::<Vec<_>>(),
+            vec![
+                "antigravity-cli",
+                "antigravity-ide",
+                "claude",
+                "codex",
+                "grok",
+                "pi"
+            ]
+        );
+
+        fs::create_dir_all(home.join(".gemini")).unwrap();
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::create_dir_all(home.join(".grok")).unwrap();
+        fs::create_dir_all(home.join(".pi")).unwrap();
+        let detected = inspect_surfaces_under(&home);
+        assert!(detected
+            .iter()
+            .all(|row| row.state == SurfaceState::Detected));
+
+        fs::create_dir_all(home.join(".gemini/antigravity-cli/plugins/agent-otel-bridge")).unwrap();
+        fs::write(
+            home.join(".gemini/antigravity-cli/plugins/agent-otel-bridge/plugin.json"),
+            "{}",
+        )
+        .unwrap();
+        fs::create_dir_all(home.join(".gemini/config")).unwrap();
+        fs::write(
+            home.join(".gemini/config/hooks.json"),
+            r#"{"agent-otel-bridge":{}}"#,
+        )
+        .unwrap();
+        fs::write(
+            home.join(".claude/settings.json"),
+            r#"{"enabledPlugins":{"agent-otel-bridge@agent-otel-bridge":true}}"#,
+        )
+        .unwrap();
+        fs::write(
+            home.join(".codex/hooks.json"),
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"command":"agent-hook PreToolUse"}]}]}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(home.join(".grok/hooks")).unwrap();
+        fs::write(
+            home.join(".grok/hooks/agent-otel.json"),
+            r#"{"hooks":{"Stop":[{"hooks":[{"command":"agent-hook Stop"}]}]}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(home.join(".pi/agent/extensions")).unwrap();
+        fs::write(
+            home.join(".pi/agent/extensions/agent-otel-bridge.ts"),
+            "// Managed by agent-otel-bridge.\nexport {}\n",
+        )
+        .unwrap();
+
+        let registered = inspect_surfaces_under(&home);
+        assert!(registered
+            .iter()
+            .all(|row| row.state == SurfaceState::Registered));
+        let codex = registered.iter().find(|row| row.id == "codex").unwrap();
+        assert_eq!(codex.detail, "trust review remains with Codex");
+
+        fs::write(
+            home.join(".claude/settings.json"),
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"command":"herdr status"}]}]}}"#,
+        )
+        .unwrap();
+        fs::write(
+            home.join(".pi/agent/extensions/agent-otel-bridge.ts"),
+            "// user owned\n",
+        )
+        .unwrap();
+        fs::remove_file(home.join(".gemini/antigravity-cli/plugins/agent-otel-bridge/plugin.json"))
+            .unwrap();
+        fs::create_dir_all(home.join(".gemini/config/plugins/agent-otel-bridge")).unwrap();
+        fs::write(
+            home.join(".gemini/config/plugins/agent-otel-bridge/plugin.json"),
+            "{}",
+        )
+        .unwrap();
+        let mixed = inspect_surfaces_under(&home);
+        assert_eq!(mixed[0].state, SurfaceState::Registered);
+        assert_eq!(mixed[1].state, SurfaceState::Registered);
+        assert_eq!(mixed[2].state, SurfaceState::Detected);
+        assert_eq!(mixed[5].state, SurfaceState::Detected);
+
+        fs::write(
+            home.join(".claude/settings.json"),
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"command":"\"/opt/agent-hook\" PreToolUse"}]}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inspect_surfaces_under(&home)[2].state,
+            SurfaceState::Registered
+        );
+        let _ = fs::remove_dir_all(&home);
     }
 }

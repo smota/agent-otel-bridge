@@ -27,7 +27,7 @@ pub fn is_bridge_command(cmd: &str) -> bool {
     lower.contains("agent-hook") || lower.contains("agent-otel-bridge hook")
 }
 
-pub(crate) fn has_bridge_command(value: &Value) -> bool {
+pub fn has_bridge_command(value: &Value) -> bool {
     match value {
         Value::Object(object) => {
             object
