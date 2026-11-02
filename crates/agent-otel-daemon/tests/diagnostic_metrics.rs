@@ -1,7 +1,9 @@
 use agent_otel_daemon::context_cache::ContextCacheStats;
 use agent_otel_daemon::diagnostic_metrics::{
-    append_bridge_metrics, METRIC_BRIDGE_CONTEXT_REFRESH, METRIC_BRIDGE_DROPPED,
-    METRIC_BRIDGE_EVENTS, METRIC_BRIDGE_QUEUE_BYTES,
+    append_bridge_metrics, METRIC_BRIDGE_CONTEXT_REFRESH, METRIC_BRIDGE_CONTEXT_REFRESH_OPT_IN,
+    METRIC_BRIDGE_DROPPED, METRIC_BRIDGE_DROPPED_OPT_IN, METRIC_BRIDGE_EVENTS,
+    METRIC_BRIDGE_EVENTS_OPT_IN, METRIC_BRIDGE_EXPORT_ATTEMPTS,
+    METRIC_BRIDGE_EXPORT_ATTEMPTS_OPT_IN, METRIC_BRIDGE_QUEUE_BYTES, METRIC_BRIDGE_QUEUE_ITEMS,
 };
 use agent_otel_daemon::diagnostics::DiagnosticSnapshot;
 use agent_otel_ipc::server::IngressStats;
@@ -97,6 +99,7 @@ fn appends_cumulative_event_outcomes_without_conflating_unknown() {
         &ingress,
         &diagnostic_snapshot(),
         &context_snapshot(),
+        false,
     );
 
     assert_eq!(appended, 8);
@@ -141,6 +144,7 @@ fn emits_exact_drop_refresh_and_byte_values_with_fixed_labels() {
         &ingress,
         &diagnostic_snapshot(),
         &context_snapshot(),
+        false,
     );
 
     let dropped = metric_named(&request, METRIC_BRIDGE_DROPPED);
@@ -201,6 +205,7 @@ fn diagnostic_labels_never_include_identity_or_payload_dimensions() {
         &IngressStats::default(),
         &diagnostic_snapshot(),
         &context_snapshot(),
+        false,
     );
 
     let allowed = [
@@ -229,4 +234,42 @@ fn diagnostic_labels_never_include_identity_or_payload_dimensions() {
             }));
         }
     }
+}
+
+#[test]
+fn gen_ai_latest_experimental_renames_counters_without_emitting_both() {
+    let mut request = ExportMetricsServiceRequest::default();
+    append_bridge_metrics(
+        &mut request,
+        1,
+        &IngressStats::default(),
+        &diagnostic_snapshot(),
+        &context_snapshot(),
+        true,
+    );
+
+    let names: Vec<&str> = all_metrics(&request)
+        .iter()
+        .map(|metric| metric.name.as_str())
+        .collect();
+    for (legacy, opted) in [
+        (METRIC_BRIDGE_EVENTS, METRIC_BRIDGE_EVENTS_OPT_IN),
+        (METRIC_BRIDGE_DROPPED, METRIC_BRIDGE_DROPPED_OPT_IN),
+        (
+            METRIC_BRIDGE_CONTEXT_REFRESH,
+            METRIC_BRIDGE_CONTEXT_REFRESH_OPT_IN,
+        ),
+        (
+            METRIC_BRIDGE_EXPORT_ATTEMPTS,
+            METRIC_BRIDGE_EXPORT_ATTEMPTS_OPT_IN,
+        ),
+    ] {
+        assert!(names.contains(&opted), "missing {opted}");
+        assert!(!names.contains(&legacy), "{legacy} must not be emitted");
+    }
+    assert!(names.contains(&METRIC_BRIDGE_QUEUE_ITEMS));
+    assert_eq!(
+        metric_named(&request, METRIC_BRIDGE_EVENTS_OPT_IN).unit,
+        "{event}"
+    );
 }

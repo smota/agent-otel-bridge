@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,6 +23,7 @@ fn spawn_hook(event: &str, client: &str, watchdog_ms: u64) -> Child {
         .env("AGENT_OTEL_PIPE", pipe_name)
         .env("AGENT_OTEL_WATCHDOG_MS", watchdog_ms.to_string())
         .env_remove("TRACEPARENT")
+        .env_remove("TRACESTATE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -52,6 +53,7 @@ fn traceparent_response_is_safe_and_preserves_context() {
         let output = Command::new(env!("CARGO_BIN_EXE_agent-hook"))
             .args(["PreToolUse", "--client", client])
             .env("TRACEPARENT", value)
+            .env_remove("TRACESTATE")
             .env("AGENT_OTEL_WATCHDOG_MS", "500")
             .env("AGENT_OTEL_PIPE", format!(r"\\.\pipe\aob-response-test-{}", std::process::id()))
             .stdin(Stdio::null())

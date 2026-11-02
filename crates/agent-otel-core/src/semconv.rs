@@ -131,6 +131,17 @@ pub const METRIC_AGENT_QUOTA_REMAINING: &str = "agent.quota.remaining_fraction";
 pub const METRIC_AGENT_QUOTA_RESET: &str = "agent.quota.seconds_to_reset";
 pub const METRIC_FLEET_BOTTLENECK_RATIO: &str = "agent.fleet.bottleneck_ratio";
 pub const METRIC_FLEET_TOKEN_RATE: &str = "agent.fleet.token_rate_minute";
+/// Opt-in name when `gen_ai_latest_experimental` is set. Unit is `{token}/min`.
+pub const METRIC_FLEET_TOKEN_RATE_OPT_IN: &str = "agent.fleet.token_rate";
+
+/// Selects the fleet token-rate metric name. The gauge value is unchanged.
+pub fn fleet_token_rate_metric_name(gen_ai_latest_experimental: bool) -> &'static str {
+    if gen_ai_latest_experimental {
+        METRIC_FLEET_TOKEN_RATE_OPT_IN
+    } else {
+        METRIC_FLEET_TOKEN_RATE
+    }
+}
 
 // --- Legacy Quota Metrics Aliases ---
 pub const METRIC_AGY_QUOTA_REMAINING: &str = "agy.quota.remaining_fraction";

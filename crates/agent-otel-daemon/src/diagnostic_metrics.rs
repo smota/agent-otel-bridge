@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,6 +26,24 @@ pub const METRIC_BRIDGE_EXPORT_ATTEMPTS: &str = "agent.bridge.export.attempts.to
 pub const METRIC_BRIDGE_CONNECTIONS: &str = "agent.bridge.connections";
 pub const METRIC_BRIDGE_CONTEXT_WORKERS: &str = "agent.bridge.context.workers";
 
+/// Opt-in names when `gen_ai_latest_experimental` is set. The `.total` names stay for the default path.
+pub const METRIC_BRIDGE_EVENTS_OPT_IN: &str = "agent.bridge.events";
+pub const METRIC_BRIDGE_DROPPED_OPT_IN: &str = "agent.bridge.dropped";
+pub const METRIC_BRIDGE_CONTEXT_REFRESH_OPT_IN: &str = "agent.bridge.context.refresh";
+pub const METRIC_BRIDGE_EXPORT_ATTEMPTS_OPT_IN: &str = "agent.bridge.export.attempts";
+
+fn bridge_metric_name(
+    gen_ai_latest_experimental: bool,
+    stable: &'static str,
+    opt_in: &'static str,
+) -> &'static str {
+    if gen_ai_latest_experimental {
+        opt_in
+    } else {
+        stable
+    }
+}
+
 /// Appends one finite snapshot of bridge diagnostics to an OTLP metrics request.
 ///
 /// All counter points are cumulative for the current daemon process. Labels
@@ -37,8 +55,15 @@ pub fn append_bridge_metrics(
     ingress: &IngressStats,
     pipeline: &DiagnosticSnapshot,
     context: &ContextCacheStats,
+    gen_ai_latest_experimental: bool,
 ) -> usize {
-    let metrics = bridge_metrics(observed_at_unix_nano, ingress, pipeline, context);
+    let metrics = bridge_metrics(
+        observed_at_unix_nano,
+        ingress,
+        pipeline,
+        context,
+        gen_ai_latest_experimental,
+    );
     let appended = metrics.len();
     scope_metrics(request).metrics.extend(metrics);
     appended
@@ -49,9 +74,14 @@ fn bridge_metrics(
     ingress: &IngressStats,
     pipeline: &DiagnosticSnapshot,
     context: &ContextCacheStats,
+    gen_ai_latest_experimental: bool,
 ) -> Vec<Metric> {
     let events = counter(
-        METRIC_BRIDGE_EVENTS,
+        bridge_metric_name(
+            gen_ai_latest_experimental,
+            METRIC_BRIDGE_EVENTS,
+            METRIC_BRIDGE_EVENTS_OPT_IN,
+        ),
         "Unique bridge events by processing stage and outcome.",
         "{event}",
         observed_ns,
@@ -91,7 +121,11 @@ fn bridge_metrics(
     );
 
     let dropped = counter(
-        METRIC_BRIDGE_DROPPED,
+        bridge_metric_name(
+            gen_ai_latest_experimental,
+            METRIC_BRIDGE_DROPPED,
+            METRIC_BRIDGE_DROPPED_OPT_IN,
+        ),
         "Bridge events discarded before confirmed backend acceptance.",
         "{event}",
         observed_ns,
@@ -189,7 +223,11 @@ fn bridge_metrics(
     );
 
     let context_refresh = counter(
-        METRIC_BRIDGE_CONTEXT_REFRESH,
+        bridge_metric_name(
+            gen_ai_latest_experimental,
+            METRIC_BRIDGE_CONTEXT_REFRESH,
+            METRIC_BRIDGE_CONTEXT_REFRESH_OPT_IN,
+        ),
         "Workspace context refresh operations by result.",
         "{refresh}",
         observed_ns,
@@ -203,7 +241,11 @@ fn bridge_metrics(
         ],
     );
     let export_attempts = counter(
-        METRIC_BRIDGE_EXPORT_ATTEMPTS,
+        bridge_metric_name(
+            gen_ai_latest_experimental,
+            METRIC_BRIDGE_EXPORT_ATTEMPTS,
+            METRIC_BRIDGE_EXPORT_ATTEMPTS_OPT_IN,
+        ),
         "OTLP export attempts and batches with possible duplicate delivery.",
         "{attempt}",
         observed_ns,

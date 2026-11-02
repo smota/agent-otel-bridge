@@ -116,6 +116,7 @@ impl Daemon {
         let metrics_ingress = ingress.clone();
         let metrics_contexts = contexts.clone();
         let metrics_resource = self.config.resource();
+        let metrics_semconv_opt_in = self.config.gen_ai_latest_experimental;
         let mut metrics = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(1));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -141,6 +142,7 @@ impl Daemon {
                     &metrics_ingress,
                     &metrics_stats.snapshot(),
                     &metrics_contexts.stats(Instant::now()),
+                    metrics_semconv_opt_in,
                 );
                 let _ = metrics_exporter
                     .export_metrics_until(
