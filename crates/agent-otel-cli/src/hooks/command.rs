@@ -45,11 +45,14 @@ pub fn format_claude_hook_command(binary: &str, event: &str, client_tag: Option<
     if !cfg!(windows) {
         return format_hook_command(binary, event, client_tag);
     }
-    // Grok imports Claude settings but supplies its own native bridge hooks.
-    // Avoid both PowerShell parsing errors and duplicate/misattributed spans,
-    // without disabling imported third-party hooks.
-    let invocation = format_powershell_hook_command(binary, event, Some("claude"));
-    let script = format!("if ($env:GROK_WORKSPACE_ROOT) {{ '{{}}' }} else {{ {invocation} }}");
+    format_claude_windows_hook_command(binary, event)
+}
+
+/// Windows Claude launcher. Grok imports Claude settings but supplies its own
+/// native bridge hooks. The encoded script emits `{}` when `GROK_WORKSPACE_ROOT`
+/// is set, without disabling imported third-party hooks.
+pub fn format_claude_windows_hook_command(binary: &str, event: &str) -> String {
+    let script = claude_imported_grok_guard_script(binary, event);
     let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
     let system_root = std::env::var("SystemRoot")
@@ -57,6 +60,11 @@ pub fn format_claude_hook_command(binary: &str, event: &str, client_tag: Option<
         .replace('\\', "/");
     // Forward slashes survive Claude's Git Bash as well as Grok's PowerShell.
     format!("{system_root}/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -EncodedCommand {encoded}")
+}
+
+pub fn claude_imported_grok_guard_script(binary: &str, event: &str) -> String {
+    let invocation = format_powershell_hook_command(binary, event, Some("claude"));
+    format!("if ($env:GROK_WORKSPACE_ROOT) {{ '{{}}' }} else {{ {invocation} }}")
 }
 
 pub fn format_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {

@@ -5,6 +5,7 @@
 
 use super::codex::format_codex_windows_command;
 use super::*;
+use base64::Engine;
 use serde_json::json;
 
 #[test]
@@ -254,6 +255,56 @@ fn test_antigravity_hooks_install_and_uninstall_preserves_third_party() {
     assert!(after_parsed.get("herdr").is_some());
 
     let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn format_claude_hook_command_guards_imported_grok_sessions() {
+    let binary = r"C:\Bridge\agent-hook.exe";
+    let script = claude_imported_grok_guard_script(binary, "PreToolUse");
+    assert!(
+        script.contains("GROK_WORKSPACE_ROOT"),
+        "guard script: {script}"
+    );
+    assert!(
+        script.contains("'{}'"),
+        "guard must emit {{}} when GROK_WORKSPACE_ROOT is set: {script}"
+    );
+    let command = format_claude_windows_hook_command(binary, "PreToolUse");
+    let encoded = command
+        .split_once("-EncodedCommand ")
+        .expect("encoded powershell")
+        .1
+        .trim();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .unwrap();
+    let words: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .collect();
+    let decoded = String::from_utf16(&words).unwrap();
+    assert_eq!(decoded, script);
+    assert!(decoded.contains("GROK_WORKSPACE_ROOT"));
+    assert!(decoded.contains("'{}'"));
+    let projected = format_claude_hook_command(binary, "PreToolUse", None);
+    if let Some((_, encoded)) = projected.split_once("-EncodedCommand ") {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded.trim())
+            .unwrap();
+        let words: Vec<u16> = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_le_bytes(*pair))
+            .collect();
+        let decoded = String::from_utf16(&words).unwrap();
+        assert!(decoded.contains("GROK_WORKSPACE_ROOT"));
+        assert!(decoded.contains("'{}'"));
+    } else {
+        assert_eq!(projected, format_hook_command(binary, "PreToolUse", None));
+    }
 }
 
 #[test]
