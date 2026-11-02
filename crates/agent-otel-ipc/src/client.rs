@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -133,6 +133,53 @@ pub unsafe fn read_traceparent() -> Option<String> {
     #[cfg(unix)]
     {
         let ptr = unsafe { getenv(c"TRACEPARENT".as_ptr()) };
+        if ptr.is_null() {
+            return None;
+        }
+        let mut bytes = [0u8; MAX_TRACEPARENT_BYTES + 1];
+        let mut len = 0;
+        while len < bytes.len() {
+            let byte = unsafe { ptr.cast::<u8>().add(len).read() };
+            if byte == 0 {
+                return accept_traceparent_bytes(&bytes[..len]);
+            }
+            bytes[len] = byte;
+            len += 1;
+        }
+        None
+    }
+
+    #[cfg(not(any(windows, unix)))]
+    None
+}
+
+/// Read the hook process's TRACESTATE without an unbounded environment
+/// allocation. Values over 512 UTF-8 bytes or invalid UTF-8 are omitted.
+///
+/// # Safety
+///
+/// On Unix, the caller must ensure no thread concurrently mutates the process
+/// environment while this function reads the pointer returned by `getenv`.
+pub unsafe fn read_tracestate() -> Option<String> {
+    #[cfg(windows)]
+    {
+        const CAP: u32 = (MAX_TRACEPARENT_BYTES + 1) as u32;
+        let name: [u16; 11] = [
+            'T' as u16, 'R' as u16, 'A' as u16, 'C' as u16, 'E' as u16, 'S' as u16, 'T' as u16,
+            'A' as u16, 'T' as u16, 'E' as u16, 0,
+        ];
+        let mut buffer = [0u16; MAX_TRACEPARENT_BYTES + 1];
+        let len = unsafe { GetEnvironmentVariableW(name.as_ptr(), buffer.as_mut_ptr(), CAP) };
+        if len == 0 || len >= CAP {
+            return None;
+        }
+        let value = String::from_utf16(&buffer[..len as usize]).ok()?;
+        accept_traceparent_bytes(value.as_bytes())
+    }
+
+    #[cfg(unix)]
+    {
+        let ptr = unsafe { getenv(c"TRACESTATE".as_ptr()) };
         if ptr.is_null() {
             return None;
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -67,6 +67,23 @@ pub fn quota_gauge(
         })),
         ..Default::default()
     }
+}
+
+/// Fleet token-rate gauge. `gen_ai_latest_experimental` selects the name only.
+/// The unit is `{token}/min` so the opt-in name does not encode the rate.
+pub fn build_fleet_token_rate_metric(
+    value: f64,
+    observed_at_unix_nano: u64,
+    gen_ai_latest_experimental: bool,
+) -> Metric {
+    quota_gauge(
+        fleet_token_rate_metric_name(gen_ai_latest_experimental),
+        "{token}/min",
+        value,
+        observed_at_unix_nano,
+        "fleet",
+        "all",
+    )
 }
 
 pub fn build_quota_metrics_request(

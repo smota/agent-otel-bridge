@@ -1,15 +1,16 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
+use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::process;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_otel_ipc::client::{
-    attempt_send_until, read_traceparent, terminate_current_process, SendAttempt,
+    attempt_send_until, read_traceparent, read_tracestate, terminate_current_process, SendAttempt,
 };
 use agent_otel_ipc::frame::{encode_context_payload, MsgType, WireHeader};
 
@@ -200,25 +201,123 @@ fn write_response(header: WireHeader) -> bool {
         .unwrap_or(true);
 
     let write_result = if header.event_id == 3 && allow_pre_tool {
-        if let Some(tp) = unsafe { read_traceparent() }.filter(|value| {
-            value
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
-        }) {
-            let resp = format!(
-                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{}\"}}}}}}",
-                tp
-            );
-            stdout.write_all(resp.as_bytes())
-        } else {
-            stdout.write_all(b"{\"decision\":\"allow\"}")
-        }
+        let traceparent = unsafe { read_traceparent() };
+        let tracestate = unsafe { read_tracestate() };
+        let body = pre_tool_allow_json(traceparent.as_deref(), tracestate.as_deref());
+        stdout.write_all(body.as_bytes())
     } else {
         stdout.write_all(b"{}")
     };
     write_result.is_ok() && stdout.flush().is_ok()
 }
 
+#[cfg(windows)]
 fn finish_with_guard<T>(_guard: T) -> ! {
     process::exit(0);
+}
+
+fn traceparent_is_echo_safe(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+}
+
+fn tracestate_is_echo_safe(value: &str) -> bool {
+    (1..=512).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| (byte.is_ascii_graphic() || byte == b' ') && byte != b'"' && byte != b'\\')
+}
+
+fn pre_tool_allow_json(traceparent: Option<&str>, tracestate: Option<&str>) -> Cow<'static, str> {
+    let traceparent = traceparent.filter(|value| traceparent_is_echo_safe(value));
+    let tracestate = tracestate.filter(|value| tracestate_is_echo_safe(value));
+    match (traceparent, tracestate) {
+        (Some(traceparent), Some(tracestate)) => Cow::Owned(format!(
+            "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{traceparent}\",\"TRACESTATE\":\"{tracestate}\"}}}}}}"
+        )),
+        (Some(traceparent), None) => Cow::Owned(format!(
+            "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{traceparent}\"}}}}}}"
+        )),
+        (None, Some(tracestate)) => Cow::Owned(format!(
+            "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACESTATE\":\"{tracestate}\"}}}}}}"
+        )),
+        (None, None) => Cow::Borrowed("{\"decision\":\"allow\"}"),
+    }
+}
+
+#[cfg(test)]
+mod response_tests {
+    use super::pre_tool_allow_json;
+
+    #[test]
+    fn echoes_traceparent_and_safe_tracestate() {
+        let traceparent = "00-11111111111111111111111111111111-2222222222222222-01";
+        let tracestate = "vendor=a,other=b";
+        assert_eq!(
+            pre_tool_allow_json(Some(traceparent), Some(tracestate)),
+            format!(
+                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{traceparent}\",\"TRACESTATE\":\"{tracestate}\"}}}}}}"
+            )
+        );
+    }
+
+    #[test]
+    fn keeps_traceparent_only_json() {
+        let traceparent = "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01";
+        assert_eq!(
+            pre_tool_allow_json(Some(traceparent), Some("bad\"value")).as_ref(),
+            format!(
+                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{traceparent}\"}}}}}}"
+            )
+        );
+        assert_eq!(
+            pre_tool_allow_json(Some(traceparent), None).as_ref(),
+            format!(
+                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACEPARENT\":\"{traceparent}\"}}}}}}"
+            )
+        );
+    }
+
+    #[test]
+    fn echoes_tracestate_when_traceparent_is_unsafe() {
+        let tracestate = "rojo=00f067aa0ba902b7";
+        assert_eq!(
+            pre_tool_allow_json(Some("bad\"value\n"), Some(tracestate)).as_ref(),
+            format!(
+                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACESTATE\":\"{tracestate}\"}}}}}}"
+            )
+        );
+        assert_eq!(
+            pre_tool_allow_json(None, Some(tracestate)).as_ref(),
+            format!(
+                "{{\"decision\":\"allow\",\"hookSpecificOutput\":{{\"env\":{{\"TRACESTATE\":\"{tracestate}\"}}}}}}"
+            )
+        );
+    }
+
+    #[test]
+    fn rejects_empty_control_quote_backslash_and_overlong_tracestate() {
+        assert_eq!(
+            pre_tool_allow_json(None, Some("")).as_ref(),
+            "{\"decision\":\"allow\"}"
+        );
+        assert_eq!(
+            pre_tool_allow_json(None, Some("has\\slash")).as_ref(),
+            "{\"decision\":\"allow\"}"
+        );
+        assert_eq!(
+            pre_tool_allow_json(None, Some("line\nbreak")).as_ref(),
+            "{\"decision\":\"allow\"}"
+        );
+        assert_eq!(
+            pre_tool_allow_json(None, Some("del\u{7f}char")).as_ref(),
+            "{\"decision\":\"allow\"}"
+        );
+        assert_eq!(
+            pre_tool_allow_json(None, Some(&"a".repeat(513))).as_ref(),
+            "{\"decision\":\"allow\"}"
+        );
+        assert!(pre_tool_allow_json(None, Some(&"a".repeat(512))).contains("TRACESTATE"));
+    }
 }

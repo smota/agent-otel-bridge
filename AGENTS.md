@@ -83,7 +83,7 @@ When harvesting context:
   3. Deterministic fallback hash of conversation ID.
 * Egress:
   - Context is read from the environment and the hook payload. Agents must not be told to pass `--traceparent` flags or to add tracing fields to tool schemas.
-  - Egress of a fresh traceparent for the current span is not implemented. Do not document it as a requirement until a measured hook change lands.
+  - The hook echoes an inbound `TRACEPARENT` and a safe `TRACESTATE` on PreToolUse. It does not mint `00-{trace}-{span}-01`, because it does not parse the hook payload and it does not wait for the daemon.
 
 ### 3.5 Local Runtime & Station Installation Contract
 Ao alterar cliente, daemon, IPC, hooks, adaptadores CLI/desktop, instalação, atualização ou ativação de builds locais, leia e cumpra [`docs/local-runtime-contract.md`](file:///C:/Users/samue/code/agent-otel-bridge/docs/local-runtime-contract.md). Valide as superfícies afetadas e registre separadamente testes do candidato e da instalação ativa.

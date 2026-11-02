@@ -1,0 +1,622 @@
+# Project registry snapshot for agent-otel-bridge.
+# This file records names the bridge emits on the default path and when
+# gen_ai_latest_experimental is set. It is not a claim that upstream
+# OpenTelemetry semantic conventions have released these names.
+# Trace schema when that opt-in is set: https://opentelemetry.io/schemas/1.41.0
+groups:
+  - id: registry.agent.gen_ai.default
+    type: attribute_group
+    brief: "Default-path GenAI attribute names. Project snapshot, not an upstream release."
+    attributes:
+      - id: gen_ai.operation.name
+        type: string
+        stability: development
+        brief: "Operation name."
+        examples: ['execute_tool']
+      - id: gen_ai.provider.name
+        type: string
+        stability: development
+        brief: "Provider name."
+        examples: ['openai']
+      - id: gen_ai.system
+        type: string
+        stability: development
+        brief: "Legacy system name. Omitted when gen_ai_latest_experimental is set."
+        examples: ['antigravity']
+      - id: gen_ai.agent.name
+        type: string
+        stability: development
+        brief: "Agent name."
+        examples: ['claude-code']
+      - id: gen_ai.agent.id
+        type: string
+        stability: development
+        brief: "Agent id."
+        examples: ['agent-1']
+      - id: gen_ai.conversation.id
+        type: string
+        stability: development
+        brief: "Conversation id."
+        examples: ['conv-1']
+      - id: gen_ai.request.model
+        type: string
+        stability: development
+        brief: "Request model."
+        examples: ['gpt']
+      - id: gen_ai.response.model
+        type: string
+        stability: development
+        brief: "Response model."
+        examples: ['gpt']
+      - id: gen_ai.tool.name
+        type: string
+        stability: development
+        brief: "Tool name."
+        examples: ['bash']
+      - id: gen_ai.tool.call.id
+        type: string
+        stability: development
+        brief: "Tool call id."
+        examples: ['call-1']
+      - id: gen_ai.usage.input_tokens
+        type: int
+        stability: development
+        brief: "Input tokens."
+        examples: [1]
+      - id: gen_ai.usage.output_tokens
+        type: int
+        stability: development
+        brief: "Output tokens."
+        examples: [1]
+      - id: gen_ai.usage.cache_read_tokens
+        type: int
+        stability: development
+        brief: "Cache-read tokens."
+        examples: [1]
+      - id: gen_ai.response.finish_reasons
+        type: string
+        stability: development
+        brief: "Finish reason. One-element string array when gen_ai_latest_experimental is set."
+        examples: ['stop']
+      - id: gen_ai.agent.depth
+        type: int
+        stability: development
+        brief: "Default lineage depth. Replaced under gen_ai_latest_experimental."
+        examples: [0]
+      - id: gen_ai.agent.parent_name
+        type: string
+        stability: development
+        brief: "Default parent agent name."
+        examples: ['claude-code']
+      - id: gen_ai.agent.root_id
+        type: string
+        stability: development
+        brief: "Default root conversation id."
+        examples: ['conv-root']
+      - id: gen_ai.agent.is_root
+        type: boolean
+        stability: development
+        brief: "Default root flag."
+        examples: [true]
+      - id: gen_ai.agent.step_index
+        type: int
+        stability: development
+        brief: "Default step index. Omitted when gen_ai_latest_experimental is set."
+        examples: [0]
+
+  - id: registry.agent.lineage.opt_in
+    type: attribute_group
+    brief: "Lineage names emitted only when gen_ai_latest_experimental is set."
+    attributes:
+      - id: agent.lineage.depth
+        type: int
+        stability: development
+        brief: "Opt-in lineage depth."
+        examples: [0]
+      - id: agent.lineage.parent_name
+        type: string
+        stability: development
+        brief: "Opt-in parent agent name."
+        examples: ['claude-code']
+      - id: agent.lineage.root_id
+        type: string
+        stability: development
+        brief: "Opt-in root id."
+        examples: ['conv-root']
+      - id: agent.lineage.is_root
+        type: boolean
+        stability: development
+        brief: "Opt-in root flag."
+        examples: [true]
+
+  - id: registry.agent.resource
+    type: attribute_group
+    brief: "Resource attributes emitted on the default path."
+    attributes:
+      - id: service.name
+        type: string
+        stability: development
+        brief: "Service name."
+        examples: ['agent-otel-bridge']
+      - id: deployment.environment
+        type: string
+        stability: development
+        brief: "Deployment environment."
+        examples: ['production']
+      - id: deployment.environment.name
+        type: string
+        stability: development
+        brief: "Deployment environment name."
+        examples: ['production']
+      - id: service.version
+        type: string
+        stability: development
+        brief: "Service version."
+        examples: ['0.7.0']
+      - id: service.instance.id
+        type: string
+        stability: development
+        brief: "Process-stable instance id."
+        examples: ['instance']
+      - id: host.name
+        type: string
+        stability: development
+        brief: "Host name."
+        examples: ['localhost']
+      - id: os.type
+        type: string
+        stability: development
+        brief: "OS type."
+        examples: ['linux']
+      - id: telemetry.sdk.name
+        type: string
+        stability: development
+        brief: "SDK name."
+        examples: ['agent-otel-bridge']
+      - id: telemetry.sdk.language
+        type: string
+        stability: development
+        brief: "SDK language."
+        examples: ['rust']
+      - id: telemetry.sdk.version
+        type: string
+        stability: development
+        brief: "SDK version."
+        examples: ['0.7.0']
+      - id: telemetry.distro.name
+        type: string
+        stability: development
+        brief: "Distro name."
+        examples: ['agent-otel-bridge']
+      - id: telemetry.distro.version
+        type: string
+        stability: development
+        brief: "Distro version."
+        examples: ['0.7.0']
+
+  - id: registry.agent.identity
+    type: attribute_group
+    brief: "Identity and execution attributes."
+    attributes:
+      - id: user.email
+        type: string
+        stability: development
+        brief: "Operator email."
+        examples: ['dev@example.com']
+      - id: terminal.type
+        type: string
+        stability: development
+        brief: "Terminal program."
+        examples: ['vscode']
+      - id: agent.decision
+        type: string
+        stability: development
+        brief: "Hook decision."
+        examples: ['allow']
+      - id: agent.success
+        type: boolean
+        stability: development
+        brief: "Turn success."
+        examples: [true]
+      - id: agent.execution.mode
+        type: string
+        stability: development
+        brief: "Interactive or automation."
+        examples: ['interactive']
+      - id: agent.hook.event
+        type: string
+        stability: development
+        brief: "Hook event name."
+        examples: ['PreToolUse']
+      - id: agent.step.index
+        type: int
+        stability: development
+        brief: "Step index kept on both paths."
+        examples: [0]
+      - id: agent.execution.num
+        type: int
+        stability: development
+        brief: "Execution number."
+        examples: [1]
+      - id: agent.fully_idle
+        type: boolean
+        stability: development
+        brief: "Fully idle flag."
+        examples: [false]
+      - id: agent.termination_reason
+        type: string
+        stability: development
+        brief: "Harness termination string."
+        examples: ['stop']
+
+  - id: registry.agent.git
+    type: attribute_group
+    brief: "Git workspace facts."
+    attributes:
+      - id: agent.git.lines_added
+        type: int
+        stability: development
+        brief: "Lines added."
+        examples: [1]
+      - id: agent.git.lines_deleted
+        type: int
+        stability: development
+        brief: "Lines deleted."
+        examples: [1]
+      - id: agent.git.files_changed
+        type: int
+        stability: development
+        brief: "Files changed."
+        examples: [1]
+      - id: agent.git.self_revert
+        type: boolean
+        stability: development
+        brief: "Self-revert flag."
+        examples: [false]
+
+  - id: registry.agent.workspace
+    type: attribute_group
+    brief: "Workspace attributes."
+    attributes:
+      - id: workspace.path
+        type: string
+        stability: development
+        brief: "Workspace path."
+        examples: ['/work']
+      - id: workspace.project_name
+        type: string
+        stability: development
+        brief: "Project name."
+        examples: ['agent-otel-bridge']
+      - id: workspace.project_root
+        type: string
+        stability: development
+        brief: "Project root."
+        examples: ['/work']
+      - id: workspace.project_type
+        type: string
+        stability: development
+        brief: "Project type."
+        examples: ['rust']
+
+  - id: registry.agent.vcs.default
+    type: attribute_group
+    brief: "VCS attributes on the default path."
+    attributes:
+      - id: vcs.system
+        type: string
+        stability: development
+        brief: "VCS system."
+        examples: ['git']
+      - id: vcs.repository.name
+        type: string
+        stability: development
+        brief: "Repository name."
+        examples: ['agent-otel-bridge']
+      - id: vcs.branch.name
+        type: string
+        stability: development
+        brief: "Branch name. Replaced under gen_ai_latest_experimental."
+        examples: ['main']
+      - id: vcs.commit.sha
+        type: string
+        stability: development
+        brief: "Commit SHA. Replaced under gen_ai_latest_experimental."
+        examples: ['abc']
+      - id: vcs.worktree.active
+        type: boolean
+        stability: development
+        brief: "Worktree active."
+        examples: [false]
+
+  - id: registry.agent.vcs.opt_in
+    type: attribute_group
+    brief: "VCS names emitted only when gen_ai_latest_experimental is set."
+    attributes:
+      - id: vcs.ref.head.name
+        type: string
+        stability: development
+        brief: "Opt-in head name."
+        examples: ['main']
+      - id: vcs.ref.head.revision
+        type: string
+        stability: development
+        brief: "Opt-in head revision."
+        examples: ['abc']
+
+  - id: registry.agent.tool
+    type: attribute_group
+    brief: "Tool archetype attributes."
+    attributes:
+      - id: agent.tool.archetype
+        type: string
+        stability: development
+        brief: "Behavioral archetype."
+        examples: ['GenericExec']
+      - id: agent.tool.binary
+        type: string
+        stability: development
+        brief: "Tool binary."
+        examples: ['cargo']
+      - id: agent.tool.wrapped_binary
+        type: string
+        stability: development
+        brief: "Wrapped binary."
+        examples: ['cargo']
+      - id: agent.tool.pipeline_depth
+        type: int
+        stability: development
+        brief: "Pipeline depth."
+        examples: [1]
+      - id: agent.tool.compression_ratio
+        type: double
+        stability: development
+        brief: "Compression ratio."
+        examples: [1.0]
+      - id: agent.tool.tokens_saved
+        type: int
+        stability: development
+        brief: "Tokens saved."
+        examples: [1]
+
+  - id: registry.agent.capability
+    type: attribute_group
+    brief: "Capability attributes."
+    attributes:
+      - id: capability.kind
+        type: string
+        stability: development
+        brief: "Capability kind."
+        examples: ['tool']
+      - id: capability.namespace
+        type: string
+        stability: development
+        brief: "Capability namespace."
+        examples: ['fs']
+      - id: capability.name
+        type: string
+        stability: development
+        brief: "Capability name."
+        examples: ['read']
+      - id: capability.schema_tokens
+        type: int
+        stability: development
+        brief: "Schema tokens."
+        examples: [1]
+      - id: capability.response_bytes
+        type: int
+        stability: development
+        brief: "Response bytes."
+        examples: [1]
+      - id: capability.response_tokens
+        type: int
+        stability: development
+        brief: "Response tokens."
+        examples: [1]
+      - id: capability.consecutive_retries
+        type: int
+        stability: development
+        brief: "Consecutive retries."
+        examples: [0]
+      - id: capability.is_waste
+        type: boolean
+        stability: development
+        brief: "Waste classification."
+        examples: [false]
+
+  - id: registry.agent.error
+    type: attribute_group
+    brief: "Error attributes."
+    attributes:
+      - id: agent.error.category
+        type: string
+        stability: development
+        brief: "Error category."
+        examples: ['user_interrupted']
+      - id: error.type
+        type: string
+        stability: development
+        brief: "Error type."
+        examples: ['_OTHER']
+
+  - id: registry.agent.legacy_agy
+    type: attribute_group
+    brief: "Legacy agy aliases. Not renamed by gen_ai_latest_experimental."
+    attributes:
+      - id: agy.hook.event
+        type: string
+        stability: development
+        brief: "Legacy hook event."
+        examples: ['PreToolUse']
+      - id: agy.termination_reason
+        type: string
+        stability: development
+        brief: "Legacy termination reason."
+        examples: ['stop']
+      - id: agy.execution.num
+        type: int
+        stability: development
+        brief: "Legacy execution number."
+        examples: [1]
+      - id: agy.fully_idle
+        type: boolean
+        stability: development
+        brief: "Legacy idle flag."
+        examples: [false]
+      - id: agy.step.index
+        type: int
+        stability: development
+        brief: "Legacy step index."
+        examples: [0]
+
+  - id: metric.agent.bridge.events.default
+    type: metric
+    metric_name: agent.bridge.events.total
+    stability: development
+    brief: "Default unique bridge events."
+    instrument: counter
+    unit: "{event}"
+
+  - id: metric.agent.bridge.dropped.default
+    type: metric
+    metric_name: agent.bridge.dropped.total
+    stability: development
+    brief: "Default dropped events."
+    instrument: counter
+    unit: "{event}"
+
+  - id: metric.agent.bridge.context.refresh.default
+    type: metric
+    metric_name: agent.bridge.context.refresh.total
+    stability: development
+    brief: "Default context refreshes."
+    instrument: counter
+    unit: "{refresh}"
+
+  - id: metric.agent.bridge.export.attempts.default
+    type: metric
+    metric_name: agent.bridge.export.attempts.total
+    stability: development
+    brief: "Default export attempts."
+    instrument: counter
+    unit: "{attempt}"
+
+  - id: metric.agent.bridge.events.opt_in
+    type: metric
+    metric_name: agent.bridge.events
+    stability: development
+    brief: "Opt-in unique bridge events. Replaces agent.bridge.events.total."
+    instrument: counter
+    unit: "{event}"
+
+  - id: metric.agent.bridge.dropped.opt_in
+    type: metric
+    metric_name: agent.bridge.dropped
+    stability: development
+    brief: "Opt-in dropped events. Replaces agent.bridge.dropped.total."
+    instrument: counter
+    unit: "{event}"
+
+  - id: metric.agent.bridge.context.refresh.opt_in
+    type: metric
+    metric_name: agent.bridge.context.refresh
+    stability: development
+    brief: "Opt-in context refreshes. Replaces the .total name."
+    instrument: counter
+    unit: "{refresh}"
+
+  - id: metric.agent.bridge.export.attempts.opt_in
+    type: metric
+    metric_name: agent.bridge.export.attempts
+    stability: development
+    brief: "Opt-in export attempts. Replaces the .total name."
+    instrument: counter
+    unit: "{attempt}"
+
+  - id: metric.agent.bridge.queue.items
+    type: metric
+    metric_name: agent.bridge.queue.items
+    stability: development
+    brief: "Queue item occupancy. Not renamed."
+    instrument: gauge
+    unit: "{item}"
+
+  - id: metric.agent.bridge.queue.bytes
+    type: metric
+    metric_name: agent.bridge.queue.bytes
+    stability: development
+    brief: "Queue byte reservation. Not renamed."
+    instrument: gauge
+    unit: "By"
+
+  - id: metric.agent.bridge.connections
+    type: metric
+    metric_name: agent.bridge.connections
+    stability: development
+    brief: "Ingress connections. Not renamed."
+    instrument: gauge
+    unit: "{connection}"
+
+  - id: metric.agent.bridge.context.workers
+    type: metric
+    metric_name: agent.bridge.context.workers
+    stability: development
+    brief: "Context workers. Not renamed."
+    instrument: gauge
+    unit: "{worker}"
+
+  - id: metric.agent.quota.remaining_fraction
+    type: metric
+    metric_name: agent.quota.remaining_fraction
+    stability: development
+    brief: "Quota remaining fraction. Not renamed."
+    instrument: gauge
+    unit: "1"
+
+  - id: metric.agent.quota.seconds_to_reset
+    type: metric
+    metric_name: agent.quota.seconds_to_reset
+    stability: development
+    brief: "Seconds to quota reset. Not renamed."
+    instrument: gauge
+    unit: "s"
+
+  - id: metric.agent.fleet.bottleneck_ratio
+    type: metric
+    metric_name: agent.fleet.bottleneck_ratio
+    stability: development
+    brief: "Fleet bottleneck ratio. Not renamed."
+    instrument: gauge
+    unit: "1"
+
+  - id: metric.agent.fleet.token_rate.default
+    type: metric
+    metric_name: agent.fleet.token_rate_minute
+    stability: development
+    brief: "Default fleet token-rate gauge."
+    instrument: gauge
+    unit: "{token}/min"
+
+  - id: metric.agent.fleet.token_rate.opt_in
+    type: metric
+    metric_name: agent.fleet.token_rate
+    stability: development
+    brief: "Opt-in fleet token-rate gauge. Same value; unit is {token}/min."
+    instrument: gauge
+    unit: "{token}/min"
+
+  - id: metric.agy.quota.remaining_fraction
+    type: metric
+    metric_name: agy.quota.remaining_fraction
+    stability: development
+    brief: "Legacy quota fraction. Not renamed."
+    instrument: gauge
+    unit: "1"
+
+  - id: metric.agy.quota.seconds_to_reset
+    type: metric
+    metric_name: agy.quota.seconds_to_reset
+    stability: development
+    brief: "Legacy seconds to reset. Not renamed."
+    instrument: gauge
+    unit: "s"

@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- When `OTEL_SEMCONV_STABILITY_OPT_IN` contains `gen_ai_latest_experimental`, bridge counters use unsuffixed names and the fleet token-rate gauge is `agent.fleet.token_rate` with unit `{token}/min` instead of `agent.fleet.token_rate_minute`; default names stay otherwise, both names are not emitted together, and PreToolUse echoes a safe inbound `TRACESTATE` without minting a span id.
 - `user.email` defaults to the hook payload or `$USER_EMAIL`. Git config and `$GIT_AUTHOR_EMAIL` are used only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
 - `AGENT_OTEL_WORKSPACE_PATH` (`absolute`, `relative`, or `hash`) controls `workspace.path` and `workspace.project_root`. The default remains absolute paths.
 - Experimental GenAI error status messages are truncated to 160 bytes on a character boundary, with `…` appended when cut. `error.type` is not the raw message.

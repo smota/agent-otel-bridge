@@ -9,7 +9,8 @@ use agent_otel_core::otlp::{
     build_trace_request, semantic_os_type,
 };
 use agent_otel_core::quota::{
-    build_quota_metrics_request, build_quota_metrics_request_opts, QuotaSnapshot,
+    build_fleet_token_rate_metric, build_quota_metrics_request, build_quota_metrics_request_opts,
+    QuotaSnapshot,
 };
 use agent_otel_core::semconv::*;
 use agent_otel_core::trace_id::{derive_span_id, derive_trace_id};
@@ -223,6 +224,34 @@ fn test_quota_metrics_request() {
     assert_eq!(metrics_legacy[2].name, METRIC_AGY_QUOTA_REMAINING);
     assert_eq!(metrics_legacy[3].name, METRIC_AGENT_QUOTA_RESET);
     assert_eq!(metrics_legacy[4].name, METRIC_AGY_QUOTA_RESET);
+}
+
+#[test]
+fn fleet_token_rate_name_follows_semconv_opt_in() {
+    let legacy = build_fleet_token_rate_metric(12.5, 9, false);
+    let opted = build_fleet_token_rate_metric(12.5, 9, true);
+    assert_eq!(legacy.name, METRIC_FLEET_TOKEN_RATE);
+    assert_eq!(opted.name, METRIC_FLEET_TOKEN_RATE_OPT_IN);
+    assert_eq!(legacy.unit, "{token}/min");
+    assert_eq!(opted.unit, "{token}/min");
+    assert_ne!(legacy.name, opted.name);
+    let value = |metric: &opentelemetry_proto::tonic::metrics::v1::Metric| match metric
+        .data
+        .as_ref()
+        .and_then(|data| match data {
+            opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(gauge) => {
+                gauge.data_points.first()
+            }
+            _ => None,
+        })
+        .and_then(|point| point.value.as_ref())
+    {
+        Some(opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(
+            value,
+        )) => *value,
+        other => panic!("expected gauge double, got {other:?}"),
+    };
+    assert_eq!(value(&legacy), value(&opted));
 }
 
 #[test]
