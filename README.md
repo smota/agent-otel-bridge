@@ -217,24 +217,23 @@ agent-otel-bridge local install
 agent-otel-bridge local install
 ```
 
-`local install` stages versioned builds, computes SHA-256 integrity hashes, updates the active symlink, and idempotently registers canonical hook paths.
+`local install` stages versioned builds and computes SHA-256 integrity hashes. It does not edit harness configuration.
 
-### 3. Automated Hook Registration (`install-hooks`)
+### 3. Enable one application (`local enable`)
 
-Automatically detect installed AI agent harnesses and configure their lifecycle hooks:
+Register the bridge through that application's own plugin or owned hook file:
 
 ```bash
-# Automatically detects Antigravity, Claude Code, Codex CLI, Grok, Pi and configures hooks
-agent-otel-bridge install-hooks
+agent-otel-bridge local enable --app claude
+agent-otel-bridge local enable --app codex
+agent-otel-bridge local enable --app antigravity
+agent-otel-bridge local enable --app grok
+agent-otel-bridge local enable --app pi
 
-# Or register hooks for a specific platform
-agent-otel-bridge install-hooks --client claude
-agent-otel-bridge install-hooks --client antigravity
-agent-otel-bridge install-hooks --client codex
-
-# Check status of all hook registrations
-agent-otel-bridge hooks status
+agent-otel-bridge doctor
 ```
+
+`install-hooks` without `--legacy-config` does not write configuration. It tells you to run `local enable` and exits 2. `--legacy-config` keeps the previous JSON merger.
 
 ### 4. Verify Telemetry Health (`doctor`)
 

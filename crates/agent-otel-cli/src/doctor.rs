@@ -331,11 +331,13 @@ fn codex_row(home: &Path) -> SurfaceRow {
     if !child_exists(home, ".codex") {
         return SurfaceRow::plain("codex", SurfaceState::NotDetected);
     }
-    let registered = read_text(&home.join(".codex/hooks.json")).is_some_and(|text| {
+    let hooks_registered = read_text(&home.join(".codex/hooks.json")).is_some_and(|text| {
         serde_json::from_str::<Value>(&text)
             .is_ok_and(|value| crate::hooks::has_bridge_command(&value))
     });
-    if registered {
+    let plugin_registered = read_text(&home.join(".codex/config.toml"))
+        .is_some_and(|text| text.contains("agent-otel-bridge"));
+    if hooks_registered || plugin_registered {
         SurfaceRow {
             id: "codex",
             state: SurfaceState::Registered,
@@ -815,6 +817,28 @@ mod tests {
             .all(|row| row.state == SurfaceState::Registered));
         let codex = registered.iter().find(|row| row.id == "codex").unwrap();
         assert_eq!(codex.detail, "trust review remains with Codex");
+
+        fs::remove_file(home.join(".codex/hooks.json")).unwrap();
+        fs::write(
+            home.join(".codex/config.toml"),
+            "[plugins.\"agent-otel-bridge@agent-otel-bridge\"]\nenabled = true\n",
+        )
+        .unwrap();
+        let plugin_only = inspect_surfaces_under(&home)
+            .into_iter()
+            .find(|row| row.id == "codex")
+            .unwrap();
+        assert_eq!(plugin_only.state, SurfaceState::Registered);
+        assert_eq!(plugin_only.detail, "trust review remains with Codex");
+        fs::write(home.join(".codex/config.toml"), "model = \"example\"\n").unwrap();
+        assert_eq!(
+            inspect_surfaces_under(&home)
+                .into_iter()
+                .find(|row| row.id == "codex")
+                .unwrap()
+                .state,
+            SurfaceState::Detected
+        );
 
         fs::write(
             home.join(".claude/settings.json"),
