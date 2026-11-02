@@ -10,6 +10,9 @@ mod doctor;
 mod emit_quota;
 mod enable;
 mod guardrails;
+// Library re-exports are public API in the lib crate. This binary compiles the
+// same private module, so those re-exports are unused here.
+#[allow(unused_imports)]
 mod hooks;
 mod local;
 mod scanner;
@@ -68,6 +71,9 @@ enum Commands {
         /// Custom binary name or path for hook command (default: agent-hook)
         #[arg(long)]
         binary: Option<String>,
+        /// Write the legacy JSON hook configuration instead of refusing
+        #[arg(long)]
+        legacy_config: bool,
     },
     /// Runs performance benchmarks and evaluates hot-path latency SLAs
     Benchmark {
@@ -108,7 +114,7 @@ enum LocalAction {
         activate: bool,
 
         /// If set, updates agent lifecycle hooks to point to canonical bin/
-        #[arg(long, default_value_t = true)]
+        #[arg(long, default_value_t = false)]
         update_hooks: bool,
 
         /// Optional path to pre-built target directory containing release binaries
@@ -120,7 +126,7 @@ enum LocalAction {
     /// Rolls back immediately to the previous installed version
     Rollback {
         /// If set, updates agent lifecycle hooks after rollback
-        #[arg(long, default_value_t = true)]
+        #[arg(long, default_value_t = false)]
         update_hooks: bool,
     },
     /// Enables one application through its vendor command or owned config
@@ -157,6 +163,9 @@ enum HookAction {
         project: bool,
         #[arg(long)]
         binary: Option<String>,
+        /// Write the legacy JSON hook configuration instead of refusing
+        #[arg(long)]
+        legacy_config: bool,
     },
     /// Uninstalls hooks for specified client (antigravity, claude, codex, grok, pi, or all)
     Uninstall {
@@ -305,7 +314,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 client,
                 project,
                 binary,
-            } => hooks::run_install(&client, project, binary.as_deref()),
+                legacy_config,
+            } => install_hooks_command(legacy_config, &client, project, binary.as_deref()),
             HookAction::Uninstall {
                 client,
                 project,
@@ -343,7 +353,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             client,
             project,
             binary,
-        } => hooks::run_install(&client, project, binary.as_deref()),
+            legacy_config,
+        } => install_hooks_command(legacy_config, &client, project, binary.as_deref()),
         Commands::Benchmark {
             json,
             markdown,
@@ -353,6 +364,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => run_benchmark(json, markdown, export, submit, open_browser),
         Commands::CheckGuardrails { fix } => guardrails::run_check(fix),
     }
+}
+
+fn install_hooks_command(
+    legacy_config: bool,
+    client: &str,
+    project: bool,
+    binary: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !legacy_config {
+        println!("Run `agent-otel-bridge local enable --app <client>`");
+        std::process::exit(2);
+    }
+    hooks::run_install(client, project, binary)
 }
 
 fn run_benchmark(

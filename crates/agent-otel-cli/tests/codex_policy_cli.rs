@@ -21,6 +21,7 @@ fn invalid_codex_policy_returns_failure_without_changing_hooks() {
             "codex",
             "--binary",
             "C:/Bridge/agent-hook.exe",
+            "--legacy-config",
         ])
         .env("USERPROFILE", &dir)
         .env("HOME", &dir)
