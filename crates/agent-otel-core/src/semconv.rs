@@ -71,6 +71,8 @@ pub const VCS_SYSTEM: &str = "vcs.system";
 pub const VCS_REPOSITORY_NAME: &str = "vcs.repository.name";
 pub const VCS_BRANCH_NAME: &str = "vcs.branch.name";
 pub const VCS_COMMIT_SHA: &str = "vcs.commit.sha";
+pub const VCS_REF_HEAD_NAME: &str = "vcs.ref.head.name";
+pub const VCS_REF_HEAD_REVISION: &str = "vcs.ref.head.revision";
 pub const VCS_WORKTREE_ACTIVE: &str = "vcs.worktree.active";
 
 // --- Tool Archetypes & I/O Economics ---
@@ -96,9 +98,18 @@ pub const GEN_AI_AGENT_DEPTH: &str = "gen_ai.agent.depth";
 pub const GEN_AI_AGENT_PARENT_NAME: &str = "gen_ai.agent.parent_name";
 pub const GEN_AI_AGENT_ROOT_ID: &str = "gen_ai.agent.root_id";
 pub const GEN_AI_AGENT_IS_ROOT: &str = "gen_ai.agent.is_root";
+pub const AGENT_LINEAGE_DEPTH: &str = "agent.lineage.depth";
+pub const AGENT_LINEAGE_PARENT_NAME: &str = "agent.lineage.parent_name";
+pub const AGENT_LINEAGE_ROOT_ID: &str = "agent.lineage.root_id";
+pub const AGENT_LINEAGE_IS_ROOT: &str = "agent.lineage.is_root";
 
 // --- Multi-Layer Error Categorization ---
 pub const AGENT_ERROR_CATEGORY: &str = "agent.error.category";
+pub const ERROR_TYPE: &str = "error.type";
+
+/// Schema URL applied to trace resource and scope spans when
+/// `gen_ai_latest_experimental` is enabled. Metrics stay unset in this slice.
+pub const OTEL_SCHEMA_1_41_0: &str = "https://opentelemetry.io/schemas/1.41.0";
 
 // --- Generic Agent Semantic Conventions ---
 pub const AGENT_HOOK_EVENT: &str = "agent.hook.event";
@@ -151,9 +162,12 @@ pub fn infer_provider(model: &str) -> &'static str {
     {
         GEN_AI_PROVIDER_OPENAI
     } else {
-        "unknown"
+        GEN_AI_PROVIDER_UNKNOWN
     }
 }
+
+/// `infer_provider` result for a model string that matches no known provider.
+pub const GEN_AI_PROVIDER_UNKNOWN: &str = "unknown";
 
 /// Infers the agent name from model or client hints.
 pub fn infer_agent_name(model: Option<&str>, client_hint: Option<&str>) -> &'static str {

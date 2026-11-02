@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` opts trace spans into the experimental GenAI field set (conditional provider, finish-reason array, unset success status, `agent.lineage.*`, `vcs.ref.head.*`, and schema `1.41.0`). The default export is unchanged.
 - The daemon honors the OTLP/HTTP environment contract for signal endpoints, headers, gzip compression, timeouts, extra root certificates, `http/protobuf` selection, and `OTEL_SDK_DISABLED`.
 - Resource identity includes telemetry SDK and distro attributes, a process-stable `service.instance.id`, the full `OTEL_RESOURCE_ATTRIBUTES` list, and `os.type=darwin` on macOS. An empty deployment environment is omitted instead of defaulting to `homelab`.
 

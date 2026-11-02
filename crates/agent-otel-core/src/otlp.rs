@@ -5,7 +5,7 @@
 
 use opentelemetry_proto::tonic::{
     collector::trace::v1::ExportTraceServiceRequest,
-    common::v1::{any_value, AnyValue, InstrumentationScope, KeyValue},
+    common::v1::{any_value, AnyValue, ArrayValue, InstrumentationScope, KeyValue},
     resource::v1::Resource,
     trace::v1::{span::SpanKind, status::StatusCode, ResourceSpans, ScopeSpans, Span, Status},
 };
@@ -51,6 +51,25 @@ pub fn kv_bool(key: &str, value: bool) -> KeyValue {
         key: key.to_string(),
         value: Some(AnyValue {
             value: Some(any_value::Value::BoolValue(value)),
+        }),
+        ..Default::default()
+    }
+}
+
+/// One-element (or longer) string array attribute. Used for
+/// `gen_ai.response.finish_reasons` on the experimental opt-in path.
+pub fn kv_array(key: &str, values: &[&str]) -> KeyValue {
+    KeyValue {
+        key: key.to_string(),
+        value: Some(AnyValue {
+            value: Some(any_value::Value::ArrayValue(ArrayValue {
+                values: values
+                    .iter()
+                    .map(|value| AnyValue {
+                        value: Some(any_value::Value::StringValue((*value).to_string())),
+                    })
+                    .collect(),
+            })),
         }),
         ..Default::default()
     }
@@ -225,6 +244,7 @@ pub fn build_span_from_hook_with_context_opts(
             terminal_type: terminal.as_deref(),
         },
         emit_legacy_aliases,
+        false,
     )
 }
 
@@ -243,6 +263,7 @@ pub fn build_span_from_resolved(
     context: ResolvedTraceContext,
     metadata: ResolvedSpanMetadata<'_>,
     emit_legacy_aliases: bool,
+    gen_ai_latest_experimental: bool,
 ) -> Span {
     let tool_name = input.resolved_tool_name();
     let tool_call_id = input.resolved_tool_call_id();
@@ -253,11 +274,7 @@ pub fn build_span_from_resolved(
     let parent_span_id = context.parent_span_id;
     let span_id = derive_span_id(conv_id, step_idx, event, tool_name, salt);
 
-    let provider = input
-        .model
-        .as_deref()
-        .map(infer_provider)
-        .unwrap_or(GEN_AI_PROVIDER_GOOGLE);
+    let inferred_provider = input.model.as_deref().map(infer_provider);
 
     let agent_name = input
         .agent_name
@@ -297,12 +314,21 @@ pub fn build_span_from_resolved(
     let mut attributes = vec![
         // Canonical GenAI SemConv
         kv_string(GEN_AI_OPERATION_NAME, op_name),
-        kv_string(GEN_AI_PROVIDER_NAME, provider),
-        kv_string(GEN_AI_SYSTEM, provider),
         kv_string(GEN_AI_AGENT_NAME, agent_name),
         // Canonical Agent attribute
         kv_string(AGENT_HOOK_EVENT, event.as_str()),
     ];
+    if gen_ai_latest_experimental {
+        if let Some(provider) =
+            inferred_provider.filter(|provider| *provider != GEN_AI_PROVIDER_UNKNOWN)
+        {
+            attributes.push(kv_string(GEN_AI_PROVIDER_NAME, provider));
+        }
+    } else {
+        let provider = inferred_provider.unwrap_or(GEN_AI_PROVIDER_GOOGLE);
+        attributes.push(kv_string(GEN_AI_PROVIDER_NAME, provider));
+        attributes.push(kv_string(GEN_AI_SYSTEM, provider));
+    }
 
     if emit_legacy_aliases {
         attributes.push(kv_string(AGY_HOOK_EVENT, event.as_str()));
@@ -322,14 +348,20 @@ pub fn build_span_from_resolved(
     }
     if let Some(reason) = input.termination_reason.as_deref() {
         attributes.push(kv_string(AGENT_TERMINATION_REASON, reason));
-        attributes.push(kv_string(GEN_AI_RESPONSE_FINISH_REASONS, reason));
+        if gen_ai_latest_experimental {
+            attributes.push(kv_array(GEN_AI_RESPONSE_FINISH_REASONS, &[reason]));
+        } else {
+            attributes.push(kv_string(GEN_AI_RESPONSE_FINISH_REASONS, reason));
+        }
         if emit_legacy_aliases {
             attributes.push(kv_string(AGY_TERMINATION_REASON, reason));
         }
     }
     if let Some(step) = step_idx {
         attributes.push(kv_int(AGENT_STEP_INDEX, step as i64));
-        attributes.push(kv_int(GEN_AI_AGENT_STEP_INDEX, step as i64));
+        if !gen_ai_latest_experimental {
+            attributes.push(kv_int(GEN_AI_AGENT_STEP_INDEX, step as i64));
+        }
         if emit_legacy_aliases {
             attributes.push(kv_int(AGY_STEP_INDEX, step as i64));
         }
@@ -409,10 +441,20 @@ pub fn build_span_from_resolved(
         attributes.push(kv_string(VCS_REPOSITORY_NAME, repo));
     }
     if let Some(branch) = input.vcs_branch.as_deref() {
-        attributes.push(kv_string(VCS_BRANCH_NAME, branch));
+        let key = if gen_ai_latest_experimental {
+            VCS_REF_HEAD_NAME
+        } else {
+            VCS_BRANCH_NAME
+        };
+        attributes.push(kv_string(key, branch));
     }
     if let Some(commit) = input.vcs_commit.as_deref() {
-        attributes.push(kv_string(VCS_COMMIT_SHA, commit));
+        let key = if gen_ai_latest_experimental {
+            VCS_REF_HEAD_REVISION
+        } else {
+            VCS_COMMIT_SHA
+        };
+        attributes.push(kv_string(key, commit));
     }
     if let Some(worktree) = input.vcs_worktree {
         attributes.push(kv_bool(VCS_WORKTREE_ACTIVE, worktree));
@@ -470,18 +512,34 @@ pub fn build_span_from_resolved(
         attributes.push(kv_bool(CAPABILITY_IS_WASTE, is_waste));
     }
 
-    // Cross-Agent Lineage (v0.3)
+    // Cross-Agent Lineage (v0.3). The experimental opt-in renames these keys
+    // and does not also emit the gen_ai.agent.* names.
+    let (depth_key, parent_key, root_key, root_flag_key) = if gen_ai_latest_experimental {
+        (
+            AGENT_LINEAGE_DEPTH,
+            AGENT_LINEAGE_PARENT_NAME,
+            AGENT_LINEAGE_ROOT_ID,
+            AGENT_LINEAGE_IS_ROOT,
+        )
+    } else {
+        (
+            GEN_AI_AGENT_DEPTH,
+            GEN_AI_AGENT_PARENT_NAME,
+            GEN_AI_AGENT_ROOT_ID,
+            GEN_AI_AGENT_IS_ROOT,
+        )
+    };
     if let Some(depth) = input.agent_depth {
-        attributes.push(kv_int(GEN_AI_AGENT_DEPTH, depth as i64));
+        attributes.push(kv_int(depth_key, depth as i64));
     }
     if let Some(parent_name) = input.agent_parent_name.as_deref() {
-        attributes.push(kv_string(GEN_AI_AGENT_PARENT_NAME, parent_name));
+        attributes.push(kv_string(parent_key, parent_name));
     }
     if let Some(root_id) = input.agent_root_id.as_deref() {
-        attributes.push(kv_string(GEN_AI_AGENT_ROOT_ID, root_id));
+        attributes.push(kv_string(root_key, root_id));
     }
     if let Some(is_root) = input.agent_is_root {
-        attributes.push(kv_bool(GEN_AI_AGENT_IS_ROOT, is_root));
+        attributes.push(kv_bool(root_flag_key, is_root));
     }
 
     // Multi-Layer Error Categorization (v0.3)
@@ -489,8 +547,19 @@ pub fn build_span_from_resolved(
         attributes.push(kv_string(AGENT_ERROR_CATEGORY, ecat));
     }
 
+    let errored = matches!(&input.error, Some(err) if !err.trim().is_empty());
+    if gen_ai_latest_experimental && errored {
+        let error_type = input
+            .error_category
+            .as_deref()
+            .filter(|category| !category.is_empty())
+            .unwrap_or("_OTHER");
+        attributes.push(kv_string(ERROR_TYPE, error_type));
+    }
+
     let (status_code, status_msg) = match &input.error {
         Some(err) if !err.trim().is_empty() => (StatusCode::Error as i32, err.clone()),
+        _ if gen_ai_latest_experimental => (StatusCode::Unset as i32, String::new()),
         _ => (StatusCode::Ok as i32, String::new()),
     };
 
@@ -517,15 +586,25 @@ pub fn build_span_from_resolved(
 }
 
 pub fn build_trace_request(resource: Resource, spans: Vec<Span>) -> ExportTraceServiceRequest {
+    build_trace_request_with_schema(resource, spans, "")
+}
+
+/// `schema_url` is applied to both the resource spans and the scope spans.
+/// The default path passes an empty string, which protobuf omits.
+pub fn build_trace_request_with_schema(
+    resource: Resource,
+    spans: Vec<Span>,
+    schema_url: &str,
+) -> ExportTraceServiceRequest {
     ExportTraceServiceRequest {
         resource_spans: vec![ResourceSpans {
             resource: Some(resource),
             scope_spans: vec![ScopeSpans {
                 scope: Some(instrumentation_scope()),
                 spans,
-                schema_url: String::new(),
+                schema_url: schema_url.to_string(),
             }],
-            schema_url: String::new(),
+            schema_url: schema_url.to_string(),
         }],
     }
 }

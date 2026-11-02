@@ -105,6 +105,7 @@ fn resolved_builder_uses_only_explicit_metadata_and_preserves_payload_precedence
             terminal_type: Some("fallback-terminal"),
         },
         false,
+        false,
     );
 
     assert_eq!(

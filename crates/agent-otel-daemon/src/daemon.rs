@@ -59,8 +59,17 @@ impl Daemon {
             ));
         }
         use prost::Message;
-        if agent_otel_core::otlp::build_trace_request(self.config.resource(), Vec::new())
-            .encoded_len()
+        let schema_url = if self.config.gen_ai_latest_experimental {
+            agent_otel_core::semconv::OTEL_SCHEMA_1_41_0
+        } else {
+            ""
+        };
+        if agent_otel_core::otlp::build_trace_request_with_schema(
+            self.config.resource(),
+            Vec::new(),
+            schema_url,
+        )
+        .encoded_len()
             >= crate::exporter::MAX_REQUEST_BYTES
         {
             return Err(std::io::Error::new(
@@ -141,7 +150,8 @@ impl Daemon {
                     .await;
             }
         });
-        let mut batch = SpanBatcher::new(self.config.resource(), self.config.batch_size);
+        let mut batch =
+            SpanBatcher::with_schema(self.config.resource(), self.config.batch_size, schema_url);
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
         let user_email = std::env::var("USER_EMAIL")
@@ -204,7 +214,7 @@ impl Daemon {
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break; };
                     last_activity = Instant::now();
-                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, metadata);
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata);
                     processed += 1;
                 }
                 _ = tick.tick() => {
@@ -242,6 +252,7 @@ impl Daemon {
                     &mut salt,
                     execution_mode,
                     self.config.emit_legacy_aliases,
+                    self.config.gen_ai_latest_experimental,
                     metadata,
                 );
             }
@@ -290,6 +301,7 @@ fn process_frame(
     salt: &mut u32,
     mode: ExecutionMode,
     aliases: bool,
+    gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
 ) {
     transform(
@@ -302,6 +314,7 @@ fn process_frame(
         salt,
         mode,
         aliases,
+        gen_ai_latest_experimental,
         metadata,
     );
 }
@@ -315,10 +328,21 @@ fn process_frame_without_quota(
     salt: &mut u32,
     mode: ExecutionMode,
     aliases: bool,
+    gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
 ) {
     transform(
-        frame, contexts, None, batch, queue, stats, salt, mode, aliases, metadata,
+        frame,
+        contexts,
+        None,
+        batch,
+        queue,
+        stats,
+        salt,
+        mode,
+        aliases,
+        gen_ai_latest_experimental,
+        metadata,
     );
 }
 #[allow(clippy::too_many_arguments)]
@@ -332,6 +356,7 @@ fn transform(
     salt: &mut u32,
     mode: ExecutionMode,
     aliases: bool,
+    gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
 ) {
     let now_instant = Instant::now();
@@ -348,6 +373,7 @@ fn transform(
         next_salt,
         mode,
         aliases,
+        gen_ai_latest_experimental,
         metadata,
         now_instant,
         now_nanos,

@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -29,6 +29,7 @@ fn test_production_transform_0x04_envelope() {
         &contexts,
         1,
         ExecutionMode::Interactive,
+        false,
         false,
         metadata,
         Instant::now(),
@@ -89,6 +90,7 @@ fn test_production_transform_0x01_legacy_frame() {
         2,
         ExecutionMode::Automation,
         false,
+        false,
         metadata,
         Instant::now(),
         1_700_000_000_000_000_000,
@@ -111,6 +113,7 @@ fn test_production_transform_invalid_inputs() {
         1,
         ExecutionMode::Interactive,
         false,
+        false,
         metadata,
         Instant::now(),
         1_000,
@@ -128,6 +131,7 @@ fn test_production_transform_invalid_inputs() {
         &contexts,
         2,
         ExecutionMode::Interactive,
+        false,
         false,
         metadata,
         Instant::now(),
