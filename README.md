@@ -250,7 +250,7 @@ Diagnosing station telemetry pipeline & OpenTelemetry invariants
 [1/5] Checking environment contract variables...
   [ok] OTEL_EXPORTER_OTLP_ENDPOINT = http://127.0.0.1:4318
   [info] OTEL_SERVICE_NAME is unset (using default 'agent-otel-bridge')
-  [ok] OTEL_RESOURCE_ATTRIBUTES = deployment.environment=homelab
+  [info] OTEL_RESOURCE_ATTRIBUTES is unset (deployment.environment is omitted)
 
 [2/5] Checking IPC pipeline...
   [ok] Daemon is RUNNING and responding on local IPC!
