@@ -7,6 +7,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-02
+
+See the [release notes](docs/releases/v0.7.0.md).
+
+### Added
+
+- `agent-otel-bridge local enable --app <client>` and `local disable --app <client>` for Claude, Codex, Antigravity CLI, Grok, and Pi. Claude, Codex, and Antigravity are enabled through their vendor CLIs. Grok writes only its owned hook file. Pi writes only the managed extension.
+- Doctor rows for `antigravity-cli`, `antigravity-ide`, `claude`, `codex`, `grok`, and `pi`. A missing home directory is `not detected`, not an error.
+- `--legacy-config` on `install-hooks` and `hooks install`, which keeps the previous JSON merger and third-party preservation.
+
+### Changed
+
+- `local install` publishes binaries only. It does not rewrite harness configuration. `update_hooks` now defaults to false for both install and rollback.
+- `install-hooks` and `hooks install` without `--legacy-config` print `agent-otel-bridge local enable --app <client>` and exit 2. They write nothing.
+
+### Known limitations
+
+- Desktop and IDE live sessions are not certified. This release does not claim a live desktop session.
+- IPC admission loss under sustained stress remains open ([RES-004](docs/resilience-backlog.md)).
+
 ## [0.6.0] - 2026-09-30
 
 See the [release notes](docs/releases/v0.6.0.md) for upgrade instructions and validation limits.

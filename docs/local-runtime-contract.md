@@ -86,24 +86,44 @@ All local runtime state resides under the user's Local AppData directory:
 
 ## 3. Supported Client Integration Matrix
 
-The local bridge manager (`agent-otel-bridge local`) automatically configures and maintains hooks for all target harnesses on Windows:
+`agent-otel-bridge local install` publishes the canonical binaries only. It does not rewrite harness configuration. `update_hooks` defaults to false for both `local install` and `local rollback`. Pass `--update-hooks true` only to opt into the legacy JSON installer.
 
-| Client / Harness | Config Path | Scope | Hook Mechanism |
+Enable and disable one application at a time:
+
+```text
+agent-otel-bridge local enable --app claude
+agent-otel-bridge local enable --app codex
+agent-otel-bridge local enable --app antigravity
+agent-otel-bridge local enable --app grok
+agent-otel-bridge local enable --app pi
+
+agent-otel-bridge local disable --app <client>
+```
+
+`install-hooks` and `hooks install` without `--legacy-config` print `agent-otel-bridge local enable --app <client>` and exit 2. They write nothing. With `--legacy-config`, they run the previous JSON merger and preserve third-party hooks.
+
+If `local enable` cannot reach the daemon, it starts the existing daemon. If `claude`, `codex`, or `agy` cannot be spawned, enable returns an error and does not write under that user's `.claude`, `.codex`, or `.gemini` directory. Plugin files may be staged under the bridge runtime directory `<runtime>/plugins-stage`.
+
+Unknown application names are an error and write nothing.
+
+| Surface | Enablement | Detected when | Registered when |
 | :--- | :--- | :--- | :--- |
-| **Antigravity CLI / IDE** | `~/.gemini/config/hooks.json` | CLI, S4U Daemon, IDE | `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, `PrePrompt` |
-| **Claude Code CLI / Desktop** | `~/.claude/settings.json` | CLI, Desktop App | `commands.PreToolUse`, `commands.PostToolUse` |
-| **OpenAI Codex CLI / Desktop** | `~/.codex/hooks.json` | CLI, Desktop App | `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd` |
-| **xAI Grok CLI** | `~/.grok/hooks/agent-otel.json` | CLI | Standalone bridge config (cleans legacy duplicate in `hooks.json`) |
-| **Pi CLI** | `~/.pi/agent/extensions/agent-otel-bridge.ts` | CLI | Native `tool_call`, `tool_result`, session and agent events; legacy `~/.pi/hooks.json` retained for compatibility |
+| **claude** | `claude plugin marketplace add` of a staged marketplace, then `claude plugin install agent-otel-bridge@agent-otel-bridge --scope user`. Hook commands come from `format_claude_hook_command`. | `~/.claude` exists | `settings.json` has a bridge command, or `enabledPlugins` mentions `agent-otel-bridge` |
+| **codex** | Staged `.agents/plugins/marketplace.json` plus `.codex-plugin/plugin.json` and `hooks/hooks.json`, then `codex plugin marketplace add` and `codex plugin add agent-otel-bridge@agent-otel-bridge`. Disable uses `codex plugin remove agent-otel-bridge@agent-otel-bridge`. This path does not write `~/.codex/hooks.json` or Codex trust files. | `~/.codex` exists | `hooks.json` contains a bridge command. Doctor then says trust review remains with Codex. A plugin marker is not required. |
+| **antigravity-cli** | `agy plugin install` of a staged plugin whose `hooks.json` uses the same object `install_antigravity_hooks` stores under `agent-otel-bridge`. Disable is `agy plugin uninstall agent-otel-bridge`. | `~/.gemini` exists | `~/.gemini/antigravity-cli/plugins/agent-otel-bridge/plugin.json` or `~/.gemini/config/plugins/agent-otel-bridge/plugin.json` exists |
+| **antigravity-ide** | Not enabled by the CLI plugin command above. | `~/.gemini` exists | `~/.gemini/config/hooks.json` contains `agent-hook` or `agent-otel-bridge` |
+| **grok** | `install_grok_hooks` / `uninstall_standard_hooks` on the owned `~/.grok/hooks/agent-otel.json` file only. No other Grok file is merged. | `~/.grok` exists | That owned file contains `agent-hook` |
+| **pi** | `install_pi_hooks` writes only `~/.pi/agent/extensions/agent-otel-bridge.ts`. It does not create `hooks.json`. Uninstall deletes the owned extension and may still clean a legacy `hooks.json`. | `~/.pi` exists | The managed extension starts with `// Managed by agent-otel-bridge.` |
+
+Doctor prints these rows in addition to the existing adapter lines. A missing home child is `not detected`, not an error. Desktop and IDE live sessions are not certified.
 
 ### Third-Party Coexistence Rules
 - On Windows, Claude bridge commands use encoded PowerShell and return `{}`
   when imported by Grok (`GROK_WORKSPACE_ROOT` is present). Grok's dedicated
   bridge hooks emit its telemetry; imported third-party hooks remain enabled.
-- Pi uses a managed native extension. The installer refuses to overwrite an
-  unowned extension at that path, and uninstall removes only its owned file.
-- Existing hooks such as `powershell -ExecutionPolicy Bypass -File ... herdr-agent-state.ps1` or `rtk hook claude` MUST be preserved verbatim.
-- The installer detects existing bridge hooks via executable filename matching (`agent-hook.exe`). If found, it updates the command path in-place. If absent, it appends the bridge entry.
+- Pi refuses to overwrite an unowned extension at the managed path. Uninstall removes only that owned extension, and may remove bridge entries from a legacy `hooks.json` without deleting unrelated extensions.
+- `--legacy-config`, and the Grok owned file, preserve existing third-party hooks such as `powershell -ExecutionPolicy Bypass -File ... herdr-agent-state.ps1` or `rtk hook claude`.
+- The legacy installer detects existing bridge hooks via executable filename matching (`agent-hook.exe`). If found, it updates the command path in-place. If absent, it appends the bridge entry.
 
 ---
 
@@ -131,7 +151,7 @@ During installation, the command:
 2. Stages files into `versions/<version_id>/`.
 3. Backs up the current active version into `previous/`.
 4. Atomically replaces executables in `bin/` (handling Windows file locks via temporary rename).
-5. Projects canonical double-quoted paths to `%LOCALAPPDATA%\agent-otel-bridge\bin\agent-hook.exe` into all supported client config files.
+5. Does not rewrite harness configuration. Enable each application with `agent-otel-bridge local enable --app <client>`.
 6. Writes updated `active.json`.
 
 ### 3. Immediate Rollback
@@ -139,7 +159,7 @@ If a regression or issue is detected in the active runtime:
 ```powershell
 agent-otel-bridge local rollback
 ```
-This restores the executables and manifest from `previous/` and ensures hooks point to the verified working installation.
+This restores the executables and manifest from `previous/`. It does not rewrite harness configuration unless `--update-hooks true` is passed, which runs the legacy JSON installer.
 
 ### 4. Station Diagnostics
 Verify all IPC pipes, binary paths, and hook registrations:
