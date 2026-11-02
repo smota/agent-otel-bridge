@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0 */
 use crate::{
     batch::SpanBatcher,
-    config::DaemonConfig,
+    config::{DaemonConfig, WorkspacePathMode},
     context_cache::ContextCache,
     diagnostics::Diagnostics,
     exporter::{ExporterBuildError, OtlpExporter},
@@ -154,9 +154,7 @@ impl Daemon {
             SpanBatcher::with_schema(self.config.resource(), self.config.batch_size, schema_url);
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
-        let user_email = std::env::var("USER_EMAIL")
-            .or_else(|_| std::env::var("GIT_AUTHOR_EMAIL"))
-            .ok();
+        let user_email = ambient_user_email(self.config.enrich_email);
         let terminal_type = std::env::var("TERM_PROGRAM")
             .ok()
             .or_else(|| std::env::var_os("WT_SESSION").map(|_| "windows-terminal".to_string()))
@@ -214,7 +212,7 @@ impl Daemon {
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break; };
                     last_activity = Instant::now();
-                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata);
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode);
                     processed += 1;
                 }
                 _ = tick.tick() => {
@@ -254,6 +252,7 @@ impl Daemon {
                     self.config.emit_legacy_aliases,
                     self.config.gen_ai_latest_experimental,
                     metadata,
+                    self.config.workspace_path_mode,
                 );
             }
         }
@@ -290,6 +289,18 @@ impl Daemon {
     }
 }
 
+/// `$USER_EMAIL` is always eligible. Git config and `$GIT_AUTHOR_EMAIL` run
+/// only when email enrichment is enabled, and only at startup.
+fn ambient_user_email(enrich_email: bool) -> Option<String> {
+    let explicit = std::env::var("USER_EMAIL").ok();
+    if !enrich_email {
+        return explicit;
+    }
+    explicit
+        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
+        .or_else(agent_otel_core::context::harvest_user_email)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn process_frame(
     frame: IngressFrame,
@@ -303,6 +314,7 @@ fn process_frame(
     aliases: bool,
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
+    workspace_path_mode: WorkspacePathMode,
 ) {
     transform(
         frame,
@@ -316,6 +328,7 @@ fn process_frame(
         aliases,
         gen_ai_latest_experimental,
         metadata,
+        workspace_path_mode,
     );
 }
 #[allow(clippy::too_many_arguments)]
@@ -330,6 +343,7 @@ fn process_frame_without_quota(
     aliases: bool,
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
+    workspace_path_mode: WorkspacePathMode,
 ) {
     transform(
         frame,
@@ -343,6 +357,7 @@ fn process_frame_without_quota(
         aliases,
         gen_ai_latest_experimental,
         metadata,
+        workspace_path_mode,
     );
 }
 #[allow(clippy::too_many_arguments)]
@@ -358,6 +373,7 @@ fn transform(
     aliases: bool,
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
+    workspace_path_mode: WorkspacePathMode,
 ) {
     let now_instant = Instant::now();
     let now_nanos = std::time::SystemTime::now()
@@ -366,7 +382,7 @@ fn transform(
         .as_nanos() as u64;
     let next_salt = salt.wrapping_add(1);
 
-    let outcome = match crate::transform::production_transform(
+    let outcome = match crate::transform::production_transform_with_workspace(
         frame.msg_type,
         &frame.payload,
         contexts,
@@ -377,6 +393,7 @@ fn transform(
         metadata,
         now_instant,
         now_nanos,
+        workspace_path_mode,
     ) {
         Ok(res) => {
             *salt = next_salt;

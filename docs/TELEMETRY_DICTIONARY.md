@@ -64,7 +64,7 @@ The table below details all attributes captured, enriched, and emitted by `agent
 | Taxonomy Dimension | Canonical OTel Attribute / Metric | OTel Signal | Type | Antigravity | Claude Code | OpenAI Codex | xAI Grok | Pi (pi.dev) | Source & Description |
 |---|---|---|---|:---:|:---:|:---:|:---:|:---:|---|
 | **Identity & Session** | `gen_ai.conversation.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Conversation / session identifier. Deterministic trace correlation ID. |
-| **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email. Captured from payload or enriched from `$USER_EMAIL` / `$GIT_AUTHOR_EMAIL`. |
+| **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email from the payload or `$USER_EMAIL`. Git config and `$GIT_AUTHOR_EMAIL` require `AGENT_OTEL_ENRICH_EMAIL`. |
 | **Identity & Session** | `terminal.type` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Terminal emulator (e.g. `windows-terminal`, `xterm-256color`, `vscode`). Enriched from env. |
 | **Identity & Session** | `service.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Standard OTel service name (`agent-otel-bridge` or custom via `OTEL_SERVICE_NAME`). |
 | **Identity & Session** | `host.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Hostname of the developer workstation. Enriched automatically from OS. |
@@ -106,7 +106,7 @@ The OpenAI Codex dashboard (`codex-dashboard.json`) in SigNoz is recognized as o
 |---|---|---|---|:---:|---|
 | 1 | **Conversations** | `count_distinct(conversation.id)` | `count_distinct(gen_ai.conversation.id)` | **Full Coverage** | OpenTelemetry GenAI standard convention. |
 | 2 | **Conversations Over Time** | `conversation.id` over time | `gen_ai.conversation.id` over time | **Full Coverage** | Time series aggregation over `agent.stop` or `agent.hook.event`. |
-| 3 | **Conversation Distribution By User** | `user.email` | `user.email` | **Full Coverage** | Emitted from payload or enriched via `$USER_EMAIL` / Git config. |
+| 3 | **Conversation Distribution By User** | `user.email` | `user.email` | **Full Coverage** | Emitted from the payload or `$USER_EMAIL`. Git-config enrichment is off unless `AGENT_OTEL_ENRICH_EMAIL` is set. |
 | 4 | **Conversations by Terminal Type** | `terminal.type` | `terminal.type` | **Full Coverage** | Emitted from payload or enriched via `$WT_SESSION` / `$TERM_PROGRAM` / `$TERM`. |
 | 5 | **Conversation Details** | `conversation.id`, `sum(duration_ms)`, `count_distinct(call_id)` | `gen_ai.conversation.id`, `sum(durationNano)`, `count_distinct(gen_ai.tool.call.id)` | **Unmeasured** | Hook spans currently have equal start and end, so sums of that field are not tool latency. |
 | 6 | **Tool Call Distribution** | `tool_name` | `gen_ai.tool.name` | **Full Coverage** | Captured for all tools across all 5 harnesses. |
@@ -175,6 +175,15 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 | `vcs.branch.name` | `string` | Active branch name extracted directly from `.git/HEAD` | `main`, `feat/tokenomics` |
 | `vcs.commit.sha` | `string` | Active commit SHA hash | `6b755a6...` |
 | `vcs.worktree.active` | `bool` | True if operating inside a secondary Git worktree | `true`, `false` |
+
+### 5.1.1 Team-safe path and email defaults
+
+- `user.email` comes from the hook payload or `$USER_EMAIL`. `$GIT_AUTHOR_EMAIL` and git config are read only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
+- `AGENT_OTEL_WORKSPACE_PATH` controls `workspace.path` and `workspace.project_root`:
+  - `absolute` (default): both values are emitted as harvested.
+  - `relative`: when the path is under the project root, `workspace.path` is that relative path; otherwise it is omitted. `workspace.project_root` is only the final directory name. `workspace.project_name` is unchanged.
+  - `hash`: both values are the lowercase hex SHA-256 of the absolute path string.
+- When `OTEL_SEMCONV_STABILITY_OPT_IN` includes `gen_ai_latest_experimental` and the span is an error, the status message is truncated to 160 bytes on a character boundary and `…` is appended if it was cut. `error.type` stays the error category (or `_OTHER`), not the raw message. The default export keeps the full status message.
 
 ### 5.2 Behavioral Tool Execution Archetypes
 Decouples observability from specific CLI tools (`rtk`, `jq`, `bat`, `delta`) by modeling functional intent:

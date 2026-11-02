@@ -204,8 +204,30 @@ pub fn build_span_from_hook_opts(
     )
 }
 
+fn email_enrichment_requested(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+}
+
+/// Payload `user_email`, then explicit `$USER_EMAIL`. Git config and
+/// `$GIT_AUTHOR_EMAIL` run only when `enrich_email` is true.
+fn resolve_compat_email(input: &AgentHookInput, enrich_email: bool) -> Option<String> {
+    let explicit = input
+        .user_email
+        .clone()
+        .or_else(|| std::env::var("USER_EMAIL").ok());
+    if !enrich_email {
+        return explicit;
+    }
+    explicit
+        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
+        .or_else(crate::context::harvest_user_email)
+}
+
 /// Builds a span using a context already resolved for this event. This keeps
 /// daemon IPC handling independent from the daemon process environment.
+///
+/// `$GIT_AUTHOR_EMAIL` and git-config email enrichment run only when
+/// `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
 pub fn build_span_from_hook_with_context_opts(
     event: HookEvent,
     input: &AgentHookInput,
@@ -215,12 +237,9 @@ pub fn build_span_from_hook_with_context_opts(
     context: ResolvedTraceContext,
     emit_legacy_aliases: bool,
 ) -> Span {
-    let email = input
-        .user_email
-        .clone()
-        .or_else(|| std::env::var("USER_EMAIL").ok())
-        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
-        .or_else(crate::context::harvest_user_email);
+    let enrich_email =
+        email_enrichment_requested(std::env::var("AGENT_OTEL_ENRICH_EMAIL").ok().as_deref());
+    let email = resolve_compat_email(input, enrich_email);
     let terminal = input
         .terminal_type
         .clone()
@@ -558,7 +577,14 @@ pub fn build_span_from_resolved(
     }
 
     let (status_code, status_msg) = match &input.error {
-        Some(err) if !err.trim().is_empty() => (StatusCode::Error as i32, err.clone()),
+        Some(err) if !err.trim().is_empty() => {
+            let message = if gen_ai_latest_experimental {
+                truncate_status_message(err)
+            } else {
+                err.clone()
+            };
+            (StatusCode::Error as i32, message)
+        }
         _ if gen_ai_latest_experimental => (StatusCode::Unset as i32, String::new()),
         _ => (StatusCode::Ok as i32, String::new()),
     };
@@ -585,6 +611,27 @@ pub fn build_span_from_resolved(
     }
 }
 
+const STATUS_MESSAGE_MAX_BYTES: usize = 160;
+
+/// Keeps at most 160 bytes on a char boundary. A cut message gains a trailing `…`.
+fn truncate_status_message(message: &str) -> String {
+    if message.len() <= STATUS_MESSAGE_MAX_BYTES {
+        return message.to_string();
+    }
+    let mut end = 0;
+    for (index, ch) in message.char_indices() {
+        let next = index + ch.len_utf8();
+        if next > STATUS_MESSAGE_MAX_BYTES {
+            break;
+        }
+        end = next;
+    }
+    let mut truncated = String::with_capacity(end + '…'.len_utf8());
+    truncated.push_str(&message[..end]);
+    truncated.push('…');
+    truncated
+}
+
 pub fn build_trace_request(resource: Resource, spans: Vec<Span>) -> ExportTraceServiceRequest {
     build_trace_request_with_schema(resource, spans, "")
 }
@@ -606,5 +653,77 @@ pub fn build_trace_request_with_schema(
             }],
             schema_url: schema_url.to_string(),
         }],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn email_flag_off_keeps_explicit_values_and_skips_git_author_email() {
+        assert!(!email_enrichment_requested(None));
+        assert!(!email_enrichment_requested(Some("yes")));
+        assert!(email_enrichment_requested(Some("1")));
+        assert!(email_enrichment_requested(Some("TRUE")));
+
+        let payload = AgentHookInput {
+            user_email: Some("payload@example.invalid".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_compat_email(&payload, false).as_deref(),
+            Some("payload@example.invalid")
+        );
+
+        let previous_author = std::env::var("GIT_AUTHOR_EMAIL").ok();
+        // SAFETY: lib unit tests do not otherwise write GIT_AUTHOR_EMAIL. The
+        // disabled path must not observe it. Restored before return.
+        unsafe {
+            std::env::set_var(
+                "GIT_AUTHOR_EMAIL",
+                "git-author-must-not-leak@example.invalid",
+            );
+        }
+        let bare = AgentHookInput::default();
+        let disabled = resolve_compat_email(&bare, false);
+        assert_ne!(
+            disabled.as_deref(),
+            Some("git-author-must-not-leak@example.invalid")
+        );
+        if std::env::var("USER_EMAIL").ok().is_none() {
+            assert_eq!(disabled, None);
+            assert_eq!(
+                resolve_compat_email(&bare, true).as_deref(),
+                Some("git-author-must-not-leak@example.invalid")
+            );
+        }
+        unsafe {
+            match previous_author {
+                Some(value) => std::env::set_var("GIT_AUTHOR_EMAIL", value),
+                None => std::env::remove_var("GIT_AUTHOR_EMAIL"),
+            }
+        }
+    }
+
+    #[test]
+    fn status_truncation_is_char_safe_and_only_marks_cut_messages() {
+        let exact = "a".repeat(STATUS_MESSAGE_MAX_BYTES);
+        assert_eq!(truncate_status_message(&exact), exact);
+
+        let ascii = "b".repeat(STATUS_MESSAGE_MAX_BYTES + 1);
+        let truncated = truncate_status_message(&ascii);
+        assert_eq!(
+            truncated,
+            format!("{}…", "b".repeat(STATUS_MESSAGE_MAX_BYTES))
+        );
+
+        let mut multibyte = "c".repeat(159);
+        multibyte.push('é');
+        assert!(multibyte.len() > STATUS_MESSAGE_MAX_BYTES);
+        assert_eq!(
+            truncate_status_message(&multibyte),
+            format!("{}…", "c".repeat(159))
+        );
     }
 }

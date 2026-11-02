@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The daemon honors the OTLP/HTTP environment contract for signal endpoints, headers, gzip compression, timeouts, extra root certificates, `http/protobuf` selection, and `OTEL_SDK_DISABLED`.
 - Resource identity includes telemetry SDK and distro attributes, a process-stable `service.instance.id`, the full `OTEL_RESOURCE_ATTRIBUTES` list, and `os.type=darwin` on macOS. An empty deployment environment is omitted instead of defaulting to `homelab`.
 
+### Changed
+
+- `user.email` defaults to the hook payload or `$USER_EMAIL`. Git config and `$GIT_AUTHOR_EMAIL` are used only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
+- `AGENT_OTEL_WORKSPACE_PATH` (`absolute`, `relative`, or `hash`) controls `workspace.path` and `workspace.project_root`. The default remains absolute paths.
+- Experimental GenAI error status messages are truncated to 160 bytes on a character boundary, with `…` appended when cut. `error.type` is not the raw message.
+
 ## [0.7.0] - 2026-11-02
 
 See the [release notes](docs/releases/v0.7.0.md).

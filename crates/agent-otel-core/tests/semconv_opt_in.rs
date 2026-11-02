@@ -306,3 +306,54 @@ fn trace_schema_url_is_empty_unless_the_opt_in_schema_is_requested() {
         "https://opentelemetry.io/schemas/1.41.0"
     );
 }
+
+#[test]
+fn resolved_builder_ignores_git_author_email_without_metadata() {
+    let previous = std::env::var("GIT_AUTHOR_EMAIL").ok();
+    // SAFETY: this test binary does not otherwise write GIT_AUTHOR_EMAIL.
+    // build_span_from_resolved must not read it. The previous value is restored
+    // before the test returns.
+    unsafe {
+        std::env::set_var(
+            "GIT_AUTHOR_EMAIL",
+            "git-author-must-not-leak@example.invalid",
+        );
+    }
+    let span = build(&AgentHookInput::default(), false);
+    assert!(
+        !has_key(&span, "user.email"),
+        "user.email leaked from the environment"
+    );
+    unsafe {
+        match previous {
+            Some(value) => std::env::set_var("GIT_AUTHOR_EMAIL", value),
+            None => std::env::remove_var("GIT_AUTHOR_EMAIL"),
+        }
+    }
+}
+
+#[test]
+fn status_message_truncates_only_when_experimental_opt_in_is_on() {
+    let long = format!("{}{}", "e".repeat(159), "é");
+    assert!(long.len() > 160);
+    let input = AgentHookInput {
+        error: Some(long.clone()),
+        error_category: Some("provider_quota_exhausted".to_string()),
+        ..Default::default()
+    };
+
+    let off = build(&input, false);
+    assert_eq!(off.status.as_ref().unwrap().message, long);
+    assert!(!has_key(&off, ERROR_TYPE));
+
+    let on = build(&input, true);
+    let message = &on.status.as_ref().unwrap().message;
+    assert_eq!(message, &format!("{}…", "e".repeat(159)));
+    assert_ne!(message, &long);
+    assert!(!message.contains('é'));
+    assert_eq!(
+        string_attr(&on, ERROR_TYPE),
+        Some("provider_quota_exhausted")
+    );
+    assert_ne!(string_attr(&on, ERROR_TYPE), Some(message.as_str()));
+}

@@ -31,6 +31,21 @@ impl SignalExportConfig {
     }
 }
 
+/// How workspace path attributes are emitted on spans.
+///
+/// Parsed from `AGENT_OTEL_WORKSPACE_PATH`. Unset and unrecognized values are
+/// [`WorkspacePathMode::Absolute`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WorkspacePathMode {
+    /// Emit `workspace.path` and `workspace.project_root` unchanged.
+    #[default]
+    Absolute,
+    /// Emit a path relative to the project root, and only the root's directory name.
+    Relative,
+    /// Emit lowercase hex SHA-256 digests of the absolute path strings.
+    Hash,
+}
+
 #[derive(Debug, Clone)]
 pub struct DaemonConfig {
     pub otlp_endpoint: String,
@@ -46,6 +61,12 @@ pub struct DaemonConfig {
     /// True only when `OTEL_SEMCONV_STABILITY_OPT_IN` contains the exact token
     /// `gen_ai_latest_experimental`.
     pub gen_ai_latest_experimental: bool,
+    /// `AGENT_OTEL_ENRICH_EMAIL=true|1` restores git-config and `$GIT_AUTHOR_EMAIL`
+    /// fallback for `user.email`. Default false. Payload email and `$USER_EMAIL`
+    /// are kept either way.
+    pub enrich_email: bool,
+    /// `AGENT_OTEL_WORKSPACE_PATH`: `absolute` (default), `relative`, or `hash`.
+    pub workspace_path_mode: WorkspacePathMode,
     pub traces: SignalExportConfig,
     pub metrics: SignalExportConfig,
     pub sdk_disabled: bool,
@@ -99,6 +120,8 @@ impl DaemonConfig {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         let gen_ai_latest_experimental = semconv_opt_in_gen_ai_latest(get);
+        let enrich_email = flag_enabled(get("AGENT_OTEL_ENRICH_EMAIL").as_deref());
+        let workspace_path_mode = parse_workspace_path_mode(get("AGENT_OTEL_WORKSPACE_PATH"));
 
         Self {
             otlp_endpoint: export.base_endpoint,
@@ -112,6 +135,8 @@ impl DaemonConfig {
             idle_timeout,
             emit_legacy_aliases,
             gen_ai_latest_experimental,
+            enrich_email,
+            workspace_path_mode,
             traces: export.traces,
             metrics: export.metrics,
             sdk_disabled: export.sdk_disabled,
@@ -184,6 +209,18 @@ pub fn parse_otlp_env(get: &dyn Fn(&str) -> Option<String>) -> ParsedOtlpEnv {
         service_version,
         environment,
         resource_attributes,
+    }
+}
+
+fn flag_enabled(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+}
+
+fn parse_workspace_path_mode(value: Option<String>) -> WorkspacePathMode {
+    match value.as_deref().map(str::trim) {
+        Some("relative") => WorkspacePathMode::Relative,
+        Some("hash") => WorkspacePathMode::Hash,
+        _ => WorkspacePathMode::Absolute,
     }
 }
 
@@ -616,5 +653,33 @@ mod tests {
 
         let unset = DaemonConfig::from_vars(&var_map(&[]));
         assert!(!unset.gen_ai_latest_experimental);
+    }
+
+    #[test]
+    fn privacy_flags_default_off_and_reject_unknown_path_modes() {
+        let unset = DaemonConfig::from_vars(&var_map(&[]));
+        assert!(!unset.enrich_email);
+        assert_eq!(unset.workspace_path_mode, WorkspacePathMode::Absolute);
+
+        let enabled = DaemonConfig::from_vars(&var_map(&[
+            ("AGENT_OTEL_ENRICH_EMAIL", "true"),
+            ("AGENT_OTEL_WORKSPACE_PATH", " hash "),
+        ]));
+        assert!(enabled.enrich_email);
+        assert_eq!(enabled.workspace_path_mode, WorkspacePathMode::Hash);
+
+        let numeric = DaemonConfig::from_vars(&var_map(&[
+            ("AGENT_OTEL_ENRICH_EMAIL", "1"),
+            ("AGENT_OTEL_WORKSPACE_PATH", "relative"),
+        ]));
+        assert!(numeric.enrich_email);
+        assert_eq!(numeric.workspace_path_mode, WorkspacePathMode::Relative);
+
+        let invalid = DaemonConfig::from_vars(&var_map(&[
+            ("AGENT_OTEL_ENRICH_EMAIL", "yes"),
+            ("AGENT_OTEL_WORKSPACE_PATH", "basename"),
+        ]));
+        assert!(!invalid.enrich_email);
+        assert_eq!(invalid.workspace_path_mode, WorkspacePathMode::Absolute);
     }
 }
