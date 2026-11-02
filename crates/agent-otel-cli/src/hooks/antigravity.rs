@@ -1,0 +1,82 @@
+/*
+ * Copyright The OpenTelemetry Authors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+use super::command::format_antigravity_hook_command;
+use serde_json::{json, Value};
+use std::fs;
+use std::path::Path;
+
+pub fn install_antigravity_hooks(
+    path: &Path,
+    binary: &str,
+    client_tag: Option<&str>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut root: Value = if path.exists() {
+        let content = fs::read_to_string(path)?;
+        serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
+    } else {
+        json!({})
+    };
+
+    if !root.is_object() {
+        root = json!({});
+    }
+
+    let pre_tool = format_antigravity_hook_command(binary, "PreToolUse", client_tag);
+    let post_tool = format_antigravity_hook_command(binary, "PostToolUse", client_tag);
+    let pre_inv = format_antigravity_hook_command(binary, "PreInvocation", client_tag);
+    let post_inv = format_antigravity_hook_command(binary, "PostInvocation", client_tag);
+    let stop = format_antigravity_hook_command(binary, "Stop", client_tag);
+
+    let hook_spec = json!({
+        "PreToolUse": [
+            {
+                "matcher": ".*",
+                "hooks": [{ "command": pre_tool, "timeout": 5, "type": "command" }]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": ".*",
+                "hooks": [{ "command": post_tool, "timeout": 5, "type": "command" }]
+            }
+        ],
+        "PreInvocation": [{ "command": pre_inv, "timeout": 5, "type": "command" }],
+        "PostInvocation": [{ "command": post_inv, "timeout": 5, "type": "command" }],
+        "Stop": [{ "command": stop, "timeout": 5, "type": "command" }]
+    });
+
+    // Update only the agent-otel-bridge section, preserving third-party keys intact
+    root["agent-otel-bridge"] = hook_spec;
+
+    let serialized = serde_json::to_string_pretty(&root)?;
+    fs::write(path, serialized)?;
+    Ok(true)
+}
+
+pub fn uninstall_antigravity_hooks(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    let content = fs::read_to_string(path)?;
+    let mut root: Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return Ok(false),
+    };
+
+    if let Some(obj) = root.as_object_mut() {
+        if obj.remove("agent-otel-bridge").is_some() {
+            let serialized = serde_json::to_string_pretty(&root)?;
+            fs::write(path, serialized)?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
