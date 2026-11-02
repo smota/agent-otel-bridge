@@ -8,6 +8,7 @@ use crate::{
     exporter::{ExporterBuildError, OtlpExporter},
     pipeline::{export_worker, ExportQueue},
     quota_worker::QuotaWorker,
+    span_assembler::SpanAssembler,
 };
 use agent_otel_core::model::ExecutionMode;
 use agent_otel_core::otlp::ResolvedSpanMetadata;
@@ -152,6 +153,7 @@ impl Daemon {
         });
         let mut batch =
             SpanBatcher::with_schema(self.config.resource(), self.config.batch_size, schema_url);
+        let mut span_assembler = SpanAssembler::default();
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
         let user_email = ambient_user_email(self.config.enrich_email);
@@ -212,7 +214,7 @@ impl Daemon {
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break; };
                     last_activity = Instant::now();
-                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode);
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, &mut span_assembler);
                     processed += 1;
                 }
                 _ = tick.tick() => {
@@ -253,6 +255,7 @@ impl Daemon {
                     self.config.gen_ai_latest_experimental,
                     metadata,
                     self.config.workspace_path_mode,
+                    &mut span_assembler,
                 );
             }
         }
@@ -315,6 +318,7 @@ fn process_frame(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    assembler: &mut SpanAssembler,
 ) {
     transform(
         frame,
@@ -329,6 +333,7 @@ fn process_frame(
         gen_ai_latest_experimental,
         metadata,
         workspace_path_mode,
+        assembler,
     );
 }
 #[allow(clippy::too_many_arguments)]
@@ -344,6 +349,7 @@ fn process_frame_without_quota(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    assembler: &mut SpanAssembler,
 ) {
     transform(
         frame,
@@ -358,6 +364,7 @@ fn process_frame_without_quota(
         gen_ai_latest_experimental,
         metadata,
         workspace_path_mode,
+        assembler,
     );
 }
 #[allow(clippy::too_many_arguments)]
@@ -374,6 +381,7 @@ fn transform(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    assembler: &mut SpanAssembler,
 ) {
     let now_instant = Instant::now();
     let now_nanos = std::time::SystemTime::now()
@@ -412,19 +420,21 @@ fn transform(
     }
 
     stats.transformed.fetch_add(1, Ordering::Relaxed);
-    match batch.try_push(outcome.span, Instant::now()) {
-        Ok(ready) => {
-            if let Some(ready) = ready {
-                queue.enqueue(ready);
-            }
-            if batch.is_full() {
-                if let Some(ready) = batch.take() {
+    for span in assembler.observe(outcome.span, now_instant) {
+        match batch.try_push(span, Instant::now()) {
+            Ok(ready) => {
+                if let Some(ready) = ready {
                     queue.enqueue(ready);
                 }
+                if batch.is_full() {
+                    if let Some(ready) = batch.take() {
+                        queue.enqueue(ready);
+                    }
+                }
             }
-        }
-        Err(_) => {
-            stats.span_size.fetch_add(1, Ordering::Relaxed);
+            Err(_) => {
+                stats.span_size.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 }

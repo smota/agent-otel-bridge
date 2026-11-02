@@ -113,6 +113,9 @@ pub const OTEL_SCHEMA_1_41_0: &str = "https://opentelemetry.io/schemas/1.41.0";
 
 // --- Generic Agent Semantic Conventions ---
 pub const AGENT_HOOK_EVENT: &str = "agent.hook.event";
+/// True when the daemon joined a Pre hook with a later Post or Stop.
+/// False for immediate, unmatched, expired, and evicted spans.
+pub const AGENT_SPAN_PAIRED: &str = "agent.span.paired";
 pub const AGENT_STEP_INDEX: &str = "agent.step.index";
 pub const GEN_AI_AGENT_STEP_INDEX: &str = "gen_ai.agent.step_index";
 pub const AGENT_EXECUTION_NUM: &str = "agent.execution.num";

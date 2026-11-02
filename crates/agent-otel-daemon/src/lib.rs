@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -16,6 +16,7 @@ pub mod platform;
 pub mod platforms;
 pub mod quota;
 mod quota_worker;
+pub mod span_assembler;
 pub mod transform;
 
 pub use config::DaemonConfig;
