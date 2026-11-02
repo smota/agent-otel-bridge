@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -411,7 +411,9 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             "  [ok] OTEL_RESOURCE_ATTRIBUTES = {}",
             sanitize_resource_attributes(&v)
         ),
-        Err(_) => println!("  [info] OTEL_RESOURCE_ATTRIBUTES unset (defaulting to 'deployment.environment=homelab')"),
+        Err(_) => println!(
+            "  [info] OTEL_RESOURCE_ATTRIBUTES is unset (deployment.environment is omitted)"
+        ),
     }
 
     // 2. Named Pipe IPC check

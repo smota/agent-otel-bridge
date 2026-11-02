@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -56,20 +56,82 @@ pub fn kv_bool(key: &str, value: bool) -> KeyValue {
     }
 }
 
+/// Maps a Rust [`std::env::consts::OS`] value to the OpenTelemetry `os.type` value.
+///
+/// Rust reports macOS as `macos`; the semantic convention value is `darwin`.
+pub fn semantic_os_type(os: &str) -> &str {
+    if os == "macos" {
+        "darwin"
+    } else {
+        os
+    }
+}
+
+fn sdk_identity_key(key: &str) -> bool {
+    matches!(
+        key,
+        TELEMETRY_SDK_NAME
+            | TELEMETRY_SDK_LANGUAGE
+            | TELEMETRY_SDK_VERSION
+            | TELEMETRY_DISTRO_NAME
+            | TELEMETRY_DISTRO_VERSION
+    )
+}
+
+fn upsert_string(attributes: &mut Vec<KeyValue>, key: &str, value: &str) {
+    if let Some(existing) = attributes.iter_mut().find(|kv| kv.key == key) {
+        *existing = kv_string(key, value);
+    } else {
+        attributes.push(kv_string(key, value));
+    }
+}
+
 pub fn build_resource(service_name: &str, environment: &str, version: &str) -> Resource {
+    build_resource_with(service_name, environment, version, "", &[])
+}
+
+/// Resource builder used by the daemon.
+///
+/// `environment` emits `deployment.environment` only when non-empty. It is not
+/// copied to `deployment.environment.name`. `extra` is merged after the
+/// detected attributes. `service.name` and the telemetry SDK/distro identity
+/// stay with the detected values. A non-empty `service.instance.id` in `extra`
+/// replaces `instance_id`.
+pub fn build_resource_with(
+    service_name: &str,
+    environment: &str,
+    version: &str,
+    instance_id: &str,
+    extra: &[(&str, &str)],
+) -> Resource {
     let hostname = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "localhost".to_string());
-    let os = std::env::consts::OS;
-
+    let mut attributes = vec![
+        kv_string(SERVICE_NAME, service_name),
+        kv_string(SERVICE_VERSION, version),
+        kv_string(HOST_NAME, &hostname),
+        kv_string(OS_TYPE, semantic_os_type(std::env::consts::OS)),
+        kv_string(TELEMETRY_SDK_NAME, "agent-otel-bridge"),
+        kv_string(TELEMETRY_SDK_LANGUAGE, "rust"),
+        kv_string(TELEMETRY_SDK_VERSION, version),
+        kv_string(TELEMETRY_DISTRO_NAME, "agent-otel-bridge"),
+        kv_string(TELEMETRY_DISTRO_VERSION, version),
+    ];
+    if !environment.is_empty() {
+        attributes.push(kv_string(DEPLOYMENT_ENVIRONMENT, environment));
+    }
+    if !instance_id.is_empty() {
+        attributes.push(kv_string(SERVICE_INSTANCE_ID, instance_id));
+    }
+    for (key, value) in extra {
+        if value.is_empty() || *key == SERVICE_NAME || sdk_identity_key(key) {
+            continue;
+        }
+        upsert_string(&mut attributes, key, value);
+    }
     Resource {
-        attributes: vec![
-            kv_string(SERVICE_NAME, service_name),
-            kv_string(DEPLOYMENT_ENVIRONMENT, environment),
-            kv_string(SERVICE_VERSION, version),
-            kv_string(HOST_NAME, &hostname),
-            kv_string(OS_TYPE, os),
-        ],
+        attributes,
         ..Default::default()
     }
 }

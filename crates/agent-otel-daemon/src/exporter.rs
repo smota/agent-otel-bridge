@@ -1,12 +1,13 @@
-/* Copyright The OpenTelemetry Authors
+/* Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0 */
+use crate::config::{DaemonConfig, SignalExportConfig};
 use bytes::Bytes;
 use opentelemetry_proto::tonic::collector::{
     metrics::v1::{ExportMetricsServiceRequest, ExportMetricsServiceResponse},
     trace::v1::{ExportTraceServiceRequest, ExportTraceServiceResponse},
 };
 use prost::Message;
-use reqwest::header::{CONTENT_TYPE, RETRY_AFTER};
+use reqwest::header::{CONTENT_ENCODING, CONTENT_TYPE, RETRY_AFTER};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
@@ -58,11 +59,34 @@ impl From<prost::EncodeError> for ExportError {
     }
 }
 
+#[derive(Debug)]
+pub enum ExporterBuildError {
+    Client(reqwest::Error),
+    Certificate(String),
+}
+impl fmt::Display for ExporterBuildError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Client(error) => write!(f, "OTLP client build failed: {error}"),
+            Self::Certificate(error) => write!(f, "OTLP certificate error: {error}"),
+        }
+    }
+}
+impl std::error::Error for ExporterBuildError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Client(error) => Some(error),
+            Self::Certificate(_) => None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct OtlpExporter {
     client: reqwest::Client,
-    traces_url: String,
-    metrics_url: String,
+    traces: SignalExportConfig,
+    metrics: SignalExportConfig,
+    sdk_disabled: bool,
 }
 #[derive(Clone, Copy)]
 enum Signal {
@@ -73,23 +97,37 @@ enum Signal {
 impl OtlpExporter {
     pub fn new(traces_url: String, metrics_url: String) -> Result<Self, reqwest::Error> {
         Ok(Self {
-            client: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(2))
-                .timeout(Duration::from_secs(5))
-                .tcp_keepalive(Duration::from_secs(30))
-                .pool_idle_timeout(Duration::from_secs(90))
-                .pool_max_idle_per_host(4)
-                .redirect(reqwest::redirect::Policy::none())
-                .user_agent(concat!("agent-otel-bridge/", env!("CARGO_PKG_VERSION")))
-                .build()?,
-            traces_url,
-            metrics_url,
+            client: client_builder().build()?,
+            traces: SignalExportConfig::http_protobuf(traces_url),
+            metrics: SignalExportConfig::http_protobuf(metrics_url),
+            sdk_disabled: false,
         })
+    }
+    pub fn from_config(config: &DaemonConfig) -> Result<Self, ExporterBuildError> {
+        let client = install_certificates(
+            client_builder(),
+            config.traces.certificate.as_deref(),
+            config.metrics.certificate.as_deref(),
+        )?
+        .build()
+        .map_err(ExporterBuildError::Client)?;
+        Ok(Self {
+            client,
+            traces: config.traces.clone(),
+            metrics: config.metrics.clone(),
+            sdk_disabled: config.sdk_disabled,
+        })
+    }
+    pub fn traces_deadline(&self) -> Duration {
+        self.traces.timeout.max(EXPORT_DEADLINE)
+    }
+    pub fn metrics_deadline(&self) -> Duration {
+        self.metrics.timeout.max(EXPORT_DEADLINE)
     }
     /// Compatibility API: partial rejection must not appear as success.
     pub async fn export_traces(&self, req: ExportTraceServiceRequest) -> Result<(), ExportError> {
         outcome_result(
-            self.export_traces_until(&req, Instant::now() + EXPORT_DEADLINE)
+            self.export_traces_until(&req, Instant::now() + self.traces_deadline())
                 .await,
         )
     }
@@ -98,7 +136,7 @@ impl OtlpExporter {
         req: ExportMetricsServiceRequest,
     ) -> Result<(), ExportError> {
         outcome_result(
-            self.export_metrics_until(&req, Instant::now() + EXPORT_DEADLINE)
+            self.export_metrics_until(&req, Instant::now() + self.metrics_deadline())
                 .await,
         )
     }
@@ -113,7 +151,7 @@ impl OtlpExporter {
             .flat_map(|r| &r.scope_spans)
             .map(|s| s.spans.len())
             .sum();
-        self.export(req, &self.traces_url, Signal::Traces, count, deadline)
+        self.export(req, &self.traces, Signal::Traces, count, deadline)
             .await
     }
     pub async fn export_metrics_until(
@@ -136,17 +174,23 @@ impl OtlpExporter {
                 None => 0,
             })
             .sum();
-        self.export(req, &self.metrics_url, Signal::Metrics, count, deadline)
+        self.export(req, &self.metrics, Signal::Metrics, count, deadline)
             .await
     }
     async fn export<M: Message>(
         &self,
         req: &M,
-        url: &str,
+        target: &SignalExportConfig,
         signal: Signal,
         count: usize,
         deadline: Instant,
     ) -> ExportReport {
+        if self.sdk_disabled {
+            return report(ExportOutcome::Accepted, 0, false);
+        }
+        if let Some(reason) = target.disabled_reason {
+            return report(ExportOutcome::Rejected { reason }, 0, false);
+        }
         if req.encoded_len() > MAX_REQUEST_BYTES {
             return report(
                 ExportOutcome::Rejected {
@@ -156,8 +200,18 @@ impl OtlpExporter {
                 false,
             );
         }
-        let body = Bytes::from(req.encode_to_vec());
-        let deadline = deadline.min(Instant::now() + EXPORT_DEADLINE);
+        let encoded = req.encode_to_vec();
+        let body = if target.gzip {
+            match gzip_encode(&encoded) {
+                Ok(compressed) => Bytes::from(compressed),
+                Err(_) => {
+                    return report(ExportOutcome::Rejected { reason: "encode" }, 0, false);
+                }
+            }
+        } else {
+            Bytes::from(encoded)
+        };
+        let deadline = deadline.min(Instant::now() + target.timeout.max(EXPORT_DEADLINE));
         let mut uncertain = false;
         let mut last = ExportOutcome::Rejected {
             reason: "deadline_before_send",
@@ -168,15 +222,8 @@ impl OtlpExporter {
                 break;
             }
             attempts = attempt;
-            let response = tokio::time::timeout_at(
-                deadline,
-                self.client
-                    .post(url)
-                    .header(CONTENT_TYPE, "application/x-protobuf")
-                    .body(body.clone())
-                    .send(),
-            )
-            .await;
+            let response =
+                tokio::time::timeout_at(deadline, self.request(target, body.clone()).send()).await;
             let retry_after = match response {
                 Ok(Ok(mut response)) => {
                     let status = response.status();
@@ -282,6 +329,82 @@ impl OtlpExporter {
         }
         report(last, attempts, uncertain)
     }
+
+    fn request(&self, target: &SignalExportConfig, body: Bytes) -> reqwest::RequestBuilder {
+        let mut builder = self.client.post(&target.url).timeout(target.timeout);
+        for (name, value) in &target.headers {
+            if name.eq_ignore_ascii_case("content-type")
+                || name.eq_ignore_ascii_case("content-encoding")
+            {
+                continue;
+            }
+            builder = builder.header(name, value);
+        }
+        builder = builder.header(CONTENT_TYPE, "application/x-protobuf");
+        if target.gzip {
+            builder = builder.header(CONTENT_ENCODING, "gzip");
+        }
+        builder.body(body)
+    }
+}
+fn client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(5))
+        .tcp_keepalive(Duration::from_secs(30))
+        .pool_idle_timeout(Duration::from_secs(90))
+        .pool_max_idle_per_host(4)
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("agent-otel-bridge/", env!("CARGO_PKG_VERSION")))
+}
+fn install_certificates(
+    mut builder: reqwest::ClientBuilder,
+    traces: Option<&str>,
+    metrics: Option<&str>,
+) -> Result<reqwest::ClientBuilder, ExporterBuildError> {
+    let mut seen = std::collections::HashSet::new();
+    for path in [traces, metrics].into_iter().flatten() {
+        if !seen.insert(path.to_string()) {
+            continue;
+        }
+        let bytes = std::fs::read(path).map_err(|error| {
+            ExporterBuildError::Certificate(format!("failed to read {path}: {error}"))
+        })?;
+        for certificate in parse_pem_certificates(&bytes).map_err(|error| {
+            ExporterBuildError::Certificate(format!("invalid certificate {path}: {error}"))
+        })? {
+            builder = builder.add_root_certificate(certificate);
+        }
+    }
+    Ok(builder)
+}
+fn parse_pem_certificates(bytes: &[u8]) -> Result<Vec<reqwest::Certificate>, String> {
+    let text = String::from_utf8_lossy(bytes);
+    let marker = "-----END CERTIFICATE-----";
+    let mut rest = text.as_ref();
+    let mut certificates = Vec::new();
+    while let Some(start) = rest.find("-----BEGIN CERTIFICATE-----") {
+        let after = &rest[start..];
+        let Some(end) = after.find(marker) else {
+            return Err("truncated PEM certificate".to_string());
+        };
+        let pem = &after[..end + marker.len()];
+        let certificate =
+            reqwest::Certificate::from_pem(pem.as_bytes()).map_err(|error| error.to_string())?;
+        certificates.push(certificate);
+        rest = &after[end + marker.len()..];
+    }
+    if certificates.is_empty() {
+        return Err("no PEM certificates found".to_string());
+    }
+    Ok(certificates)
+}
+fn gzip_encode(raw: &[u8]) -> std::io::Result<Vec<u8>> {
+    use flate2::write::GzEncoder;
+    use std::io::Write;
+    let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(raw)?;
+    encoder.finish()
 }
 fn report(outcome: ExportOutcome, attempts: u32, may_duplicate: bool) -> ExportReport {
     ExportReport {
@@ -346,6 +469,7 @@ fn decode_response(signal: Signal, bytes: &[u8], sent: usize) -> ExportOutcome {
 mod tests {
     use super::*;
     use opentelemetry_proto::tonic::collector::trace::v1::ExportTracePartialSuccess;
+    use prost::Message;
     #[test]
     fn partial_is_never_full_success() {
         let body = ExportTraceServiceResponse {
@@ -395,5 +519,203 @@ mod tests {
             retry_after_duration("invalid", SystemTime::UNIX_EPOCH),
             None
         );
+    }
+
+    fn vars<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |key| {
+            pairs
+                .iter()
+                .rev()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| (*value).to_string())
+        }
+    }
+
+    fn span_request() -> ExportTraceServiceRequest {
+        use opentelemetry_proto::tonic::trace::v1::{ResourceSpans, ScopeSpans, Span};
+        ExportTraceServiceRequest {
+            resource_spans: vec![ResourceSpans {
+                resource: None,
+                scope_spans: vec![ScopeSpans {
+                    scope: None,
+                    spans: vec![Span::default()],
+                    ..Default::default()
+                }],
+                schema_url: String::new(),
+            }],
+        }
+    }
+
+    async fn read_http(socket: &mut tokio::net::TcpStream) -> (String, Vec<u8>) {
+        use tokio::io::AsyncReadExt;
+        let mut buf = Vec::new();
+        let mut tmp = [0_u8; 2048];
+        loop {
+            let n = tokio::time::timeout(Duration::from_secs(1), socket.read(&mut tmp))
+                .await
+                .expect("request header timeout")
+                .expect("request read");
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+            if let Some(split) = buf.windows(4).position(|window| window == b"\r\n\r\n") {
+                let header = String::from_utf8_lossy(&buf[..split]).to_lowercase();
+                let mut body = buf[split + 4..].to_vec();
+                let length = header
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length:"))
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .unwrap_or(body.len());
+                while body.len() < length {
+                    let n = socket.read(&mut tmp).await.expect("body read");
+                    if n == 0 {
+                        break;
+                    }
+                    body.extend_from_slice(&tmp[..n]);
+                }
+                body.truncate(length);
+                return (header, body);
+            }
+        }
+        (String::from_utf8_lossy(&buf).to_lowercase(), Vec::new())
+    }
+
+    #[tokio::test]
+    async fn gzip_sets_content_encoding_and_compresses_body() {
+        use flate2::read::GzDecoder;
+        use std::io::Read;
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let (header, body) = read_http(&mut socket).await;
+            let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/x-protobuf\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = socket.write_all(response).await;
+            (header, body)
+        });
+        let config = crate::config::DaemonConfig::from_vars(&vars(&[
+            (
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+                &format!("http://{address}/v1/traces"),
+            ),
+            (
+                "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+                &format!("http://{address}/v1/metrics"),
+            ),
+            ("OTEL_EXPORTER_OTLP_TRACES_COMPRESSION", "gzip"),
+            ("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "X-Test=hello%20world"),
+            (
+                "OTEL_EXPORTER_OTLP_HEADERS",
+                "Content-Type=application/json",
+            ),
+        ]));
+        let exporter = OtlpExporter::from_config(&config).unwrap();
+        let report = exporter
+            .export_traces_until(&span_request(), Instant::now() + Duration::from_secs(2))
+            .await;
+        let (header, body) = server.await.unwrap();
+        assert_eq!(report.outcome, ExportOutcome::Accepted);
+        assert!(header.contains("content-encoding: gzip"));
+        assert!(header.contains("content-type: application/x-protobuf"));
+        assert!(header.contains("x-test: hello world"));
+        assert!(!header.contains("application/json"));
+        assert_eq!(&body[..2], &[0x1f, 0x8b]);
+        let mut decoded = Vec::new();
+        GzDecoder::new(body.as_slice())
+            .read_to_end(&mut decoded)
+            .unwrap();
+        let parsed = ExportTraceServiceRequest::decode(decoded.as_slice()).unwrap();
+        assert_eq!(parsed.resource_spans[0].scope_spans[0].spans.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn sdk_disabled_performs_zero_http_attempts() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&hits);
+        let server = tokio::spawn(async move {
+            loop {
+                if let Ok((socket, _)) = listener.accept().await {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    drop(socket);
+                }
+            }
+        });
+        let config = crate::config::DaemonConfig::from_vars(&vars(&[
+            ("OTEL_SDK_DISABLED", "TRUE"),
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", &format!("http://{address}")),
+        ]));
+        let exporter = OtlpExporter::from_config(&config).unwrap();
+        let report = exporter
+            .export_traces_until(&span_request(), Instant::now() + Duration::from_secs(2))
+            .await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        server.abort();
+        assert_eq!(report.outcome, ExportOutcome::Accepted);
+        assert_eq!(report.attempts, 0);
+        assert!(!report.may_duplicate);
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn unsupported_protocol_does_not_connect() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&hits);
+        let server = tokio::spawn(async move {
+            loop {
+                if let Ok((socket, _)) = listener.accept().await {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    drop(socket);
+                }
+            }
+        });
+        let config = crate::config::DaemonConfig::from_vars(&vars(&[
+            ("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc"),
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", &format!("http://{address}")),
+        ]));
+        let exporter = OtlpExporter::from_config(&config).unwrap();
+        let report = exporter
+            .export_traces_until(&span_request(), Instant::now() + Duration::from_secs(2))
+            .await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        server.abort();
+        assert_eq!(
+            report.outcome,
+            ExportOutcome::Rejected {
+                reason: "unsupported_protocol"
+            }
+        );
+        assert_eq!(report.attempts, 0);
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        assert!(exporter.metrics.disabled_reason.is_none());
+    }
+
+    #[test]
+    fn invalid_certificate_path_fails_construction() {
+        let config = crate::config::DaemonConfig::from_vars(&vars(&[(
+            "OTEL_EXPORTER_OTLP_CERTIFICATE",
+            "/no/such/agent-otel-bridge-root.pem",
+        )]));
+        match OtlpExporter::from_config(&config) {
+            Err(ExporterBuildError::Certificate(_)) => {}
+            Err(error) => panic!("expected certificate error, got {error}"),
+            Ok(_) => panic!("expected certificate error"),
+        }
     }
 }
