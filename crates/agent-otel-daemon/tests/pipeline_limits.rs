@@ -103,6 +103,7 @@ async fn blocked_exporter_does_not_block_transform_and_shutdown_reconciles() {
         quota_interval: Duration::from_secs(60),
         idle_timeout: Duration::MAX,
         emit_legacy_aliases: false,
+        gen_ai_latest_experimental: false,
         traces: SignalExportConfig::http_protobuf(format!(
             "{}/v1/traces",
             collector.endpoint.trim_end_matches('/')

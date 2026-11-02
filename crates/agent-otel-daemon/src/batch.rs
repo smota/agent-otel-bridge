@@ -1,9 +1,9 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
-use agent_otel_core::otlp::build_trace_request;
+use agent_otel_core::otlp::build_trace_request_with_schema;
 use opentelemetry_proto::tonic::resource::v1::Resource;
 use opentelemetry_proto::tonic::trace::v1::Span;
 
@@ -21,20 +21,29 @@ pub struct ExportBatch {
 
 pub struct SpanBatcher {
     resource: Resource,
+    schema_url: String,
     batch_size: usize,
     spans: Vec<Span>,
     wire_bytes: usize,
     resource_bytes: usize,
     scope_bytes: usize,
+    schema_field_bytes: usize,
     oldest: Option<Instant>,
 }
 
 impl SpanBatcher {
     pub fn new(resource: Resource, batch_size: usize) -> Self {
+        Self::with_schema(resource, batch_size, "")
+    }
+
+    pub fn with_schema(resource: Resource, batch_size: usize, schema_url: &str) -> Self {
         let resource_bytes = field_bytes(resource.encoded_len());
         let scope_bytes = field_bytes(agent_otel_core::otlp::instrumentation_scope().encoded_len());
+        let schema_url = schema_url.to_string();
         Self {
             resource,
+            schema_field_bytes: string_field_bytes(&schema_url),
+            schema_url,
             batch_size: batch_size.clamp(1, 4096),
             spans: Vec::with_capacity(batch_size.clamp(1, 4096)),
             wire_bytes: 0,
@@ -60,7 +69,10 @@ impl SpanBatcher {
     }
 
     fn request_bytes(&self, spans_wire_bytes: usize) -> usize {
-        field_bytes(self.resource_bytes + field_bytes(self.scope_bytes + spans_wire_bytes))
+        let scope_inner = self.scope_bytes + spans_wire_bytes + self.schema_field_bytes;
+        let resource_inner =
+            self.resource_bytes + field_bytes(scope_inner) + self.schema_field_bytes;
+        field_bytes(resource_inner)
     }
 
     /// Bounded synchronous path. A returned batch precedes the newly buffered span.
@@ -108,7 +120,8 @@ impl SpanBatcher {
         let count = self.spans.len();
         let predicted = self.request_bytes(self.wire_bytes);
         let spans = std::mem::replace(&mut self.spans, Vec::with_capacity(self.batch_size));
-        let request = build_trace_request(self.resource.clone(), spans);
+        let request =
+            build_trace_request_with_schema(self.resource.clone(), spans, &self.schema_url);
         let encoded_bytes = request.encoded_len();
         debug_assert_eq!(predicted, encoded_bytes);
         self.wire_bytes = 0;
@@ -132,6 +145,14 @@ impl SpanBatcher {
         if let Err(e) = exporter.export_traces(request).await {
             eprintln!("[agent-otel-daemon] Failed to export {count} spans: {e}");
         }
+    }
+}
+
+fn string_field_bytes(value: &str) -> usize {
+    if value.is_empty() {
+        0
+    } else {
+        field_bytes(value.len())
     }
 }
 
@@ -182,5 +203,34 @@ mod tests {
                 now
             )
             .is_err());
+    }
+
+    #[test]
+    fn schema_url_is_counted_in_the_trace_request() {
+        let mut batch = SpanBatcher::with_schema(
+            Resource::default(),
+            50,
+            agent_otel_core::semconv::OTEL_SCHEMA_1_41_0,
+        );
+        let now = Instant::now();
+        batch
+            .try_push(
+                Span {
+                    name: "named".to_string(),
+                    ..Default::default()
+                },
+                now,
+            )
+            .unwrap();
+        let ready = batch.take().unwrap();
+        assert_eq!(
+            ready.request.resource_spans[0].schema_url,
+            agent_otel_core::semconv::OTEL_SCHEMA_1_41_0
+        );
+        assert_eq!(
+            ready.request.resource_spans[0].scope_spans[0].schema_url,
+            agent_otel_core::semconv::OTEL_SCHEMA_1_41_0
+        );
+        assert_eq!(ready.encoded_bytes, ready.request.encoded_len());
     }
 }

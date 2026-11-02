@@ -160,6 +160,7 @@ fn bench_parse_and_build_resolved(
             context,
             metadata,
             false,
+            false,
         );
         black_box(span);
     }
@@ -177,6 +178,7 @@ fn bench_parse_and_build_resolved(
             i as u32,
             context,
             metadata,
+            false,
             false,
         );
         black_box(span);
@@ -218,6 +220,7 @@ fn verify_resolved_builder_equivalence(
         7,
         context,
         metadata,
+        false,
         false,
     );
     assert_eq!(compatibility, resolved);

@@ -43,6 +43,9 @@ pub struct DaemonConfig {
     pub quota_interval: Duration,
     pub idle_timeout: Duration,
     pub emit_legacy_aliases: bool,
+    /// True only when `OTEL_SEMCONV_STABILITY_OPT_IN` contains the exact token
+    /// `gen_ai_latest_experimental`.
+    pub gen_ai_latest_experimental: bool,
     pub traces: SignalExportConfig,
     pub metrics: SignalExportConfig,
     pub sdk_disabled: bool,
@@ -95,6 +98,7 @@ impl DaemonConfig {
             .or_else(|| get("AGENT_OTEL_EMIT_AGY_ALIASES"))
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
+        let gen_ai_latest_experimental = semconv_opt_in_gen_ai_latest(get);
 
         Self {
             otlp_endpoint: export.base_endpoint,
@@ -107,6 +111,7 @@ impl DaemonConfig {
             quota_interval: Duration::from_secs(quota_interval_secs),
             idle_timeout,
             emit_legacy_aliases,
+            gen_ai_latest_experimental,
             traces: export.traces,
             metrics: export.metrics,
             sdk_disabled: export.sdk_disabled,
@@ -180,6 +185,16 @@ pub fn parse_otlp_env(get: &dyn Fn(&str) -> Option<String>) -> ParsedOtlpEnv {
         environment,
         resource_attributes,
     }
+}
+
+/// Comma-separated `OTEL_SEMCONV_STABILITY_OPT_IN`. A token matches only when
+/// it equals `gen_ai_latest_experimental` after trimming. The match is
+/// case-sensitive. Unset is off.
+fn semconv_opt_in_gen_ai_latest(get: &dyn Fn(&str) -> Option<String>) -> bool {
+    get("OTEL_SEMCONV_STABILITY_OPT_IN").is_some_and(|raw| {
+        raw.split(',')
+            .any(|token| token.trim() == "gen_ai_latest_experimental")
+    })
 }
 
 fn parse_signal(
@@ -583,5 +598,23 @@ mod tests {
         );
         assert!(!config.metrics.gzip);
         assert!(!config.sdk_disabled);
+    }
+
+    #[test]
+    fn semconv_opt_in_recognizes_only_the_experimental_token() {
+        let enabled = DaemonConfig::from_vars(&var_map(&[(
+            "OTEL_SEMCONV_STABILITY_OPT_IN",
+            "http/dup, gen_ai_latest_experimental ",
+        )]));
+        assert!(enabled.gen_ai_latest_experimental);
+
+        let other = DaemonConfig::from_vars(&var_map(&[(
+            "OTEL_SEMCONV_STABILITY_OPT_IN",
+            "gen_ai_latest,GEN_AI_LATEST_EXPERIMENTAL",
+        )]));
+        assert!(!other.gen_ai_latest_experimental);
+
+        let unset = DaemonConfig::from_vars(&var_map(&[]));
+        assert!(!unset.gen_ai_latest_experimental);
     }
 }

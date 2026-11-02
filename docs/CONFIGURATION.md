@@ -35,6 +35,7 @@ All environment variables follow standard OpenTelemetry conventions with project
 | `AGENT_OTEL_QUOTA_INTERVAL_SECS` | `60` | Ticker interval in seconds for broadcasting model quota gauges to the collector. |
 | `AGENT_OTEL_QUOTA_FILE` | *(Auto-discovered)* | Custom file path to read quota state JSON. Defaults to auto-discovering in `~/.state/quota.json`, `~/.gemini/quota.json`, or `~/.agent-otel/quota.json`. |
 | `AGENT_OTEL_LEGACY_ATTRIBUTES` | `false` | When set to `true`, emits legacy `agy.*` aliases alongside canonical OpenTelemetry `gen_ai.*` and `agent.*` conventions for backward compatibility. |
+| `OTEL_SEMCONV_STABILITY_OPT_IN` | *(unset)* | Comma-separated tokens. Span export changes only when a token equals `gen_ai_latest_experimental` after trimming. The match is case-sensitive. Any other token is ignored. Unset leaves the default export unchanged. |
 
 ### OTLP/HTTP export
 
@@ -49,6 +50,17 @@ Detected attributes are `service.name`, `service.version`, `host.name`, `os.type
 `deployment.environment` is emitted only when that key is present in `OTEL_RESOURCE_ATTRIBUTES`. `deployment.environment.name` is emitted only when that key is present. Neither is copied from the other, and neither defaults to `homelab`.
 
 `OTEL_RESOURCE_ATTRIBUTES` overrides detected attributes except `service.name` and the `telemetry.sdk.*` / `telemetry.distro.*` identity. An explicit `service.instance.id` in the list replaces the generated id.
+
+### Experimental semantic conventions
+
+The default trace export is unchanged when `OTEL_SEMCONV_STABILITY_OPT_IN` is unset or does not contain the exact token `gen_ai_latest_experimental`. When that token is present, trace spans differ as follows:
+
+- `gen_ai.system` is omitted. `gen_ai.provider.name` is emitted only when the event model is present and recognized. A missing or unrecognized model does not substitute `google`.
+- `gen_ai.response.finish_reasons` is a one-element string array of the raw harness string. `agent.termination_reason` stays a string copy. `NO_TOOL_CALL` is not mapped to `stop`.
+- Successful spans use status `Unset`. Errors stay status `Error` with the same message. `error.type` is the event error category when that is non-empty, otherwise `_OTHER`.
+- Lineage is `agent.lineage.depth`, `agent.lineage.parent_name`, `agent.lineage.root_id`, and `agent.lineage.is_root` instead of `gen_ai.agent.depth`, `gen_ai.agent.parent_name`, `gen_ai.agent.root_id`, and `gen_ai.agent.is_root`. `gen_ai.agent.step_index` is omitted. `agent.step.index` stays. No new `gen_ai.*` attribute is added, and `gen_ai.operation.name` is not set to `chat`.
+- `vcs.branch.name` and `vcs.commit.sha` are emitted as `vcs.ref.head.name` and `vcs.ref.head.revision`. The same value is not emitted under both names.
+- Trace `schema_url` on resource spans and scope spans is `https://opentelemetry.io/schemas/1.41.0`. Metrics requests are unchanged in this slice.
 
 ---
 

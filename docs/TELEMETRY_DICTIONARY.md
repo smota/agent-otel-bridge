@@ -153,7 +153,7 @@ In the Antigravity agent architecture:
 - In other harnesses:
   - Claude Code emits `model_stop` or `end_turn`.
   - OpenAI Codex emits `stop` or `success`.
-- When a termination reason is present, the bridge copies that harness string into `gen_ai.response.finish_reasons`. It does not map `NO_TOOL_CALL` to `["stop"]`, and it does not emit a string array.
+- When a termination reason is present, the bridge copies that harness string into `gen_ai.response.finish_reasons`. It does not map `NO_TOOL_CALL` to `["stop"]`, and the default export is a string, not a string array. The experimental opt-in below emits a one-element string array of the same raw value.
 
 ---
 
@@ -211,6 +211,20 @@ Links heterogeneous subagent sessions into a single distributed trace tree. A ho
 | `gen_ai.agent.parent_name` | `string` | Name of the calling harness | `antigravity`, `claude-code` |
 | `gen_ai.agent.root_id` | `string` | Root conversation ID binding the fleet turn | `conv-root-12345` |
 | `gen_ai.agent.is_root` | `bool` | True if root orchestrator span | `true`, `false` |
+
+#### Opt-in gen_ai_latest_experimental
+
+Unset `OTEL_SEMCONV_STABILITY_OPT_IN` keeps the default names in the tables above. When the value contains the token `gen_ai_latest_experimental`, lineage and VCS attributes use the names below instead. The bridge does not emit both the old and new name for the same value. `agent.step.index` stays. `gen_ai.agent.step_index` is omitted. `gen_ai.response.finish_reasons` is a one-element string array of the raw harness termination string, including `NO_TOOL_CALL`. This opt-in does not pair Pre and Post spans and does not change duration.
+
+| Attribute | Type | Replaces |
+| :--- | :--- | :--- |
+| `agent.lineage.depth` | `int` | `gen_ai.agent.depth` |
+| `agent.lineage.parent_name` | `string` | `gen_ai.agent.parent_name` |
+| `agent.lineage.root_id` | `string` | `gen_ai.agent.root_id` |
+| `agent.lineage.is_root` | `bool` | `gen_ai.agent.is_root` |
+| `vcs.ref.head.name` | `string` | `vcs.branch.name` |
+| `vcs.ref.head.revision` | `string` | `vcs.commit.sha` |
+| `gen_ai.response.finish_reasons` | `string[]` | the default string copy of the harness termination reason |
 
 ### 5.5 Multi-Layer Error Categorization
 Replaces ambiguous binary errors with actionable diagnostic categories:

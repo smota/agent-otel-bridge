@@ -1,5 +1,5 @@
 /*
- * Copyright The OpenTelemetry Authors
+ * Copyright agent-otel-bridge contributors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -75,6 +75,7 @@ pub fn production_transform(
     salt: u32,
     mode: ExecutionMode,
     aliases: bool,
+    gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     now_instant: Instant,
     now_unix_nanos: u64,
@@ -123,6 +124,7 @@ pub fn production_transform(
         context,
         metadata,
         aliases,
+        gen_ai_latest_experimental,
     );
 
     let provided = lookup.context.is_none()
