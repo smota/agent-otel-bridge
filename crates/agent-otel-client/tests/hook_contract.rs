@@ -55,6 +55,7 @@ fn read_exact_response(child: &mut Child, expected: &[u8]) {
 }
 
 #[test]
+#[cfg(not(target_os = "linux"))]
 fn traceparent_response_is_safe_and_preserves_context() {
     let traceparent = "00-11111111111111111111111111111111-2222222222222222-01";
     for (client, value, expected) in [
@@ -79,11 +80,16 @@ fn traceparent_response_is_safe_and_preserves_context() {
 
 #[test]
 fn response_is_published_before_stdin_and_only_once() {
+    let passive: &[u8] = if cfg!(target_os = "linux") {
+        b"{}"
+    } else {
+        b"{\"decision\":\"allow\"}"
+    };
     let cases: &[(&str, &[u8])] = &[
-        ("antigravity", b"{\"decision\":\"allow\"}"),
-        ("claude", b"{\"decision\":\"allow\"}"),
-        ("grok", b"{\"decision\":\"allow\"}"),
-        ("pi", b"{\"decision\":\"allow\"}"),
+        ("antigravity", passive),
+        ("claude", passive),
+        ("grok", passive),
+        ("pi", passive),
         ("codex", b"{}"),
     ];
 
@@ -155,6 +161,44 @@ mod linux_deadlines {
                 panic!("hook did not fail open within subprocess cleanup deadline");
             }
             std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn linux_telemetry_response_never_controls_tools() {
+        for client in ["antigravity", "claude", "codex", "grok", "pi", "unknown"] {
+            for event in [
+                "PreInvocation",
+                "PostInvocation",
+                "PreToolUse",
+                "PostToolUse",
+                "Stop",
+                "255",
+            ] {
+                let mut child = Command::new(env!("CARGO_BIN_EXE_agent-hook"))
+                    .env("AGENT_OTEL_SOCKET", isolated_socket())
+                    .args([event, "--client", client])
+                    .env(
+                        "TRACEPARENT",
+                        "00-11111111111111111111111111111111-2222222222222222-01",
+                    )
+                    .env("TRACESTATE", "vendor=synthetic")
+                    .env("AGENT_OTEL_WATCHDOG_MS", "500")
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("spawn passive telemetry hook");
+                assert!(wait_bounded(&mut child).success());
+                let mut response = Vec::new();
+                child
+                    .stdout
+                    .take()
+                    .unwrap()
+                    .read_to_end(&mut response)
+                    .unwrap();
+                assert_eq!(response, b"{}", "{client} {event} must not emit tool decisions, input changes, or environment injection");
+            }
         }
     }
 

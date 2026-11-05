@@ -50,22 +50,19 @@ def clean(p):
         p.wait(timeout=2)
 
 def responses():
-    for client in ['antigravity', 'claude', 'codex', 'grok', 'pi']:
-        r = run(['PreToolUse', '--client', client])
-        assert r.returncode == 0 and (not r.stderr)
-        assert r.stdout == (b'{}' if client == 'codex' else b'{"decision":"allow"}')
-    for trace, state, expected in [(TP, 'vendor=a', {'TRACEPARENT': TP, 'TRACESTATE': 'vendor=a'}), ('bad"value', 'vendor=a', {'TRACESTATE': 'vendor=a'}), (TP, 'bad"value', {'TRACEPARENT': TP})]:
-        r = run(['PreToolUse', '--client', 'claude'], trace=trace, state=state)
-        assert r.returncode == 0
-        assert json.loads(r.stdout) == {'decision': 'allow', 'hookSpecificOutput': {'env': expected}}
-    r = run(['PreToolUse', '--client', 'codex'], trace=TP, state='vendor=a')
-    assert r.returncode == 0 and r.stdout == b'{}'
+    for client in ['antigravity', 'claude', 'codex', 'grok', 'pi', 'unknown']:
+        for event in ['PreInvocation', 'PostInvocation', 'PreToolUse', 'PostToolUse', 'Stop', '255']:
+            for trace, state in [(None, None), (TP, 'vendor=a'), ('bad"value', 'bad"state')]:
+                r = run([event, '--client', client], trace=trace, state=state)
+                assert r.returncode == 0 and not r.stderr
+                assert r.stdout == b'{}', f'{client} {event} must be passive: {r.stdout!r}'
+    return {'passive_responses_verified': 108, 'tool_decisions_or_env_injection': False}
 
 def before_stdin():
     p = subprocess.Popen([str(BINARY), 'PreToolUse', '--client', 'claude'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env())
     try:
         os.set_blocking(p.stdout.fileno(), False)
-        expected = b'{"decision":"allow"}'
+        expected = b'{}'
         response = b''
         deadline = time.monotonic() + 1
         selector = selectors.DefaultSelector()
@@ -134,36 +131,37 @@ def invalid_argv():
 def receiver():
     payload = json.dumps({'session_id': 'synthetic-artifact-fixture', 'cwd': '/fixture', 'tool_name': 'Read', 'note': 'synthetic λ\nfixture'}, ensure_ascii=False).encode()
     for client, wire_id in [('antigravity', 1), ('claude', 2), ('codex', 3), ('grok', 4), ('pi', 5)]:
-        endpoint = BASE / (client + '.sock')
-        listener = socket.socket(socket.AF_UNIX)
-        listener.settimeout(2)
-        listener.bind(str(endpoint))
-        listener.listen(1)
-        try:
-            r = run(['PostToolUse', '--client', client], data=payload, endpoint=endpoint, trace=TP)
-            assert r.returncode == 0 and r.stdout == b'{}'
-            connection, _ = listener.accept()
-            connection.settimeout(2)
-            with connection:
-                data = b''
-                while True:
-                    chunk = connection.recv(65536)
-                    if not chunk:
-                        break
-                    data += chunk
-            assert data[:4] == b'AG\x01\x04'
-            length = struct.unpack_from('<I', data, 4)[0]
-            assert len(data) == 8 + length
-            body = data[8:]
-            assert struct.unpack_from('<BH', body, 0) == (4, wire_id)
-            assert body[3] == 1
-            context_length = struct.unpack_from('<H', body, 4)[0]
-            assert body[6:6 + context_length] == TP.encode()
-            assert body[6 + context_length:] == payload
-        finally:
-            listener.close()
-            endpoint.unlink(missing_ok=True)
-    return {'client_wire_identities_verified': 5, 'json_bytes_exact': True, 'traceparent_bytes_exact': True}
+        for event, event_id in [('PreToolUse', 3), ('PostToolUse', 4)]:
+            endpoint = BASE / (client + '-' + event + '.sock')
+            listener = socket.socket(socket.AF_UNIX)
+            listener.settimeout(2)
+            listener.bind(str(endpoint))
+            listener.listen(1)
+            try:
+                r = run([event, '--client', client], data=payload, endpoint=endpoint, trace=TP)
+                assert r.returncode == 0 and r.stdout == b'{}'
+                connection, _ = listener.accept()
+                connection.settimeout(2)
+                with connection:
+                    data = b''
+                    while True:
+                        chunk = connection.recv(65536)
+                        if not chunk:
+                            break
+                        data += chunk
+                assert data[:4] == b'AG\x01\x04'
+                length = struct.unpack_from('<I', data, 4)[0]
+                assert len(data) == 8 + length
+                body = data[8:]
+                assert struct.unpack_from('<BH', body, 0) == (event_id, wire_id)
+                assert body[3] == 1
+                context_length = struct.unpack_from('<H', body, 4)[0]
+                assert body[6:6 + context_length] == TP.encode()
+                assert body[6 + context_length:] == payload
+            finally:
+                listener.close()
+                endpoint.unlink(missing_ok=True)
+    return {'client_wire_identities_verified': 5, 'pre_and_post_tool_verified': True, 'json_bytes_exact': True, 'traceparent_bytes_exact': True}
 
 def fd_flags():
     incoming, child_in = socket.socketpair()

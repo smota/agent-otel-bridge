@@ -242,6 +242,16 @@ standard-library unwinder imports disappear. Linux uses an independent native
 pthread watchdog and unbuffered inherited streams; thread/clock creation failure
 exits zero without attempting a potentially blocked response.
 
+Linux telemetry hooks write only `{}` and exit zero for every client and event.
+They never emit approval or denial decisions, replacement tool inputs, blocking
+instructions, or environment-injection output. If the watchdog cannot start or
+its deadline expires, fail-open termination can omit the response. Incoming
+`TRACEPARENT`, when supplied by the parent process, is still carried unchanged in
+the native IPC context alongside the original event JSON. Linux stdout does not
+set the harness's environment or propagate context into its future child tools;
+that requires an independently supported parent/harness integration. This Linux
+response contract does not change the existing non-Linux response path.
+
 Build verification uses Cargo, Bash, GNU core utilities/binutils (`readelf`), and
 Python 3 from the station runtime. Run
 `python3 scripts/check-linux-hook.py target/release/agent-hook` to exercise the

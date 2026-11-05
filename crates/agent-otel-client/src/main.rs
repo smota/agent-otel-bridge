@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#[cfg(not(target_os = "linux"))]
 use std::borrow::Cow;
 #[cfg(not(target_os = "linux"))]
 use std::io::{self, Read, Write};
@@ -12,7 +13,9 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use agent_otel_ipc::client::{attempt_send_until, read_traceparent, read_tracestate, SendAttempt};
+#[cfg(not(target_os = "linux"))]
+use agent_otel_ipc::client::read_tracestate;
+use agent_otel_ipc::client::{attempt_send_until, read_traceparent, SendAttempt};
 use agent_otel_ipc::frame::{encode_context_payload, MsgType, WireHeader};
 
 #[cfg(not(target_os = "linux"))]
@@ -110,6 +113,7 @@ fn main() {
 struct ClientMapping {
     aliases: &'static [&'static str],
     wire_id: u16,
+    #[cfg(not(target_os = "linux"))]
     allow_pre_tool: bool,
 }
 
@@ -117,26 +121,31 @@ const CLIENT_MAPPINGS: &[ClientMapping] = &[
     ClientMapping {
         aliases: &["antigravity", "agy", "gemini"],
         wire_id: 1,
+        #[cfg(not(target_os = "linux"))]
         allow_pre_tool: true,
     },
     ClientMapping {
         aliases: &["claude", "claude-code", "claudecode"],
         wire_id: 2,
+        #[cfg(not(target_os = "linux"))]
         allow_pre_tool: true,
     },
     ClientMapping {
         aliases: &["codex", "openai", "codex-cli"],
         wire_id: 3,
+        #[cfg(not(target_os = "linux"))]
         allow_pre_tool: false,
     },
     ClientMapping {
         aliases: &["grok", "xai", "grok-cli"],
         wire_id: 4,
+        #[cfg(not(target_os = "linux"))]
         allow_pre_tool: true,
     },
     ClientMapping {
         aliases: &["pi", "pi-cli"],
         wire_id: 5,
+        #[cfg(not(target_os = "linux"))]
         allow_pre_tool: true,
     },
 ];
@@ -283,20 +292,10 @@ fn write_response(header: WireHeader) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn write_response(header: WireHeader) -> bool {
-    let allow_pre_tool = CLIENT_MAPPINGS
-        .iter()
-        .find(|mapping| mapping.wire_id == header.client_id)
-        .map(|mapping| mapping.allow_pre_tool)
-        .unwrap_or(true);
-    if header.event_id == 3 && allow_pre_tool {
-        let traceparent = unsafe { read_traceparent() };
-        let tracestate = unsafe { read_tracestate() };
-        let body = pre_tool_allow_json(traceparent.as_deref(), tracestate.as_deref());
-        linux_runtime::write_stdout(body.as_bytes())
-    } else {
-        linux_runtime::write_stdout(b"{}")
-    }
+fn write_response(_header: WireHeader) -> bool {
+    // Telemetry never approves, denies, or rewrites a tool invocation. Inherited
+    // trace context travels only in IPC; stdout cannot set the harness's env.
+    linux_runtime::write_stdout(b"{}")
 }
 
 #[cfg(windows)]
@@ -304,12 +303,14 @@ fn finish_with_guard<T>(_guard: T) -> ! {
     process::exit(0);
 }
 
+#[cfg(not(target_os = "linux"))]
 fn traceparent_is_echo_safe(value: &str) -> bool {
     value
         .bytes()
         .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
 }
 
+#[cfg(not(target_os = "linux"))]
 fn tracestate_is_echo_safe(value: &str) -> bool {
     (1..=512).contains(&value.len())
         && value
@@ -335,36 +336,9 @@ fn pre_tool_allow_json(traceparent: Option<&str>, tracestate: Option<&str>) -> C
     }
 }
 
-#[cfg(target_os = "linux")]
-fn pre_tool_allow_json(traceparent: Option<&str>, tracestate: Option<&str>) -> Cow<'static, str> {
-    let traceparent = traceparent.filter(|value| traceparent_is_echo_safe(value));
-    let tracestate = tracestate.filter(|value| tracestate_is_echo_safe(value));
-    if traceparent.is_none() && tracestate.is_none() {
-        return Cow::Borrowed("{\"decision\":\"allow\"}");
-    }
-    // The existing validators exclude quotes, backslashes and control bytes.
-    // Appending these validated values preserves the exact response encoding
-    // without general-purpose formatting on this small native client.
-    let mut response = String::from("{\"decision\":\"allow\",\"hookSpecificOutput\":{\"env\":{");
-    if let Some(value) = traceparent {
-        response.push_str("\"TRACEPARENT\":\"");
-        response.push_str(value);
-        response.push('"');
-    }
-    if let Some(value) = tracestate {
-        if traceparent.is_some() {
-            response.push(',');
-        }
-        response.push_str("\"TRACESTATE\":\"");
-        response.push_str(value);
-        response.push('"');
-    }
-    response.push_str("}}}");
-    Cow::Owned(response)
-}
-
 #[cfg(test)]
 mod response_tests {
+    #[cfg(not(target_os = "linux"))]
     use super::pre_tool_allow_json;
 
     #[test]
@@ -373,6 +347,7 @@ mod response_tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn echoes_traceparent_and_safe_tracestate() {
         let traceparent = "00-11111111111111111111111111111111-2222222222222222-01";
         let tracestate = "vendor=a,other=b";
@@ -385,6 +360,7 @@ mod response_tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn keeps_traceparent_only_json() {
         let traceparent = "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01";
         assert_eq!(
@@ -402,6 +378,7 @@ mod response_tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn echoes_tracestate_when_traceparent_is_unsafe() {
         let tracestate = "rojo=00f067aa0ba902b7";
         assert_eq!(
@@ -419,6 +396,7 @@ mod response_tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn rejects_empty_control_quote_backslash_and_overlong_tracestate() {
         assert_eq!(
             pre_tool_allow_json(None, Some("")).as_ref(),
