@@ -33,3 +33,44 @@ jobs:
 
       - name: Verify release build
         run: cargo check --release --workspace
+
+  linux-native:
+    name: Linux native hook contract
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify code formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Run unit and integration tests
+        run: cargo test --locked --workspace
+
+      - name: Verify ordinary release tests retain unwinding
+        run: cargo test --release --locked -p agent-otel-client ordinary_cargo_tests_retain_panic_unwinding
+
+      - name: Build documentation
+        run: cargo doc --locked --workspace --no-deps
+
+      - name: Build native bridge
+        run: cargo build --release --locked --target x86_64-unknown-linux-gnu -p agent-otel-bridge
+
+      - name: Package production hook after ordinary Cargo builds
+        run: bash scripts/build-linux-hook.sh
+
+      - name: Verify actual packaged ELF and isolated hook behavior
+        run: python3 scripts/check-linux-hook.py target/release/agent-hook
