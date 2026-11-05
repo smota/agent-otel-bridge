@@ -230,6 +230,61 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn agy_projection_removes_owned_pre_tool_and_preserves_foreign_denial() {
+        let home = fixture_home("agy-fail-open");
+        let path = home.join(".gemini/config/hooks.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let original = json!({
+            "agent-otel-bridge": {"PreToolUse": [{"matcher": ".*", "hooks": [{"command": "/old/agent-hook PreToolUse --client agy"}]}]},
+            "foreign-policy": {"PreToolUse": [{"matcher": ".*", "hooks": [{"command": "/policy/deny-tool"}]}]}
+        });
+        let before = serde_json::to_vec(&original).unwrap();
+        fs::write(&path, &before).unwrap();
+        let gemini = home.join(".gemini/settings.json");
+        fs::write(&gemini, b"{\"unrelated\":true}\n").unwrap();
+        for client in ["agy", "antigravity"] {
+            let changes = plan_home_hooks(
+                &home,
+                &[client],
+                Path::new("/installed/agent-hook"),
+                Some(Path::new("/installed/run/socket")),
+            )
+            .unwrap();
+            assert_eq!(changes.len(), 1);
+            assert_eq!(changes[0].before.as_ref(), Some(&before));
+            let after: Value = serde_json::from_slice(&changes[0].after).unwrap();
+            assert!(
+                after["agent-otel-bridge"].get("PreToolUse").is_none(),
+                "the Linux AGY pre-tool integration caused native hook denial"
+            );
+            assert_eq!(after["foreign-policy"], original["foreign-policy"]);
+            for event in ["PostToolUse", "PreInvocation", "PostInvocation", "Stop"] {
+                assert!(after["agent-otel-bridge"][event].is_array());
+            }
+            assert_eq!(fs::read(&path).unwrap(), before);
+            assert_eq!(fs::read(&gemini).unwrap(), b"{\"unrelated\":true}\n");
+        }
+        let projected = plan_home_hooks(
+            &home,
+            &["agy"],
+            Path::new("/installed/agent-hook"),
+            Some(Path::new("/installed/run/socket")),
+        )
+        .unwrap();
+        fs::write(&path, &projected[0].after).unwrap();
+        let again = plan_home_hooks(
+            &home,
+            &["agy"],
+            Path::new("/installed/agent-hook"),
+            Some(Path::new("/installed/run/socket")),
+        )
+        .unwrap();
+        assert_eq!(again[0].before.as_ref(), Some(&again[0].after));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
     fn malformed_and_unowned_configs_are_refused_without_writes() {
         let home = fixture_home("refuse");
         for (client, relative, original) in [

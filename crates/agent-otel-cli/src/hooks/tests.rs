@@ -231,19 +231,23 @@ fn test_antigravity_hooks_install_and_uninstall_preserves_third_party() {
 
     // Check bridge hooks
     let bridge = &parsed["agent-otel-bridge"];
-    let command = bridge["PreToolUse"][0]["hooks"][0]["command"]
-        .as_str()
-        .unwrap();
+    let event = if cfg!(target_os = "linux") {
+        assert!(bridge.get("PreToolUse").is_none());
+        "PostToolUse"
+    } else {
+        "PreToolUse"
+    };
+    let command = bridge[event][0]["hooks"][0]["command"].as_str().unwrap();
     if cfg!(windows) {
         assert_eq!(
             command,
-            format_antigravity_hook_command("C:\\Bridge\\agent-hook.exe", "PreToolUse", None)
+            format_antigravity_hook_command("C:\\Bridge\\agent-hook.exe", event, None)
         );
         assert!(!command.contains('"'));
     } else {
         assert_eq!(
             command,
-            format_antigravity_hook_command("C:\\Bridge\\agent-hook.exe", "PreToolUse", None)
+            format_antigravity_hook_command("C:\\Bridge\\agent-hook.exe", event, None)
         );
         if cfg!(target_os = "linux") {
             assert!(command.ends_with("--client agy"));

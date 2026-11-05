@@ -167,9 +167,15 @@ fn test_antigravity_hooks_full_lifecycle_preservation() {
     assert!(content.get("agent-otel-bridge").is_some());
 
     let bridge = &content["agent-otel-bridge"];
+    let event = if cfg!(target_os = "linux") {
+        assert!(bridge.get("PreToolUse").is_none());
+        "PostToolUse"
+    } else {
+        "PreToolUse"
+    };
     assert_eq!(
-        bridge["PreToolUse"][0]["hooks"][0]["command"],
-        format_antigravity_hook_command(bin_path, "PreToolUse", None)
+        bridge[event][0]["hooks"][0]["command"],
+        format_antigravity_hook_command(bin_path, event, None)
     );
 
     // 3. Reinstall with updated path (e.g. new version)

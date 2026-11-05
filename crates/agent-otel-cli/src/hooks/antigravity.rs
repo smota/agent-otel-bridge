@@ -22,7 +22,7 @@ pub(crate) fn antigravity_bridge_hooks_with_formatter(
     let pre_inv = formatter(binary, "PreInvocation", client_tag);
     let post_inv = formatter(binary, "PostInvocation", client_tag);
     let stop = formatter(binary, "Stop", client_tag);
-    json!({
+    let mut hooks = json!({
         "PreToolUse": [
             {
                 "matcher": ".*",
@@ -38,7 +38,14 @@ pub(crate) fn antigravity_bridge_hooks_with_formatter(
         "PreInvocation": [{ "command": pre_inv, "timeout": 5, "type": "command" }],
         "PostInvocation": [{ "command": post_inv, "timeout": 5, "type": "command" }],
         "Stop": [{ "command": stop, "timeout": 5, "type": "command" }]
-    })
+    });
+    // The Linux client's passive {} does not establish AGY continuation:
+    // registering this pre-tool hook caused native hook denial. Leave policy
+    // to the harness and foreign hooks; keep post-tool/invocation telemetry.
+    if cfg!(target_os = "linux") {
+        hooks.as_object_mut().unwrap().remove("PreToolUse");
+    }
+    hooks
 }
 
 pub fn install_antigravity_hooks(
