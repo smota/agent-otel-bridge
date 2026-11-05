@@ -620,9 +620,15 @@ mod tests {
         );
         let agy_hooks: Value =
             serde_json::from_slice(&fs::read(agy_root.join("hooks.json")).unwrap()).unwrap();
+        let event = if cfg!(target_os = "linux") {
+            assert!(agy_hooks["agent-otel-bridge"].get("PreToolUse").is_none());
+            "PostToolUse"
+        } else {
+            "PreToolUse"
+        };
         assert_eq!(
-            agy_hooks["agent-otel-bridge"]["PreToolUse"][0]["hooks"][0]["command"],
-            format_antigravity_hook_command(binary, "PreToolUse", None)
+            agy_hooks["agent-otel-bridge"][event][0]["hooks"][0]["command"],
+            format_antigravity_hook_command(binary, event, None)
         );
         assert!(!home.join(".gemini").exists());
 

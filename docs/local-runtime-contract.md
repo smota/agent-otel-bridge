@@ -252,6 +252,19 @@ set the harness's environment or propagate context into its future child tools;
 that requires an independently supported parent/harness integration. This Linux
 response contract does not change the existing non-Linux response path.
 
+Native AGY rejected tools with the Linux bridge-owned `PreToolUse` registration
+active, despite the client's exit-zero `{}` response; removing only that
+registration restored native tool execution. An observational continuation
+response contract has not been established. Linux AGY projections omit the
+bridge-owned `PreToolUse` registration, including when replacing older registrations. AGY
+retains `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop` telemetry;
+pre-tool telemetry is unavailable through this integration. Foreign policy hooks
+remain intact and the bridge emits no approval or permission override. This
+exception applies to native AGY's `.gemini/config/hooks.json` and staged plugin
+hooks, not the separate Gemini CLI settings reader. Packaged ELF response checks
+alone do not establish that a harness interprets a response as continuation;
+native tool-execution acceptance is a separate check.
+
 The versioned [Linux user-service template](../deploy/systemd/agent-otel-bridge.service)
 consumes the required public `~/.config/observability/consumer.env` contract and
 persists the shared runtime/socket paths under `~/.local/bin/.agent-otel-bridge`.
