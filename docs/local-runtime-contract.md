@@ -252,6 +252,29 @@ set the harness's environment or propagate context into its future child tools;
 that requires an independently supported parent/harness integration. This Linux
 response contract does not change the existing non-Linux response path.
 
+The versioned [Linux user-service template](../deploy/systemd/agent-otel-bridge.service)
+consumes the required public `~/.config/observability/consumer.env` contract and
+persists the shared runtime/socket paths under `~/.local/bin/.agent-otel-bridge`.
+The public consumer contract must not redefine `AGENT_OTEL_HOME`,
+`AGENT_OTEL_SOCKET`, or `OTEL_SERVICE_NAME`; those values belong to this service.
+It clears only signal-specific endpoint/protocol overrides and exporter auth
+headers; the consumer file's base endpoint/protocol remain authoritative. It
+stores no backend credentials. Socket setup waits at most five seconds, refuses
+symlinks and foreign ownership, and sets mode 0600 under a private mode-0700 run
+directory. This lifecycle setup is separate from the native hook hot path.
+The service restarts after unexpected exits, and SIGINT allows the native daemon
+up to ten seconds to drain on stop. Installing artifacts, enabling this unit,
+and applying per-HOME hooks are separate activation steps; source checkout
+changes never implicitly activate them.
+
+Linux listener startup and cleanup hold a nonblocking private `socket.lock`
+lease for the listener's lifetime. Lease files persist and must not be removed
+while a listener can run. After a crash, only an owned non-symlink socket whose
+bounded connect probe returns connection-refused and whose inode still matches
+may be removed and rebound. Live or ambiguous endpoints are preserved, and
+shutdown will not unlink a replacement socket. This recovery is startup work;
+it does not change the hook path, wire protocol, or non-Linux listener behavior.
+
 Build verification uses Cargo, Bash, GNU core utilities/binutils (`readelf`), and
 Python 3 from the station runtime. Run
 `python3 scripts/check-linux-hook.py target/release/agent-hook` to exercise the
