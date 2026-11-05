@@ -9,8 +9,9 @@ mod codex;
 mod command;
 mod grok;
 #[cfg(target_os = "linux")]
-#[allow(dead_code)] // Public planning API is also compiled into the private CLI module.
 mod home;
+#[cfg(target_os = "linux")]
+pub mod home_apply;
 mod paths;
 mod pi;
 mod standard;
