@@ -6,6 +6,7 @@
 use agent_otel_ipc::frame::{decode_header, encode_frame, MsgType, HEADER_LEN};
 #[cfg(windows)]
 use agent_otel_ipc::{client, server};
+#[cfg(windows)]
 use tokio_util::sync::CancellationToken;
 
 #[test]
