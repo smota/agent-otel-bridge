@@ -40,6 +40,8 @@ struct Journal {
     socket: Option<PathBuf>,
     clients: Vec<String>,
     status: String,
+    #[serde(default)]
+    rollback_allow_before: bool,
     files: Vec<RecordedFile>,
 }
 
@@ -50,6 +52,17 @@ struct RecordedFile {
     before: Option<Vec<u8>>,
     after: Vec<u8>,
     mode: Option<u32>,
+    #[serde(default)]
+    restore_progress: RestoreProgress,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum RestoreProgress {
+    #[default]
+    Pending,
+    Restoring,
+    Restored,
 }
 
 const STATE_RELATIVE: &str = ".local/state/agent-otel-bridge/hooks";
@@ -335,6 +348,7 @@ fn apply_inner(
                 before: change.before,
                 after: change.after,
                 mode,
+                restore_progress: RestoreProgress::Pending,
             }
         })
         .collect::<Vec<_>>();
@@ -359,6 +373,7 @@ fn apply_inner(
         socket,
         clients: options.clients.clone(),
         status: "prepared".into(),
+        rollback_allow_before: false,
         files,
     };
     save_journal(&path, &journal)?;
@@ -369,7 +384,7 @@ fn apply_inner(
             if fail_after == Some(applied) {
                 return Err("Injected transaction write failure".into());
             }
-            if read_current(&file.path, &journal.home)? != file.before {
+            if !matches_recorded_state(file, &journal.home, true)? {
                 return Err("Configuration changed after planning; apply refused".into());
             }
             attempted += 1;
@@ -385,7 +400,7 @@ fn apply_inner(
         save_journal(&path, &journal)
     })();
     if let Err(error) = result {
-        let restored = restore_files(&journal, attempted, true);
+        let restored = restore_files(&mut journal, &path, attempted, true);
         journal.status = if restored.is_ok() {
             "compensated"
         } else {
@@ -411,35 +426,114 @@ fn apply_inner(
     Ok(Some(path))
 }
 
-fn restore_files(journal: &Journal, count: usize, allow_before: bool) -> Result<(), String> {
-    // Preflight all affected files before restoring any of them.
-    for file in journal.files.iter().take(count) {
-        let current = read_current(&file.path, &journal.home)?;
-        if current.as_ref() != Some(&file.after) && !(allow_before && current == file.before) {
-            return Err("Configuration changed after apply; rollback refused".into());
+fn matches_recorded_state(file: &RecordedFile, home: &Path, before: bool) -> Result<bool, String> {
+    let bytes = read_current(&file.path, home)?;
+    let mode = match fs::metadata(&file.path) {
+        Ok(metadata) => Some(metadata.mode() & 0o777),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err("Cannot inspect configuration permissions".into()),
+    };
+    let expected_bytes = if before {
+        file.before.as_ref()
+    } else {
+        Some(&file.after)
+    };
+    let expected_mode = if before {
+        file.mode
+    } else {
+        Some(file.mode.unwrap_or(0o600))
+    };
+    Ok(bytes.as_ref() == expected_bytes && mode == expected_mode)
+}
+
+fn sync_parent(path: &Path) -> Result<(), String> {
+    let mut parent = path.parent().ok_or("Missing configuration directory")?;
+    loop {
+        match File::open(parent) {
+            Ok(directory) => {
+                return directory
+                    .sync_all()
+                    .map_err(|_| "Cannot sync restored configuration directory".into())
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // A prepared transaction may never have created this target's
+                // parent. Sync the nearest existing ancestor without creating it.
+                parent = parent.parent().ok_or("Missing configuration ancestor")?;
+            }
+            Err(_) => return Err("Cannot open restored configuration directory".into()),
         }
     }
-    for file in journal.files.iter().take(count).rev() {
-        let current = read_current(&file.path, &journal.home)?;
-        if allow_before && current == file.before {
+}
+
+fn restore_files(
+    journal: &mut Journal,
+    journal_path: &Path,
+    count: usize,
+    allow_before: bool,
+) -> Result<(), String> {
+    // Preflight bytes AND permissions for every target before any restoration.
+    // Durable intent allows recovery if a crash happens between a filesystem
+    // update and recording that update as complete in the private journal.
+    for file in journal.files.iter().take(count) {
+        let before = matches_recorded_state(file, &journal.home, true)?;
+        let after = matches_recorded_state(file, &journal.home, false)?;
+        let valid = match file.restore_progress {
+            RestoreProgress::Restored => before,
+            RestoreProgress::Restoring => before || after,
+            RestoreProgress::Pending => after || (allow_before && before),
+        };
+        if !valid {
+            return Err(
+                "Configuration changed after apply (bytes or permissions); rollback refused".into(),
+            );
+        }
+    }
+    journal.rollback_allow_before = allow_before;
+    journal.status = "rolling-back".into();
+    save_journal(journal_path, journal)?;
+    for index in (0..count).rev() {
+        if journal.files[index].restore_progress == RestoreProgress::Restored {
             continue;
         }
-        if current.as_ref() != Some(&file.after) {
+        let file = &journal.files[index];
+        let before = matches_recorded_state(file, &journal.home, true)?;
+        if !matches_recorded_state(file, &journal.home, false)?
+            && !((allow_before || file.restore_progress == RestoreProgress::Restoring) && before)
+        {
             return Err(
                 "Configuration changed during rollback; remaining targets preserved".into(),
             );
         }
-        if let Some(before) = &file.before {
-            atomic_write(
-                &file.path,
-                before,
-                file.mode.unwrap_or(0o600),
-                &journal.home,
-            )?;
-        } else {
-            fs::remove_file(&file.path)
-                .map_err(|_| "Cannot remove newly registered hook during rollback")?;
+        let recovered_before =
+            before && (allow_before || file.restore_progress == RestoreProgress::Restoring);
+        journal.files[index].restore_progress = RestoreProgress::Restoring;
+        save_journal(journal_path, journal)?;
+        let file = &journal.files[index];
+        // Recheck after journaling intent so a mode tightening is never undone.
+        let before = matches_recorded_state(file, &journal.home, true)?;
+        if !(recovered_before && before) {
+            if !matches_recorded_state(file, &journal.home, false)? {
+                return Err(
+                    "Configuration changed during rollback; remaining targets preserved".into(),
+                );
+            }
+            if let Some(before) = &file.before {
+                atomic_write(
+                    &file.path,
+                    before,
+                    file.mode.unwrap_or(0o600),
+                    &journal.home,
+                )?;
+            } else {
+                fs::remove_file(&file.path)
+                    .map_err(|_| "Cannot remove newly registered hook during rollback")?;
+            }
         }
+        // This also handles a crash after unlink/rename but before its sync:
+        // persist the directory entry before durably marking this file restored.
+        sync_parent(&file.path)?;
+        journal.files[index].restore_progress = RestoreProgress::Restored;
+        save_journal(journal_path, journal)?;
     }
     Ok(())
 }
@@ -479,10 +573,34 @@ pub fn rollback(path: &Path) -> Result<(), String> {
         println!("Hook transaction was already rolled back.");
         return Ok(());
     }
-    if !["applied", "prepared", "partial"].contains(&journal.status.as_str()) {
+    if ![
+        "applied",
+        "prepared",
+        "partial",
+        "rolling-back",
+        "rollback-partial",
+    ]
+    .contains(&journal.status.as_str())
+    {
         return Err("Hook transaction is not eligible for rollback".into());
     }
-    restore_files(&journal, journal.files.len(), journal.status != "applied")?;
+    let count = journal.files.len();
+    let allow_before =
+        journal.rollback_allow_before || matches!(journal.status.as_str(), "prepared" | "partial");
+    if let Err(error) = restore_files(&mut journal, path, count, allow_before) {
+        // A preflight conflict has not changed any target; an interrupted
+        // restoration retains per-file intent/progress for a later retry.
+        if journal.status == "rolling-back" {
+            journal.status = "rollback-partial".into();
+            if save_journal(path, &journal).is_err() {
+                return Err(format!(
+                    "{error}; rollback progress journal unavailable at {}",
+                    path.display()
+                ));
+            }
+        }
+        return Err(error);
+    }
     journal.status = "rolled-back".into();
     save_journal(path, &journal)?;
     println!("Hook transaction rolled back: {}", path.display());
@@ -614,6 +732,103 @@ mod tests {
         assert!(plan(&options).is_err());
         options.home = PathBuf::from("/tmp/../home/test");
         assert!(plan(&options).is_err());
+    }
+
+    #[test]
+    fn rollback_recovers_durable_intent_after_crash_before_progress_record() {
+        let mut options = options("crash-after-unlink");
+        options.clients = vec!["claude".into(), "codex".into()];
+        let path = apply_inner(&options, None).unwrap().unwrap();
+        let mut journal: Journal = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        journal.status = "rolling-back".into();
+        journal.files[1].restore_progress = RestoreProgress::Restoring;
+        save_journal(&path, &journal).unwrap();
+        // Simulate a crash after the filesystem change, before its directory
+        // sync and completed progress record. Recovery must sync and finish it.
+        fs::remove_file(&journal.files[1].path).unwrap();
+        rollback(&path).unwrap();
+        let journal: Journal = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(journal.status, "rolled-back");
+        assert!(journal
+            .files
+            .iter()
+            .all(|file| file.restore_progress == RestoreProgress::Restored));
+        assert!(!options.home.join(".claude/settings.json").exists());
+        assert!(!options.home.join(".codex/hooks.json").exists());
+        let _ = fs::remove_dir_all(options.home);
+    }
+
+    #[test]
+    fn prepared_legacy_journal_recovers_without_creating_target_directories() {
+        let mut options = options("legacy-prepared");
+        options.clients = vec!["claude".into(), "codex".into()];
+        let (changes, _) = prepare(&options).unwrap();
+        let transaction = options
+            .home
+            .join(STATE_RELATIVE)
+            .join("tx-prepared-fixture");
+        private_dirs(&transaction, &options.home).unwrap();
+        let path = transaction.join("journal.json");
+        // Version-1 journals from before progress tracking have no new fields.
+        let legacy = serde_json::json!({"version":1,"home":options.home,"binary":options.binary,"socket":options.socket,"clients":options.clients,"status":"prepared","files":changes.into_iter().map(|change| serde_json::json!({"path":change.path,"before":change.before,"after":change.after,"mode":null})).collect::<Vec<_>>()});
+        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        rollback(&path).unwrap();
+        assert!(!options.home.join(".claude").exists());
+        assert!(!options.home.join(".codex").exists());
+        let _ = fs::remove_dir_all(options.home);
+    }
+
+    #[test]
+    fn rollback_refuses_permission_tightening_before_restoring_any_file() {
+        let mut options = options("tightened-mode");
+        options.clients = vec!["claude".into(), "codex".into()];
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(options.home.join(".claude"))
+            .unwrap();
+        let claude = options.home.join(".claude/settings.json");
+        fs::write(&claude, b"{}").unwrap();
+        fs::set_permissions(&claude, fs::Permissions::from_mode(0o644)).unwrap();
+        let path = apply_inner(&options, None).unwrap().unwrap();
+        let after = fs::read(&claude).unwrap();
+        fs::set_permissions(&claude, fs::Permissions::from_mode(0o600)).unwrap();
+        let result = rollback(&path);
+        assert!(
+            result.is_err(),
+            "rollback silently undid a confidentiality tightening"
+        );
+        assert_eq!(fs::metadata(&claude).unwrap().mode() & 0o777, 0o600);
+        assert_eq!(fs::read(&claude).unwrap(), after);
+        assert!(options.home.join(".codex/hooks.json").exists());
+        let _ = fs::remove_dir_all(options.home);
+    }
+
+    #[test]
+    fn partial_rollback_can_resume_after_restoring_directory_permissions() {
+        let mut options = options("retry-rollback");
+        options.clients = vec!["claude".into(), "codex".into()];
+        let claude_dir = options.home.join(".claude");
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&claude_dir)
+            .unwrap();
+        let claude = claude_dir.join("settings.json");
+        fs::write(&claude, b"{}").unwrap();
+        let path = apply_inner(&options, None).unwrap().unwrap();
+        fs::set_permissions(&claude_dir, fs::Permissions::from_mode(0o500)).unwrap();
+        let first = rollback(&path);
+        fs::set_permissions(&claude_dir, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(first.is_err(), "filesystem failure was not observed");
+        assert!(!options.home.join(".codex/hooks.json").exists());
+        let journal: Journal = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_ne!(
+            journal.status, "applied",
+            "partial rollback falsely remained applied"
+        );
+        rollback(&path).expect("durable partial rollback must be retryable");
+        assert_eq!(fs::read(&claude).unwrap(), b"{}");
+        let _ = fs::remove_dir_all(options.home);
     }
 
     #[test]

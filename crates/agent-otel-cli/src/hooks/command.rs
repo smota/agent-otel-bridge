@@ -7,6 +7,7 @@ use base64::Engine;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "linux"))]
 pub fn is_bridge_command(cmd: &str) -> bool {
     let lower = cmd.to_ascii_lowercase();
     if let Some((_, encoded)) = cmd.split_once("-EncodedCommand ") {
@@ -25,6 +26,183 @@ pub fn is_bridge_command(cmd: &str) -> bool {
         }
     }
     lower.contains("agent-hook") || lower.contains("agent-otel-bridge hook")
+}
+
+/// On Linux ownership is a recognized direct invocation, never a substring in
+/// an arbitrary shell command. Unrecognized wrappers remain user-owned.
+#[cfg(target_os = "linux")]
+pub fn is_bridge_command(command: &str) -> bool {
+    let command = command.trim();
+    let guard = "if [ -n \"${GROK_WORKSPACE_ROOT:-}\" ]; then printf '{}'; else ";
+    let command = if let Some(inner) = command.strip_prefix(guard) {
+        let Some(inner) = inner.strip_suffix("; fi") else {
+            return false;
+        };
+        inner
+    } else {
+        command
+    };
+    // Recognize only the exact encoded launchers emitted by the existing
+    // Windows renderers; a legacy registration can be inspected on Linux.
+    let outer: Vec<_> = command.split_whitespace().collect();
+    if outer.len() == 5
+        && outer[0].replace('\\', "/").ends_with("/powershell.exe")
+        && outer[1..4] == ["-NoProfile", "-NonInteractive", "-EncodedCommand"]
+    {
+        let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(outer[4]) else {
+            return false;
+        };
+        if bytes.len() % 2 != 0 {
+            return false;
+        }
+        let words = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect::<Vec<_>>();
+        let Ok(script) = String::from_utf16(&words) else {
+            return false;
+        };
+        return recognized_powershell_invocation(&script);
+    }
+    let Some(mut tokens) = literal_shell_words(command) else {
+        return false;
+    };
+    if tokens
+        .first()
+        .is_some_and(|word| word.starts_with("AGENT_OTEL_SOCKET="))
+    {
+        tokens.remove(0);
+    }
+    let Some(executable) = tokens.first() else {
+        return false;
+    };
+    let basename = executable.rsplit(['/', '\\']).next().unwrap_or("");
+    let arguments = if basename.eq_ignore_ascii_case("agent-hook")
+        || basename.eq_ignore_ascii_case("agent-hook.exe")
+    {
+        &tokens[1..]
+    } else if (basename.eq_ignore_ascii_case("agent-otel-bridge")
+        || basename.eq_ignore_ascii_case("agent-otel-bridge.exe"))
+        && tokens.get(1).is_some_and(|word| word == "hook")
+    {
+        &tokens[2..]
+    } else {
+        return false;
+    };
+    recognized_arguments(arguments)
+}
+
+#[cfg(target_os = "linux")]
+fn recognized_arguments(arguments: &[String]) -> bool {
+    matches!(
+        arguments.first().map(String::as_str),
+        Some("PreToolUse" | "PostToolUse" | "Stop" | "PreInvocation" | "PostInvocation")
+    ) && (arguments.len() == 1
+        || (arguments.len() == 3
+            && arguments[1] == "--client"
+            && matches!(
+                arguments[2].as_str(),
+                "claude" | "codex" | "agy" | "antigravity" | "gemini" | "grok" | "pi"
+            )))
+}
+
+#[cfg(target_os = "linux")]
+fn literal_shell_words(command: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut quote = None;
+    let mut chars = command.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match (quote, ch) {
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (None, '\'' | '"') => {
+                quote = Some(ch);
+                started = true;
+            }
+            (Some('\''), _) => {
+                word.push(ch);
+                started = true;
+            }
+            (_, '\\') => {
+                let next = chars.next()?;
+                if quote == Some('"') && !matches!(next, '$' | '`' | '"' | '\\' | '\n') {
+                    word.push('\\');
+                }
+                word.push(next);
+                started = true;
+            }
+            (_, '$' | '`') => return None,
+            (
+                None,
+                ';' | '|' | '&' | '<' | '>' | '(' | ')' | '*' | '?' | '[' | ']' | '{' | '}' | '~'
+                | '\n' | '\r',
+            ) => return None,
+            (None, ch) if ch.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            (_, _) => {
+                word.push(ch);
+                started = true;
+            }
+        }
+    }
+    if quote.is_some() {
+        return None;
+    }
+    if started {
+        words.push(word);
+    }
+    Some(words)
+}
+
+#[cfg(target_os = "linux")]
+fn recognized_powershell_invocation(script: &str) -> bool {
+    let guard = "if ($env:GROK_WORKSPACE_ROOT) { '{}' } else { ";
+    let (script, guarded) = if let Some(inner) = script.strip_prefix(guard) {
+        let Some(inner) = inner.strip_suffix(" }") else {
+            return false;
+        };
+        (inner, true)
+    } else {
+        (script, false)
+    };
+    let Some(inner) = script.strip_prefix("& \"") else {
+        return false;
+    };
+    let mut binary = String::new();
+    let mut chars = inner.char_indices();
+    while let Some((offset, ch)) = chars.next() {
+        match ch {
+            '`' => {
+                let Some((_, escaped)) = chars.next() else {
+                    return false;
+                };
+                binary.push(escaped);
+            }
+            '"' => {
+                let Some(arguments) = literal_shell_words(inner[offset + 1..].trim()) else {
+                    return false;
+                };
+                let basename = binary.rsplit(['/', '\\']).next().unwrap_or("");
+                if !matches!(basename, "agent-hook" | "agent-hook.exe")
+                    || !recognized_arguments(&arguments)
+                {
+                    return false;
+                }
+                let tag = arguments.get(2).map(String::as_str);
+                return (!guarded || tag == Some("claude"))
+                    && script == format_powershell_hook_command(&binary, &arguments[0], tag);
+            }
+            _ => binary.push(ch),
+        }
+    }
+    false
 }
 
 pub fn has_bridge_command(value: &Value) -> bool {
@@ -238,6 +416,42 @@ pub fn resolve_canonical_hook_binary(
 #[cfg(all(test, target_os = "linux"))]
 mod linux_tests {
     use super::*;
+    #[test]
+    fn ownership_does_not_claim_foreign_audit_or_wrapper_commands() {
+        for command in [
+            "printf agent-hook-audit >> /tmp/foreign-audit",
+            "echo /opt/agent-hook PreToolUse",
+            "sh -c '/opt/agent-hook PreToolUse'",
+            "cat /opt/agent-hook",
+            "/opt/agent-hook-audit PreToolUse",
+            "echo agent-otel-bridge hook",
+            "/opt/*/agent-hook PreToolUse",
+        ] {
+            assert!(
+                !is_bridge_command(command),
+                "foreign invocation was claimed"
+            );
+        }
+    }
+
+    #[test]
+    fn merge_preserves_foreign_command_that_mentions_agent_hook() {
+        let path =
+            std::env::temp_dir().join(format!("bridge-foreign-audit-{}.json", std::process::id()));
+        let foreign = serde_json::json!({"matcher":".*","hooks":[{"type":"command","command":"printf agent-hook-audit >> /tmp/foreign-audit"}]});
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({"hooks":{"PreToolUse":[foreign.clone()]}}))
+                .unwrap(),
+        )
+        .unwrap();
+        super::super::install_standard_hooks(&path, "/opt/agent-hook", Some("codex")).unwrap();
+        let merged: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(merged["hooks"]["PreToolUse"][0], foreign);
+        assert_eq!(merged["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+    }
+
     #[test]
     fn native_harnesses_have_explicit_client_tags() {
         assert!(
