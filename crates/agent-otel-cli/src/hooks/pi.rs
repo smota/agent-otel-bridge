@@ -19,10 +19,12 @@ pub fn install_pi_hooks(
         return Err("Refusing to replace an unowned Pi extension".into());
     }
     fs::create_dir_all(extension.parent().ok_or("Missing Pi extension directory")?)?;
-    let content = include_str!("../pi-extension.ts").replace(
-        "__AGENT_OTEL_HOOK_PATH__",
-        &serde_json::to_string(binary.trim_matches('"'))?,
-    );
+    let socket = if cfg!(target_os = "linux") {
+        std::env::var("AGENT_OTEL_SOCKET").ok()
+    } else {
+        None
+    };
+    let content = render_pi_extension(binary, socket.as_deref())?;
     fs::write(extension, content)?;
     Ok(true)
 }
@@ -44,4 +46,23 @@ pub fn uninstall_pi_hooks(path: &Path, binary: &str) -> Result<bool, Box<dyn std
         changed = true;
     }
     Ok(changed)
+}
+
+pub(crate) fn render_pi_extension(
+    binary: &str,
+    socket: Option<&str>,
+) -> Result<String, serde_json::Error> {
+    Ok(include_str!("../pi-extension.ts")
+        .replace(
+            "__AGENT_OTEL_HOOK_PATH__",
+            &serde_json::to_string(binary.trim_matches('"'))?,
+        )
+        .replace(
+            "__AGENT_OTEL_SOCKET_ENV__",
+            &serde_json::to_string(
+                &socket
+                    .map(|socket| serde_json::json!({"AGENT_OTEL_SOCKET":socket}))
+                    .unwrap_or_else(|| serde_json::json!({})),
+            )?,
+        ))
 }

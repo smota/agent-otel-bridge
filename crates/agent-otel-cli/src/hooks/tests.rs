@@ -241,7 +241,13 @@ fn test_antigravity_hooks_install_and_uninstall_preserves_third_party() {
         );
         assert!(!command.contains('"'));
     } else {
-        assert_eq!(command, "\"C:\\Bridge\\agent-hook.exe\" PreToolUse");
+        assert_eq!(
+            command,
+            format_antigravity_hook_command("C:\\Bridge\\agent-hook.exe", "PreToolUse", None)
+        );
+        if cfg!(target_os = "linux") {
+            assert!(command.ends_with("--client agy"));
+        }
     }
 
     // Uninstall
@@ -303,7 +309,12 @@ fn format_claude_hook_command_guards_imported_grok_sessions() {
         assert!(decoded.contains("GROK_WORKSPACE_ROOT"));
         assert!(decoded.contains("'{}'"));
     } else {
-        assert_eq!(projected, format_hook_command(binary, "PreToolUse", None));
+        if cfg!(target_os = "linux") {
+            assert!(projected.contains("GROK_WORKSPACE_ROOT"));
+            assert!(projected.contains("--client claude"));
+        } else {
+            assert_eq!(projected, format_hook_command(binary, "PreToolUse", None));
+        }
     }
 }
 

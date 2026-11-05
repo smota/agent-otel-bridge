@@ -38,16 +38,40 @@ pub(crate) fn install_formatted_hooks(
     }
 
     let mut root: Value = if path.exists() {
-        let content = fs::read_to_string(path)?;
-        serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
+        serde_json::from_str(&fs::read_to_string(path)?)?
     } else {
         json!({})
     };
+    merge_formatted_hooks(&mut root, binary, client_tag, formatter, codex_windows)?;
+    let serialized = serde_json::to_string_pretty(&root)?;
+    fs::write(path, serialized)?;
+    Ok(true)
+}
 
-    if !root.is_object() {
-        root = json!({});
+pub(crate) fn merge_formatted_hooks(
+    root: &mut Value,
+    binary: &str,
+    client_tag: Option<&str>,
+    formatter: impl Fn(&str, &str, Option<&str>) -> String,
+    codex_windows: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !root.is_object() || root.get("hooks").is_some_and(|v| !v.is_object()) {
+        return Err("Invalid hook configuration; configuration unchanged".into());
     }
-
+    for event in ["PreToolUse", "PostToolUse", "Stop"] {
+        if let Some(groups) = root.get("hooks").and_then(|hooks| hooks.get(event)) {
+            let groups = groups.as_array().ok_or("Invalid hook event array")?;
+            for group in groups {
+                let hooks = group
+                    .get("hooks")
+                    .and_then(Value::as_array)
+                    .ok_or("Invalid hook group")?;
+                if hooks.iter().any(|hook| !hook.is_object()) {
+                    return Err("Invalid hook handler".into());
+                }
+            }
+        }
+    }
     // Clean up legacy "agent-otel-bridge" root key if present
     if let Some(obj) = root.as_object_mut() {
         obj.remove("agent-otel-bridge");
@@ -133,9 +157,7 @@ pub(crate) fn install_formatted_hooks(
         }
     }
 
-    let serialized = serde_json::to_string_pretty(&root)?;
-    fs::write(path, serialized)?;
-    Ok(true)
+    Ok(())
 }
 
 pub fn uninstall_standard_hooks(
@@ -157,20 +179,23 @@ pub fn uninstall_standard_hooks(
         for event in ["PreToolUse", "PostToolUse", "Stop"] {
             if let Some(arr) = hooks_obj.get_mut(event).and_then(|v| v.as_array_mut()) {
                 let initial_len = arr.len();
-                arr.retain(|item| {
-                    let matches_bridge = item
+                for group in arr.iter_mut() {
+                    if let Some(handlers) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+                        let before = handlers.len();
+                        handlers.retain(|hook| {
+                            !hook
+                                .get("command")
+                                .and_then(Value::as_str)
+                                .is_some_and(is_bridge_command)
+                        });
+                        changed |= before != handlers.len();
+                    }
+                }
+                arr.retain(|group| {
+                    !group
                         .get("hooks")
-                        .and_then(|h| h.as_array())
-                        .map(|harr| {
-                            harr.iter().any(|h| {
-                                h.get("command")
-                                    .and_then(|c| c.as_str())
-                                    .map(is_bridge_command)
-                                    .unwrap_or(false)
-                            })
-                        })
-                        .unwrap_or(false);
-                    !matches_bridge
+                        .and_then(Value::as_array)
+                        .is_some_and(Vec::is_empty)
                 });
                 if arr.len() != initial_len {
                     changed = true;
@@ -185,5 +210,21 @@ pub fn uninstall_standard_hooks(
         Ok(true)
     } else {
         Ok(false)
+    }
+}
+
+#[cfg(test)]
+mod preservation_tests {
+    use super::*;
+    #[test]
+    fn invalid_configuration_is_preserved() {
+        let path =
+            std::env::temp_dir().join(format!("bridge-malformed-{}.json", std::process::id()));
+        fs::write(&path, "malformed user configuration").unwrap();
+        let result = install_standard_hooks(&path, "/opt/agent-hook", Some("claude"));
+        let content = fs::read_to_string(&path).unwrap();
+        let _ = fs::remove_file(path);
+        assert!(result.is_err());
+        assert_eq!(content, "malformed user configuration");
     }
 }

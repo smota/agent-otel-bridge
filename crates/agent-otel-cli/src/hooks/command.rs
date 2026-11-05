@@ -43,6 +43,14 @@ pub fn has_bridge_command(value: &Value) -> bool {
 
 pub fn format_claude_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
     if !cfg!(windows) {
+        #[cfg(target_os = "linux")]
+        return format_posix_claude_hook_command(
+            binary,
+            event,
+            client_tag,
+            std::env::var("AGENT_OTEL_SOCKET").ok().as_deref(),
+        );
+        #[cfg(not(target_os = "linux"))]
         return format_hook_command(binary, event, client_tag);
     }
     format_claude_windows_hook_command(binary, event)
@@ -68,20 +76,32 @@ pub fn claude_imported_grok_guard_script(binary: &str, event: &str) -> String {
 }
 
 pub fn format_hook_command(binary: &str, event: &str, client_tag: Option<&str>) -> String {
-    let client_arg = match client_tag {
-        Some(tag) => format!(" --client {tag}"),
-        None => String::new(),
-    };
+    #[cfg(target_os = "linux")]
+    {
+        format_posix_hook_command(
+            binary,
+            event,
+            client_tag,
+            std::env::var("AGENT_OTEL_SOCKET").ok().as_deref(),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let client_arg = match client_tag {
+            Some(tag) => format!(" --client {tag}"),
+            None => String::new(),
+        };
 
-    // Always protect the executable path from shell splitting.  Keep a path
-    // that the caller has already quoted unchanged.
-    let bin_str = if binary.starts_with('"') && binary.ends_with('"') {
-        binary.to_string()
-    } else {
-        format!("\"{binary}\"")
-    };
+        // Always protect the executable path from shell splitting.  Keep a path
+        // that the caller has already quoted unchanged.
+        let bin_str = if binary.starts_with('"') && binary.ends_with('"') {
+            binary.to_string()
+        } else {
+            format!("\"{binary}\"")
+        };
 
-    format!("{bin_str} {event}{client_arg}")
+        format!("{bin_str} {event}{client_arg}")
+    }
 }
 
 /// Render a command for adapters whose interpreter evaluates hook commands as
@@ -139,7 +159,15 @@ pub fn format_antigravity_hook_command(
         let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
         format!("%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -EncodedCommand {encoded}")
     } else {
-        format_hook_command(binary, event, client_tag)
+        format_hook_command(
+            binary,
+            event,
+            if cfg!(target_os = "linux") {
+                client_tag.or(Some("agy"))
+            } else {
+                client_tag
+            },
+        )
     }
 }
 
@@ -205,4 +233,122 @@ pub fn resolve_canonical_hook_binary(
         "Could not find an installed 'agent-hook' binary.\nRun 'agent-otel-bridge local install' to build and activate the local runtime, or specify --binary <path>."
             .into(),
     )
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+    #[test]
+    fn native_harnesses_have_explicit_client_tags() {
+        assert!(
+            format_claude_hook_command("/opt/agent-hook", "PreToolUse", None)
+                .contains("--client claude")
+        );
+        assert!(
+            format_antigravity_hook_command("/opt/agent-hook", "PreToolUse", None)
+                .ends_with("--client agy")
+        );
+    }
+    #[test]
+    fn imported_claude_telemetry_does_not_duplicate_native_grok_events() {
+        let command =
+            format_posix_claude_hook_command("/bin/false", "PreToolUse", Some("claude"), None);
+        let imported = std::process::Command::new("/bin/sh")
+            .args(["-c", &command])
+            .env("GROK_WORKSPACE_ROOT", "/workspace")
+            .output()
+            .unwrap();
+        assert!(imported.status.success());
+        assert_eq!(imported.stdout, b"{}");
+        let native = std::process::Command::new("/bin/sh")
+            .args(["-c", &command])
+            .env_remove("GROK_WORKSPACE_ROOT")
+            .output()
+            .unwrap();
+        assert!(!native.status.success());
+    }
+
+    #[test]
+    fn posix_path_is_literal_not_shell_expansion() {
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!(
+                "printf '%s' {}",
+                format_hook_command(
+                    "/tmp/$HOME`printf injected`/agent-hook",
+                    "Stop",
+                    Some("codex")
+                )
+            ))
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            "/tmp/$HOME`printf injected`/agent-hookStop--clientcodex"
+        );
+    }
+}
+
+/// Installation-time POSIX renderer. Persist the socket because isolated seat
+/// launches may clear the parent's environment before invoking the hook.
+#[cfg(target_os = "linux")]
+pub fn format_posix_hook_command(
+    binary: &str,
+    event: &str,
+    client_tag: Option<&str>,
+    socket: Option<&str>,
+) -> String {
+    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\"'\"'"));
+    let prefix = socket
+        .map(|path| format!("AGENT_OTEL_SOCKET={} ", quote(path)))
+        .unwrap_or_default();
+    // Retain double-quoted executable presentation while escaping every POSIX
+    // expansion character. No shell is spawned by the client itself.
+    let mut path = String::new();
+    let mut chars = binary.trim_matches('"').chars().peekable();
+    while let Some(ch) = chars.next() {
+        if matches!(ch, '$' | '`' | '"')
+            || (ch == '\\'
+                && chars
+                    .peek()
+                    .is_none_or(|next| matches!(next, '$' | '`' | '"' | '\\' | '\n')))
+        {
+            path.push('\\');
+        }
+        path.push(ch);
+    }
+    let client = client_tag
+        .map(|tag| {
+            format!(
+                " --client {}",
+                if tag.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+                    tag.to_string()
+                } else {
+                    quote(tag)
+                }
+            )
+        })
+        .unwrap_or_default();
+    format!(
+        "{prefix}\"{path}\" {}{client}",
+        if event.bytes().all(|b| b.is_ascii_alphanumeric()) {
+            event.to_string()
+        } else {
+            quote(event)
+        }
+    )
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn format_posix_claude_hook_command(
+    binary: &str,
+    event: &str,
+    client_tag: Option<&str>,
+    socket: Option<&str>,
+) -> String {
+    let invocation =
+        format_posix_hook_command(binary, event, client_tag.or(Some("claude")), socket);
+    // Grok imports Claude settings and loads its native hooks too. Skip only
+    // this bridge command, preserving all foreign Claude hooks.
+    format!("if [ -n \"${{GROK_WORKSPACE_ROOT:-}}\" ]; then printf '{{}}'; else {invocation}; fi")
 }
