@@ -19,3 +19,6 @@ agent-otel-ipc = { workspace = true, default-features = false, features = ["clie
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { workspace = true }

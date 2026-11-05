@@ -311,7 +311,7 @@ async fn handle_collector_request(
     stats: Arc<CollectorStats>,
     release_traces: CancellationToken,
 ) -> io::Result<()> {
-    let (path, body) = match read_http_request(&mut stream).await {
+    let (method, path, body) = match read_http_request(&mut stream).await {
         Ok(request) => request,
         Err(error) if is_peer_transport_abort(&error) => {
             stats.transport_aborts.fetch_add(1, Ordering::Relaxed);
@@ -319,8 +319,10 @@ async fn handle_collector_request(
         }
         Err(error) => return Err(error),
     };
-    match path.as_str() {
-        "/v1/traces" => {
+    match (method.as_str(), path.as_str()) {
+        // Local HTTP readiness probes must not terminate the owned collector.
+        ("GET" | "HEAD", "/") => {}
+        (_, "/v1/traces") => {
             match ExportTraceServiceRequest::decode(body.as_slice()) {
                 Ok(request) => {
                     let mut unique_spans = stats
@@ -350,7 +352,7 @@ async fn handle_collector_request(
             stats.trace_requests.fetch_add(1, Ordering::Relaxed);
             release_traces.cancelled().await;
         }
-        "/v1/metrics" => {
+        (_, "/v1/metrics") => {
             if ExportMetricsServiceRequest::decode(body.as_slice()).is_err() {
                 stats.parse_failures.fetch_add(1, Ordering::Relaxed);
             }
@@ -385,7 +387,7 @@ fn is_peer_transport_abort(error: &io::Error) -> bool {
     )
 }
 
-async fn read_http_request(stream: &mut TcpStream) -> io::Result<(String, Vec<u8>)> {
+async fn read_http_request(stream: &mut TcpStream) -> io::Result<(String, String, Vec<u8>)> {
     const HEADER_LIMIT: usize = 32 * 1024;
     const BODY_LIMIT: usize = 2 * 1024 * 1024;
     let mut bytes = Vec::new();
@@ -415,6 +417,11 @@ async fn read_http_request(stream: &mut TcpStream) -> io::Result<(String, Vec<u8
         .lines()
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing request line"))?;
+    let method = request_line
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing request method"))?
+        .to_string();
     let path = request_line
         .split_whitespace()
         .nth(1)
@@ -428,6 +435,8 @@ async fn read_http_request(stream: &mut TcpStream) -> io::Result<(String, Vec<u8
                 .then(|| value.trim().parse::<usize>().ok())
                 .flatten()
         })
+        // Bodyless readiness requests need no Content-Length; export POSTs still do.
+        .or_else(|| (matches!(method.as_str(), "GET" | "HEAD") && path == "/").then_some(0))
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing content length"))?;
     if content_length > BODY_LIMIT {
         return Err(io::Error::new(
@@ -447,7 +456,7 @@ async fn read_http_request(stream: &mut TcpStream) -> io::Result<(String, Vec<u8
         }
         bytes.extend_from_slice(&chunk[..read]);
     }
-    Ok((path, bytes[header_end..required].to_vec()))
+    Ok((method, path, bytes[header_end..required].to_vec()))
 }
 
 fn unique_ipc_endpoint() -> String {
@@ -485,6 +494,52 @@ fn unique_test_workspace() -> std::path::PathBuf {
     ));
     std::fs::create_dir_all(&path).expect("create owned test workspace");
     path
+}
+
+#[tokio::test]
+async fn bodyless_readiness_probe_preserves_collector_for_fragmented_export() {
+    let collector = TestCollector::start().await;
+    let address = collector.endpoint.strip_prefix("http://").unwrap();
+    let mut empty = TcpStream::connect(address).await.unwrap();
+    empty.shutdown().await.unwrap();
+    let mut response = Vec::new();
+    tokio::time::timeout(Duration::from_secs(1), empty.read_to_end(&mut response))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(collector.stats.transport_aborts.load(Ordering::Relaxed), 1);
+
+    for method in ["GET", "HEAD"] {
+        let mut probe = TcpStream::connect(address).await.unwrap();
+        let request = format!("{method} / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: Go-http-client/1.1\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n");
+        probe.write_all(request.as_bytes()).await.unwrap();
+        response.clear();
+        tokio::time::timeout(Duration::from_secs(1), probe.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+    }
+    assert_eq!(collector.stats.parse_failures.load(Ordering::Relaxed), 0);
+    assert_eq!(collector.stats.metric_requests.load(Ordering::Relaxed), 0);
+    assert_eq!(collector.stats.trace_requests.load(Ordering::Relaxed), 0);
+
+    let mut export = TcpStream::connect(address).await.unwrap();
+    export
+        .write_all(b"POST /v1/metrics HTTP/1.1\r\nContent-Len")
+        .await
+        .unwrap();
+    tokio::task::yield_now().await;
+    export.write_all(b"gth: 0\r\n\r\n").await.unwrap();
+    response.clear();
+    tokio::time::timeout(Duration::from_secs(1), export.read_to_end(&mut response))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+    assert_eq!(collector.stats.metric_requests.load(Ordering::Relaxed), 1);
+    assert_eq!(collector.stats.parse_failures.load(Ordering::Relaxed), 0);
+    collector.stop().await;
 }
 
 #[tokio::test]

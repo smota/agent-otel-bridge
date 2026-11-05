@@ -155,6 +155,24 @@ enum LocalAction {
 
 #[derive(Subcommand, Debug)]
 enum HookAction {
+    /// Preview native hook changes for an explicit Linux HOME without writing
+    #[cfg(target_os = "linux")]
+    PlanHome {
+        #[command(flatten)]
+        options: hooks::home_apply::HomeHookOptions,
+    },
+    /// Apply native HOME hooks with private journal, lock and rollback evidence
+    #[cfg(target_os = "linux")]
+    ApplyHome {
+        #[command(flatten)]
+        options: hooks::home_apply::HomeHookOptions,
+    },
+    /// Restore a native HOME hook transaction if its files are unchanged
+    #[cfg(target_os = "linux")]
+    RollbackHome {
+        #[arg(long)]
+        journal: std::path::PathBuf,
+    },
     /// Installs hooks for specified client (antigravity, claude, codex, grok, pi, or all)
     Install {
         #[arg(long, default_value = "all")]
@@ -310,6 +328,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => local::uninstall_local(purge, remove_hooks),
         },
         Commands::Hooks { action } => match action {
+            #[cfg(target_os = "linux")]
+            HookAction::PlanHome { options } => {
+                hooks::home_apply::plan(&options).map_err(Into::into)
+            }
+            #[cfg(target_os = "linux")]
+            HookAction::ApplyHome { options } => {
+                hooks::home_apply::apply(&options).map_err(Into::into)
+            }
+            #[cfg(target_os = "linux")]
+            HookAction::RollbackHome { journal } => {
+                hooks::home_apply::rollback(&journal).map_err(Into::into)
+            }
             HookAction::Install {
                 client,
                 project,

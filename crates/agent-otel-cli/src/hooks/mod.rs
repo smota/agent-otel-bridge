@@ -8,6 +8,10 @@ mod claude;
 mod codex;
 mod command;
 mod grok;
+#[cfg(target_os = "linux")]
+mod home;
+#[cfg(target_os = "linux")]
+pub mod home_apply;
 mod paths;
 mod pi;
 mod standard;
@@ -19,6 +23,8 @@ pub use claude::{install_claude_hooks, uninstall_claude_hooks};
 pub use codex::{
     format_codex_hook_command, install_codex_hooks, load_codex_hook_shell, CodexHookShell,
 };
+#[cfg(target_os = "linux")]
+pub use command::format_posix_hook_command;
 pub use command::{
     check_binary_in_path, claude_imported_grok_guard_script, find_binary_in_path,
     format_antigravity_hook_command, format_claude_hook_command,
@@ -27,6 +33,8 @@ pub use command::{
     resolve_canonical_hook_binary,
 };
 pub use grok::install_grok_hooks;
+#[cfg(target_os = "linux")]
+pub use home::{plan_home_hooks, HomeHookChange};
 pub use paths::{
     get_antigravity_config_path, get_antigravity_project_path, get_claude_config_path,
     get_claude_project_path, get_codex_config_path, get_codex_project_path, get_grok_config_path,

@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 
 const hook = __AGENT_OTEL_HOOK_PATH__;
+const socketEnv = __AGENT_OTEL_SOCKET_ENV__;
 export default function (pi: any) {
   const events = {
     session_start: "PreInvocation",
@@ -24,6 +25,7 @@ export default function (pi: any) {
         });
         const child = spawn(hook, [target, "--client", "pi"], {
           windowsHide: true,
+          env: { ...process.env, ...socketEnv },
           stdio: ["pipe", "ignore", "ignore"],
           timeout: 1000,
         });

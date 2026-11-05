@@ -9,11 +9,19 @@ use std::fs;
 use std::path::Path;
 
 pub fn antigravity_bridge_hooks(binary: &str, client_tag: Option<&str>) -> Value {
-    let pre_tool = format_antigravity_hook_command(binary, "PreToolUse", client_tag);
-    let post_tool = format_antigravity_hook_command(binary, "PostToolUse", client_tag);
-    let pre_inv = format_antigravity_hook_command(binary, "PreInvocation", client_tag);
-    let post_inv = format_antigravity_hook_command(binary, "PostInvocation", client_tag);
-    let stop = format_antigravity_hook_command(binary, "Stop", client_tag);
+    antigravity_bridge_hooks_with_formatter(binary, client_tag, format_antigravity_hook_command)
+}
+
+pub(crate) fn antigravity_bridge_hooks_with_formatter(
+    binary: &str,
+    client_tag: Option<&str>,
+    formatter: impl Fn(&str, &str, Option<&str>) -> String,
+) -> Value {
+    let pre_tool = formatter(binary, "PreToolUse", client_tag);
+    let post_tool = formatter(binary, "PostToolUse", client_tag);
+    let pre_inv = formatter(binary, "PreInvocation", client_tag);
+    let post_inv = formatter(binary, "PostInvocation", client_tag);
+    let stop = formatter(binary, "Stop", client_tag);
     json!({
         "PreToolUse": [
             {
@@ -44,13 +52,13 @@ pub fn install_antigravity_hooks(
 
     let mut root: Value = if path.exists() {
         let content = fs::read_to_string(path)?;
-        serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
+        serde_json::from_str(&content)?
     } else {
         json!({})
     };
 
     if !root.is_object() {
-        root = json!({});
+        return Err("Invalid Antigravity hook configuration; configuration unchanged".into());
     }
 
     // Update only the agent-otel-bridge section, preserving third-party keys intact.

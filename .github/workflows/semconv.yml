@@ -31,7 +31,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Fetch agent-otel-core dependencies
-        run: cargo fetch -p agent-otel-core
+        run: cargo fetch --locked --manifest-path crates/agent-otel-core/Cargo.toml
 
       - name: Registry lists attribute constants
         run: cargo test -p agent-otel-core --offline registry_lists_attribute_constants

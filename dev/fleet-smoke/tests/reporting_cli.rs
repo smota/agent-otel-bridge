@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::{
     io::{Read, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     process::Command,
     thread,
     time::{Duration, Instant},
@@ -64,7 +64,7 @@ fn collector(reject: bool) -> (String, thread::JoinHandle<Vec<Value>>) {
     let handle = thread::spawn(move || {
         let mut payloads = Vec::new();
         let mut last = Instant::now();
-        while last.elapsed() < Duration::from_secs(3) {
+        'connections: while last.elapsed() < Duration::from_secs(3) {
             let (mut stream, _) = match listener.accept() {
                 Ok(value) => value,
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -85,13 +85,19 @@ fn collector(reject: bool) -> (String, thread::JoinHandle<Vec<Value>>) {
                 bytes.extend_from_slice(&buffer[..count]);
                 if let Some(split) = bytes.windows(4).position(|b| b == b"\r\n\r\n") {
                     let headers = String::from_utf8_lossy(&bytes[..split]).to_ascii_lowercase();
-                    let size: usize = headers
+                    let content_length = headers
                         .lines()
-                        .find_map(|line| line.strip_prefix("content-length:"))
-                        .unwrap()
-                        .trim()
-                        .parse()
-                        .unwrap();
+                        .find_map(|line| line.strip_prefix("content-length:"));
+                    // Station readiness probes are not OTLP exports or fixture activity.
+                    if matches!(
+                        headers.lines().next(),
+                        Some("get / http/1.1" | "head / http/1.1")
+                    ) && content_length.is_none_or(|value| value.trim() == "0")
+                    {
+                        stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                        continue 'connections;
+                    }
+                    let size: usize = content_length.unwrap().trim().parse().unwrap();
                     if bytes.len() >= split + 4 + size {
                         payloads.push(
                             serde_json::from_slice(&bytes[split + 4..split + 4 + size]).unwrap(),
@@ -169,5 +175,45 @@ fn repeats_isolate_receipts_and_export_metadata() {
             .as_array()
             .unwrap();
         assert!(attrs.iter().any(|a| a["key"] == "agent.smoke.run_id"));
+    }
+}
+
+#[test]
+fn readiness_probes_preserve_export_payloads_and_intentional_status() {
+    for reject in [false, true] {
+        let (endpoint, server) = collector(reject);
+        let address = endpoint
+            .strip_prefix("http://")
+            .unwrap()
+            .strip_suffix("/v1/traces")
+            .unwrap();
+        for method in ["GET", "HEAD"] {
+            let mut stream = TcpStream::connect(address).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(1)))
+                .unwrap();
+            write!(stream, "{method} / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: Go-http-client/1.1\r\nConnection: close\r\nAccept-Encoding: gzip\r\n\r\n").unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        }
+        let mut stream = TcpStream::connect(address).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        stream
+            .write_all(
+                b"POST /v1/traces HTTP/1.1\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            )
+            .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        let status = if reject {
+            "500 Internal Server Error"
+        } else {
+            "200 OK"
+        };
+        assert!(response.starts_with(&format!("HTTP/1.1 {status}\r\n")));
+        assert_eq!(server.join().unwrap(), vec![serde_json::json!({})]);
     }
 }

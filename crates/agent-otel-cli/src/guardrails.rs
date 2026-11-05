@@ -122,12 +122,23 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
 
     // 5. Conservative decimal interpretation of the documented < 300 KB SLA.
     print!("[GUARDRAIL] Checking client binary size SLA (< 300000 bytes)... ");
-    let build_rel = Command::new("cargo")
-        .args(["build", "--release", "-p", "agent-otel-client"])
-        .status();
+    let native_linux = cfg!(all(target_os = "linux", target_arch = "x86_64"));
+    let build_rel = if native_linux {
+        Command::new("bash")
+            .arg("scripts/build-linux-hook.sh")
+            .status()
+    } else {
+        Command::new("cargo")
+            .args(["build", "--release", "-p", "agent-otel-client"])
+            .status()
+    };
     if build_rel.is_ok_and(|status| status.success()) {
         let exe_name = format!("agent-hook{}", std::env::consts::EXE_SUFFIX);
-        let bin_path = Path::new("target").join("release").join(&exe_name);
+        let bin_path = if native_linux {
+            crate::local::native_release_dir().join(&exe_name)
+        } else {
+            Path::new("target").join("release").join(&exe_name)
+        };
         if bin_path.exists() {
             if let Ok(meta) = fs::metadata(&bin_path) {
                 if meta.len() >= 300_000 {
@@ -135,6 +146,17 @@ pub fn run_check(fix: bool) -> Result<(), Box<dyn std::error::Error>> {
                     failures += 1;
                 } else {
                     println!("({} bytes) PASSED", meta.len());
+                    if native_linux {
+                        let verified = Command::new("python3")
+                            .arg("scripts/check-linux-hook.py")
+                            .arg(&bin_path)
+                            .status()
+                            .is_ok_and(|status| status.success());
+                        if !verified {
+                            println!("FAILED (packaged native hook contract checks)");
+                            failures += 1;
+                        }
+                    }
                 }
             } else {
                 println!("FAILED to inspect candidate binary");

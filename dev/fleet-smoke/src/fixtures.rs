@@ -428,11 +428,13 @@ mod tests {
             error.kind(),
             std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
         ));
-        stream.write_all(b"Connection: close\r\n\r\n").unwrap();
-        stream.shutdown(Shutdown::Write).unwrap();
+        // Configure the response deadline while the incomplete request keeps
+        // the socket open, before half-close or a completed peer response.
         stream
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap();
+        stream.write_all(b"Connection: close\r\n\r\n").unwrap();
+        stream.shutdown(Shutdown::Write).unwrap();
         let mut response = String::new();
         stream.read_to_string(&mut response).unwrap();
         assert!(response.starts_with("HTTP/1.1 200 OK"));

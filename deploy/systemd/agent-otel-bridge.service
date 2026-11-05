@@ -1,0 +1,25 @@
+[Unit]
+Description=Native Linux agent telemetry bridge
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/observability/consumer.env
+Environment=AGENT_OTEL_HOME=%h/.local/bin/.agent-otel-bridge
+Environment=AGENT_OTEL_SOCKET=%h/.local/bin/.agent-otel-bridge/run/socket
+Environment=OTEL_SERVICE_NAME=agent-otel-bridge
+UnsetEnvironment=OTEL_EXPORTER_OTLP_TRACES_ENDPOINT OTEL_EXPORTER_OTLP_METRICS_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_PROTOCOL OTEL_EXPORTER_OTLP_METRICS_PROTOCOL OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS OTEL_EXPORTER_OTLP_METRICS_HEADERS
+ExecStartPre=/usr/bin/install -d -m 0700 "%h/.local/bin/.agent-otel-bridge/run"
+ExecStart="%h/.local/bin/.agent-otel-bridge/bin/agent-otel-bridge" daemon
+ExecStartPost=/usr/bin/timeout 5s /bin/bash -c 'while [[ ! -S "$$1" ]]; do /usr/bin/sleep 0.05; done; [[ ! -L "$$1" && -O "$$1" ]] && /usr/bin/chmod 0600 -- "$$1"' -- "%h/.local/bin/.agent-otel-bridge/run/socket"
+Restart=always
+RestartSec=5s
+UMask=0077
+KillSignal=SIGINT
+TimeoutStopSec=10s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
