@@ -68,6 +68,14 @@ pub fn get_canonical_bin_dir() -> PathBuf {
     get_canonical_local_dir().join("bin")
 }
 
+pub(crate) fn native_release_dir() -> PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("target"))
+        .join("release")
+}
+
 pub fn get_plugins_stage_dir() -> PathBuf {
     get_canonical_local_dir().join("plugins-stage")
 }
@@ -194,24 +202,58 @@ pub fn install_candidate(
     let (src_hook, src_bridge) = if let Some(build_dir) = from_build {
         (build_dir.join(hook_name), build_dir.join(bridge_name))
     } else {
-        let release_dir = Path::new("target").join("release");
+        let release_dir = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            native_release_dir()
+        } else {
+            Path::new("target").join("release")
+        };
         let hook_path = release_dir.join(hook_name);
         let bridge_path = release_dir.join(bridge_name);
 
         if !hook_path.exists() || !bridge_path.exists() {
             println!("  [build] Compiling production release binaries...");
-            let status = Command::new("cargo")
-                .args([
+            let mut build = Command::new("cargo");
+            if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+                build.args([
+                    "build",
+                    "--release",
+                    "--locked",
+                    "--target",
+                    "x86_64-unknown-linux-gnu",
+                    "-p",
+                    "agent-otel-bridge",
+                ]);
+            } else {
+                build.args([
                     "build",
                     "--release",
                     "-p",
                     "agent-otel-client",
                     "-p",
                     "agent-otel-cli",
-                ])
-                .status()?;
+                ]);
+            }
+            let status = build.status()?;
             if !status.success() {
                 return Err("Failed to compile candidate binaries with cargo".into());
+            }
+            if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+                let native_bridge = release_dir
+                    .parent()
+                    .ok_or("Missing native build output directory")?
+                    .join("x86_64-unknown-linux-gnu/release")
+                    .join(bridge_name);
+                safe_copy_or_replace(&native_bridge, &bridge_path)?;
+            }
+        }
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            // Ordinary Cargo builds can replace agent-hook. Build the reviewed
+            // production-only native profile last; test harnesses keep unwind.
+            let status = Command::new("bash")
+                .arg("scripts/build-linux-hook.sh")
+                .status()?;
+            if !status.success() {
+                return Err("Native Linux hook packaging failed; nothing installed".into());
             }
         }
         (hook_path, bridge_path)
@@ -226,6 +268,12 @@ pub fn install_candidate(
 
     let hook_sha = compute_sha256(&src_hook)?;
     let hook_size = fs::metadata(&src_hook)?.len();
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) && hook_size >= 300_000 {
+        return Err(format!(
+            "Native Linux hook candidate is {hook_size} bytes; strict limit is below 300000 bytes"
+        )
+        .into());
+    }
     let bridge_sha = compute_sha256(&src_bridge)?;
     let bridge_size = fs::metadata(&src_bridge)?.len();
 

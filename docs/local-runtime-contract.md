@@ -215,3 +215,44 @@ Unknown versions, modes, fields, malformed JSON and read errors are rejected. Th
 Codex projection detects encoded bridge registrations, updates owned commandWindows overrides, and refuses ambiguous ownership or malformed hooks without replacing the file. Failed hook registrations produce a nonzero CLI result; successful registrations for other clients remain applied and are reported as partial work. Changed definitions require Codex's normal trust review; installers must not write trust approval.
 
 [Candidate measurements](production-refinement/evidence/M2/codex-candidate-02.md) separate shell startup from native runtime. Generate previews in an isolated home, review the diff against the active file, and use a scoped projection that preserves third-party hooks. Never replace the global file with a bridge-only sample. Active station validation and Desktop/IDE coverage remain separate acceptance steps.
+
+## 7. Native Linux / WSL release profile (x86_64 GNU)
+
+The production Linux hook retains the strict **below 300000 bytes** gate. Build it
+with `bash scripts/build-linux-hook.sh`, after any ordinary Cargo release build.
+The script checks the native target, runs `cargo rustc --release --locked` for
+`agent-hook` only, explicitly sets `panic=abort`, and links the reviewed augment
+script. It publishes the checked executable to `target/release/agent-hook` (or the
+same release directory under `CARGO_TARGET_DIR`). No post-link binary editing is
+used. The daemon, dependencies, Windows builds, and ordinary Cargo test harnesses
+do not receive these linker arguments.
+
+The linker script is copied into an immutable SHA-256-addressed build-cache path;
+changing only its contents therefore changes Cargo's final link argument and
+forces a relink. Linux local builds also select the native target explicitly and
+copy its bridge output into the same conventional staging directory, including
+when `CARGO_BUILD_TARGET` selects that native target.
+
+This profile removes `.eh_frame` and `.eh_frame_hdr` at the final client link,
+retains `.gcc_except_table`, RELRO, a non-executable stack, and separate writable
+and executable segments. It requires no Rust/C exception unwinding,
+`pthread_exit`, or `pthread_cancel` in the hook. Diagnostic Rust backtraces may
+truncate; this is an explicit diagnostic limitation, not a claim that prebuilt
+standard-library unwinder imports disappear. Linux uses an independent native
+pthread watchdog and unbuffered inherited streams; thread/clock creation failure
+exits zero without attempting a potentially blocked response.
+
+Build verification uses Cargo, Bash, GNU core utilities/binutils (`readelf`), and
+Python 3 from the station runtime. Run
+`python3 scripts/check-linux-hook.py target/release/agent-hook` to exercise the
+actual packaged ELF against isolated Unix receivers and blocked-stream fixtures.
+Every subprocess has its own socket override; no live daemon is contacted.
+`cargo guardrails` invokes both the native packager and these artifact checks on
+Linux x86_64. `local install` builds this profile last, and `--from-build` refuses
+oversized Linux hooks before creating installation state. Source checks,
+packaged-artifact checks, and active installation checks remain separate.
+
+Existing process-lifecycle benchmark timings include loader/process overhead;
+they do not establish the internal main-entry-to-exit latency. Preserve this
+measurement distinction in acceptance evidence. No Windows artifact equivalence
+is claimed by Linux validation.

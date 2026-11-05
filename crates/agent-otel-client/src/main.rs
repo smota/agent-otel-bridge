@@ -4,15 +4,26 @@
  */
 
 use std::borrow::Cow;
+#[cfg(not(target_os = "linux"))]
 use std::io::{self, Read, Write};
+#[cfg(not(target_os = "linux"))]
 use std::process;
+#[cfg(not(target_os = "linux"))]
 use std::thread;
 use std::time::{Duration, Instant};
 
-use agent_otel_ipc::client::{
-    attempt_send_until, read_traceparent, read_tracestate, terminate_current_process, SendAttempt,
-};
+use agent_otel_ipc::client::{attempt_send_until, read_traceparent, read_tracestate, SendAttempt};
 use agent_otel_ipc::frame::{encode_context_payload, MsgType, WireHeader};
+
+#[cfg(not(target_os = "linux"))]
+use agent_otel_ipc::client::terminate_current_process;
+#[cfg(not(target_os = "linux"))]
+use std::process::exit as exit_process;
+
+#[cfg(target_os = "linux")]
+mod linux_runtime;
+#[cfg(target_os = "linux")]
+use linux_runtime::{exit_process, read_stdin_capped};
 
 mod hook_observer;
 
@@ -24,13 +35,25 @@ const DEFAULT_WATCHDOG_MS: u64 = 3;
 fn main() {
     let main_entry = Instant::now();
     let watchdog_duration = watchdog_duration();
+    #[cfg(not(target_os = "linux"))]
     let absolute_deadline = main_entry + watchdog_duration;
+    #[cfg(target_os = "linux")]
+    let absolute_deadline = match main_entry.checked_add(watchdog_duration) {
+        Some(deadline) => deadline,
+        None => exit_process(0),
+    };
+    #[cfg(not(target_os = "linux"))]
     spawn_watchdog(absolute_deadline);
+    #[cfg(target_os = "linux")]
+    if !linux_runtime::spawn_watchdog(absolute_deadline) {
+        // Without an independent watchdog even a response could block stdout.
+        exit_process(0);
+    }
 
     let observer = HookObserver::from_environment(main_entry);
     let header = resolve_header();
     if !write_response(header) {
-        process::exit(0);
+        exit_process(0);
     }
     let response_completed = observer.as_ref().map(HookObserver::elapsed);
 
@@ -61,7 +84,7 @@ fn main() {
                     result.err(),
                 );
             }
-            process::exit(0);
+            exit_process(0);
         }
         #[cfg(windows)]
         SendAttempt::CleanupRequired { error, pending } => {
@@ -118,6 +141,7 @@ const CLIENT_MAPPINGS: &[ClientMapping] = &[
     },
 ];
 
+#[cfg(not(target_os = "linux"))]
 fn resolve_client_id(arg: &str) -> u16 {
     let lower = arg.to_ascii_lowercase();
     for m in CLIENT_MAPPINGS {
@@ -128,6 +152,7 @@ fn resolve_client_id(arg: &str) -> u16 {
     0
 }
 
+#[cfg(not(target_os = "linux"))]
 fn resolve_header() -> WireHeader {
     let mut event_id = 0u8;
     let mut client_id = 0u16;
@@ -164,6 +189,50 @@ fn resolve_header() -> WireHeader {
     WireHeader::new(client_id, event_id)
 }
 
+#[cfg(target_os = "linux")]
+fn resolve_header() -> WireHeader {
+    let mut event_id = 255;
+    let mut client_id = 0;
+    let mut args = std::env::args_os().skip(1);
+    while let Some(argument) = args.next() {
+        // An unrecognized, non-UTF-8 OS argument must not panic on the hook's
+        // fail-open path. Recognized event/client names are all ASCII.
+        let Some(argument) = argument.to_str() else {
+            continue;
+        };
+        if argument == "--client" || argument == "--agent" {
+            if let Some(client) = args.next() {
+                client_id = client
+                    .to_str()
+                    .and_then(|client| {
+                        CLIENT_MAPPINGS.iter().find(|mapping| {
+                            mapping
+                                .aliases
+                                .iter()
+                                .any(|alias| alias.eq_ignore_ascii_case(client))
+                        })
+                    })
+                    .map_or(0, |mapping| mapping.wire_id);
+            }
+            continue;
+        }
+        match argument {
+            "PreInvocation" | "pre_invocation" => event_id = 1,
+            "PostInvocation" | "post_invocation" => event_id = 2,
+            "PreToolUse" | "pre_tool_use" => event_id = 3,
+            "PostToolUse" | "post_tool_use" => event_id = 4,
+            "Stop" | "stop" => event_id = 5,
+            number => {
+                if let Ok(number) = number.parse::<u8>() {
+                    event_id = if number == 0 { 255 } else { number };
+                }
+            }
+        }
+    }
+    WireHeader::new(client_id, event_id)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn read_stdin_capped(max: usize) -> Vec<u8> {
     let mut buf = Vec::with_capacity(4096);
     let mut handle = io::stdin().take(max as u64);
@@ -179,6 +248,7 @@ fn watchdog_duration() -> Duration {
     Duration::from_millis(watchdog_ms)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn spawn_watchdog(absolute_deadline: Instant) {
     thread::spawn(move || {
         loop {
@@ -192,6 +262,7 @@ fn spawn_watchdog(absolute_deadline: Instant) {
     });
 }
 
+#[cfg(not(target_os = "linux"))]
 fn write_response(header: WireHeader) -> bool {
     let mut stdout = io::stdout();
     let allow_pre_tool = CLIENT_MAPPINGS
@@ -209,6 +280,23 @@ fn write_response(header: WireHeader) -> bool {
         stdout.write_all(b"{}")
     };
     write_result.is_ok() && stdout.flush().is_ok()
+}
+
+#[cfg(target_os = "linux")]
+fn write_response(header: WireHeader) -> bool {
+    let allow_pre_tool = CLIENT_MAPPINGS
+        .iter()
+        .find(|mapping| mapping.wire_id == header.client_id)
+        .map(|mapping| mapping.allow_pre_tool)
+        .unwrap_or(true);
+    if header.event_id == 3 && allow_pre_tool {
+        let traceparent = unsafe { read_traceparent() };
+        let tracestate = unsafe { read_tracestate() };
+        let body = pre_tool_allow_json(traceparent.as_deref(), tracestate.as_deref());
+        linux_runtime::write_stdout(body.as_bytes())
+    } else {
+        linux_runtime::write_stdout(b"{}")
+    }
 }
 
 #[cfg(windows)]
@@ -229,6 +317,7 @@ fn tracestate_is_echo_safe(value: &str) -> bool {
             .all(|byte| (byte.is_ascii_graphic() || byte == b' ') && byte != b'"' && byte != b'\\')
 }
 
+#[cfg(not(target_os = "linux"))]
 fn pre_tool_allow_json(traceparent: Option<&str>, tracestate: Option<&str>) -> Cow<'static, str> {
     let traceparent = traceparent.filter(|value| traceparent_is_echo_safe(value));
     let tracestate = tracestate.filter(|value| tracestate_is_echo_safe(value));
@@ -246,9 +335,42 @@ fn pre_tool_allow_json(traceparent: Option<&str>, tracestate: Option<&str>) -> C
     }
 }
 
+#[cfg(target_os = "linux")]
+fn pre_tool_allow_json(traceparent: Option<&str>, tracestate: Option<&str>) -> Cow<'static, str> {
+    let traceparent = traceparent.filter(|value| traceparent_is_echo_safe(value));
+    let tracestate = tracestate.filter(|value| tracestate_is_echo_safe(value));
+    if traceparent.is_none() && tracestate.is_none() {
+        return Cow::Borrowed("{\"decision\":\"allow\"}");
+    }
+    // The existing validators exclude quotes, backslashes and control bytes.
+    // Appending these validated values preserves the exact response encoding
+    // without general-purpose formatting on this small native client.
+    let mut response = String::from("{\"decision\":\"allow\",\"hookSpecificOutput\":{\"env\":{");
+    if let Some(value) = traceparent {
+        response.push_str("\"TRACEPARENT\":\"");
+        response.push_str(value);
+        response.push('"');
+    }
+    if let Some(value) = tracestate {
+        if traceparent.is_some() {
+            response.push(',');
+        }
+        response.push_str("\"TRACESTATE\":\"");
+        response.push_str(value);
+        response.push('"');
+    }
+    response.push_str("}}}");
+    Cow::Owned(response)
+}
+
 #[cfg(test)]
 mod response_tests {
     use super::pre_tool_allow_json;
+
+    #[test]
+    fn ordinary_cargo_tests_retain_panic_unwinding() {
+        assert!(std::panic::catch_unwind(|| panic!("synthetic unwind fixture")).is_err());
+    }
 
     #[test]
     fn echoes_traceparent_and_safe_tracestate() {

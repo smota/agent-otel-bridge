@@ -46,6 +46,7 @@ name = "agent-otel-client"
 version = "0.8.0"
 dependencies = [
  "agent-otel-ipc",
+ "libc",
  "windows-sys 0.59.0",
 ]
 
