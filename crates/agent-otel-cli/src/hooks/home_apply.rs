@@ -806,6 +806,24 @@ mod tests {
 
     #[test]
     fn partial_rollback_can_resume_after_restoring_directory_permissions() {
+        const CHILD: &str = "AGENT_OTEL_PERMISSION_FIXTURE_CHILD";
+        if std::env::var_os(CHILD).as_deref() != Some(std::ffi::OsStr::new("1")) {
+            // Other parallel tests spawn children. A fork can retain this
+            // test's flock until exec even after apply drops its descriptor.
+            // Isolate the permission fault so lock contention cannot replace it.
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "hooks::home_apply::tests::partial_rollback_can_resume_after_restoring_directory_permissions", "--test-threads=1"])
+                .env(CHILD, "1")
+                .output()
+                .expect("start isolated permission-failure fixture");
+            assert!(
+                output.status.success(),
+                "isolated permission-failure fixture failed: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let mut options = options("retry-rollback");
         options.clients = vec!["claude".into(), "codex".into()];
         let claude_dir = options.home.join(".claude");
@@ -819,7 +837,11 @@ mod tests {
         fs::set_permissions(&claude_dir, fs::Permissions::from_mode(0o500)).unwrap();
         let first = rollback(&path);
         fs::set_permissions(&claude_dir, fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(first.is_err(), "filesystem failure was not observed");
+        assert_eq!(
+            first.unwrap_err(),
+            "Cannot stage private configuration",
+            "rollback must reach the intended permission fault after restoring Codex"
+        );
         assert!(!options.home.join(".codex/hooks.json").exists());
         let journal: Journal = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_ne!(
