@@ -612,6 +612,33 @@ mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
 
+    // Every stateful HOME transaction test runs after exec in its own process:
+    // unrelated parallel tests must not fork while its profile flock is held.
+    fn run_isolated(name: &str) -> bool {
+        const CHILD: &str = "AGENT_OTEL_HOME_TEST_CHILD";
+        let selector = format!("hooks::home_apply::tests::{name}");
+        if std::env::var_os(CHILD).as_deref() == Some(std::ffi::OsStr::new(&selector)) {
+            return false;
+        }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &selector, "--test-threads=1"])
+            .env(CHILD, &selector)
+            .output()
+            .expect("start isolated HOME transaction test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "isolated HOME test {selector} failed: {stdout} {stderr}"
+        );
+        assert!(
+            stdout.lines().any(|line| line == "running 1 test")
+                && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;"),
+            "isolated HOME test selector did not execute exactly one test: {selector}: {stdout}"
+        );
+        true
+    }
+
     fn options(label: &str) -> HomeHookOptions {
         let home = std::env::temp_dir().join(format!(
             "bridge-transaction-{label}-{}-{}",
@@ -641,6 +668,9 @@ mod tests {
 
     #[test]
     fn preview_is_read_only_apply_is_private_and_rollback_restores_exact_bytes() {
+        if run_isolated("preview_is_read_only_apply_is_private_and_rollback_restores_exact_bytes") {
+            return;
+        }
         let options = options("roundtrip");
         let original = b"{\"foreign\":\"private test credential\", \"hooks\":{\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"rtk hook claude\"}]}]}}\n";
         fs::DirBuilder::new()
@@ -679,6 +709,9 @@ mod tests {
 
     #[test]
     fn rollback_refuses_intervening_edits_before_restoring_any_file() {
+        if run_isolated("rollback_refuses_intervening_edits_before_restoring_any_file") {
+            return;
+        }
         let options = options("intervening");
         let path = apply_inner(&options, None).unwrap().unwrap();
         let claude_before = fs::read(options.home.join(".claude/settings.json")).unwrap();
@@ -697,6 +730,9 @@ mod tests {
 
     #[test]
     fn partial_apply_is_compensated_and_keeps_private_rollback_evidence() {
+        if run_isolated("partial_apply_is_compensated_and_keeps_private_rollback_evidence") {
+            return;
+        }
         let options = options("partial");
         let error = apply_inner(&options, Some(1)).unwrap_err();
         assert!(error.contains("compensation completed"));
@@ -716,6 +752,9 @@ mod tests {
 
     #[test]
     fn lock_contention_symlinks_and_unsafe_paths_are_refused() {
+        if run_isolated("lock_contention_symlinks_and_unsafe_paths_are_refused") {
+            return;
+        }
         let mut options = options("unsafe");
         let lock = profile_lock(&options.home).unwrap();
         assert!(apply_inner(&options, None)
@@ -736,6 +775,9 @@ mod tests {
 
     #[test]
     fn rollback_recovers_durable_intent_after_crash_before_progress_record() {
+        if run_isolated("rollback_recovers_durable_intent_after_crash_before_progress_record") {
+            return;
+        }
         let mut options = options("crash-after-unlink");
         options.clients = vec!["claude".into(), "codex".into()];
         let path = apply_inner(&options, None).unwrap().unwrap();
@@ -760,6 +802,9 @@ mod tests {
 
     #[test]
     fn prepared_legacy_journal_recovers_without_creating_target_directories() {
+        if run_isolated("prepared_legacy_journal_recovers_without_creating_target_directories") {
+            return;
+        }
         let mut options = options("legacy-prepared");
         options.clients = vec!["claude".into(), "codex".into()];
         let (changes, _) = prepare(&options).unwrap();
@@ -781,6 +826,9 @@ mod tests {
 
     #[test]
     fn rollback_refuses_permission_tightening_before_restoring_any_file() {
+        if run_isolated("rollback_refuses_permission_tightening_before_restoring_any_file") {
+            return;
+        }
         let mut options = options("tightened-mode");
         options.clients = vec!["claude".into(), "codex".into()];
         fs::DirBuilder::new()
@@ -806,22 +854,7 @@ mod tests {
 
     #[test]
     fn partial_rollback_can_resume_after_restoring_directory_permissions() {
-        const CHILD: &str = "AGENT_OTEL_PERMISSION_FIXTURE_CHILD";
-        if std::env::var_os(CHILD).as_deref() != Some(std::ffi::OsStr::new("1")) {
-            // Other parallel tests spawn children. A fork can retain this
-            // test's flock until exec even after apply drops its descriptor.
-            // Isolate the permission fault so lock contention cannot replace it.
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "hooks::home_apply::tests::partial_rollback_can_resume_after_restoring_directory_permissions", "--test-threads=1"])
-                .env(CHILD, "1")
-                .output()
-                .expect("start isolated permission-failure fixture");
-            assert!(
-                output.status.success(),
-                "isolated permission-failure fixture failed: {} {}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+        if run_isolated("partial_rollback_can_resume_after_restoring_directory_permissions") {
             return;
         }
         let mut options = options("retry-rollback");
@@ -855,6 +888,9 @@ mod tests {
 
     #[test]
     fn journal_cannot_restore_an_unrelated_owned_file() {
+        if run_isolated("journal_cannot_restore_an_unrelated_owned_file") {
+            return;
+        }
         let options = options("scope");
         let path = apply_inner(&options, None).unwrap().unwrap();
         let mut journal: Journal = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
