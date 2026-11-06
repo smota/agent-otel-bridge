@@ -7,6 +7,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-06
+
+See the [release notes](docs/releases/v0.9.0.md).
+
+### Added
+
+- Native Linux `agent-hook` static/lean ELF packaging under 300 KB via `scripts/build-linux-hook.sh` and verification via `scripts/check-linux-hook.py`.
+- Multi-home and WSL/Linux transactional hook wiring with `--all-homes` and per-home discovery, ownership preservation (UID/GID), and rollback recovery.
+- Resilient Unix domain socket server recovery under lifetime leases in `agent-otel-ipc`.
+- Native Linux user systemd service template in `deploy/systemd/agent-otel-bridge.service`.
+- CI and release workflows publishing native Linux (`x86_64-unknown-linux-gnu`) artifacts alongside Windows packages.
+- Refreshed managed AgentFlow governance payload (`lib/world/world-builder.mjs`, `lib/core/seat-*`, `adapters/openrig/agentflow-world`).
+- OpenObserve support under `contrib/dashboards/openobserve/`, including five dedicated dashboards (Fleet Portfolio, Workspace / Project, Agent Workflow, Session / Turn, Telemetry Operations), build and provisioning scripts (`build.mjs`, `provision.mjs`), and `collector/otel-collector-openobserve.yaml`.
+
+### Changed
+
+- Linux telemetry hook responses remain strictly passive (`{}`), omitting approval and environment-injection responses while retaining inherited TRACEPARENT propagation over IPC.
+
+### Fixed
+
+- Omitted blocking Linux AGY pre-tool telemetry hook to guarantee fail-open execution without stalling.
+- Isolated test reporting collector from bodyless readiness probes and separated parallel HOME transaction fixtures.
+- Restored SemConv dependency fetching with supported manifest options and fixed all-target Linux compilation and test isolation.
+
 ## [0.8.0] - 2026-11-02
 
 See the [release notes](docs/releases/v0.8.0.md).

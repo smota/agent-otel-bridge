@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-otel-bench"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "agent-otel-core",
  "agent-otel-ipc",
@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "agent-otel-bridge"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "agent-otel-core",
  "agent-otel-daemon",
@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "agent-otel-client"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "agent-otel-ipc",
  "libc",
@@ -52,7 +52,7 @@ dependencies = [
 
 [[package]]
 name = "agent-otel-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "opentelemetry-proto",
  "prost",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "agent-otel-daemon"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "agent-otel-core",
  "agent-otel-ipc",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "agent-otel-fleet-smoke"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "agent-otel-core",
  "agent-otel-daemon",
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "agent-otel-ipc"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "agent-otel-core",
  "tokio",
