@@ -1,0 +1,40 @@
+# Illustrative Collector Contrib configuration. Do not replace an active config.
+# Separate receiver ports avoid taking over an existing bridge/Collector listener.
+# Supply OPENOBSERVE_AUTH as the full Basic/Bearer header via a secret manager.
+# Endpoint env examples (no credentials in URLs):
+# OPENOBSERVE_TRACES_ENDPOINT=https://observe.example/api/default/v1/traces
+# OPENOBSERVE_METRICS_ENDPOINT=https://observe.example/api/default/prometheus/api/v1/write
+receivers:
+  otlp/openobserve_example:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:14317
+      http:
+        endpoint: 127.0.0.1:14318
+
+processors:
+  batch/openobserve: {}
+
+exporters:
+  otlphttp/openobserve_traces:
+    traces_endpoint: ${env:OPENOBSERVE_TRACES_ENDPOINT}
+    headers:
+      Authorization: ${env:OPENOBSERVE_AUTH}
+      stream-name: default
+  prometheusremotewrite/openobserve_metrics:
+    endpoint: ${env:OPENOBSERVE_METRICS_ENDPOINT}
+    headers:
+      Authorization: ${env:OPENOBSERVE_AUTH}
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  pipelines:
+    traces/openobserve_example:
+      receivers: [otlp/openobserve_example]
+      processors: [batch/openobserve]
+      exporters: [otlphttp/openobserve_traces]
+    metrics/openobserve_example:
+      receivers: [otlp/openobserve_example]
+      processors: [batch/openobserve]
+      exporters: [prometheusremotewrite/openobserve_metrics]
