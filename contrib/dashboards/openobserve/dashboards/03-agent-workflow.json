@@ -1,0 +1,527 @@
+{
+  "version": 5,
+  "dashboardId": "",
+  "title": "Agent Telemetry L3: Agent Workflow",
+  "description": "agent-otel-bridge:openobserve:agent-workflow | Persona: AI Workflow Engineer. Agent harness lifecycle analysis across hook events, behavioral tool archetypes, and conversation activity. Links: workspace-project=/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aworkspace-project%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id session-turn=/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id telemetry-operations=/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Atelemetry-operations%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+  "role": "",
+  "owner": "",
+  "created": "2026-11-05T00:00:00Z",
+  "tabs": [
+    {
+      "tabId": "default",
+      "name": "Default",
+      "panels": [
+        {
+          "id": "agent-workflow-hooks",
+          "type": "bar",
+          "title": "Lifecycle Hook Events by Agent",
+          "description": "Frequency of synchronous lifecycle hook events across AI agent harnesses.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "no_value_replacement": "N/A",
+            "drilldown": [
+              {
+                "name": "Navigate to Agent Telemetry L4: Session Turn",
+                "type": "dashboard",
+                "targetBlank": false,
+                "findBy": "",
+                "data": {
+                  "dashboard": "${dashboard_id:session-turn}",
+                  "folder": "default",
+                  "tab": "default",
+                  "url": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+                  "passAllVariables": true,
+                  "variables": [
+                    {
+                      "name": "workspace_project_name",
+                      "value": "$workspace_project_name"
+                    },
+                    {
+                      "name": "gen_ai_agent_name",
+                      "value": "$gen_ai_agent_name"
+                    },
+                    {
+                      "name": "gen_ai_conversation_id",
+                      "value": "$gen_ai_conversation_id"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT COALESCE(gen_ai_agent_name, 'unknown') AS gen_ai_agent_name, COALESCE(agent_hook_event, 'unspecified') AS agent_hook_event, COUNT(span_id) AS event_count FROM \"default\" WHERE service_name = 'agent-otel-bridge' AND ('$workspace_project_name' IN ('', 'All', '*') OR workspace_project_name = '$workspace_project_name') AND ('$gen_ai_agent_name' IN ('', 'All', '*') OR gen_ai_agent_name = '$gen_ai_agent_name') AND ('$gen_ai_conversation_id' IN ('', 'All', '*') OR gen_ai_conversation_id = '$gen_ai_conversation_id') GROUP BY gen_ai_agent_name, agent_hook_event ORDER BY event_count DESC",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "gen_ai_agent_name",
+                    "alias": "gen_ai_agent_name",
+                    "column": "gen_ai_agent_name",
+                    "color": null
+                  },
+                  {
+                    "label": "agent_hook_event",
+                    "alias": "agent_hook_event",
+                    "column": "agent_hook_event",
+                    "color": null
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "event_count",
+                    "alias": "event_count",
+                    "column": "event_count",
+                    "color": null
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "w": 96,
+            "h": 8,
+            "i": 1
+          },
+          "htmlContent": "",
+          "markdownContent": "",
+          "customChartContent": ""
+        },
+        {
+          "id": "agent-workflow-archetypes",
+          "type": "table",
+          "title": "Behavioral Tool Archetype Matrix",
+          "description": "Observed spans/events across FilterCompressor, StructuredParser, InspectorDiff, SearchRetrieval, BuildTestVerify, and GenericExec.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "no_value_replacement": "N/A",
+            "drilldown": [
+              {
+                "name": "Navigate to Agent Telemetry L4: Session Turn",
+                "type": "dashboard",
+                "targetBlank": false,
+                "findBy": "",
+                "data": {
+                  "dashboard": "${dashboard_id:session-turn}",
+                  "folder": "default",
+                  "tab": "default",
+                  "url": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+                  "passAllVariables": true,
+                  "variables": [
+                    {
+                      "name": "workspace_project_name",
+                      "value": "$workspace_project_name"
+                    },
+                    {
+                      "name": "gen_ai_agent_name",
+                      "value": "$gen_ai_agent_name"
+                    },
+                    {
+                      "name": "gen_ai_conversation_id",
+                      "value": "$gen_ai_conversation_id"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT COALESCE(gen_ai_agent_name, 'unknown') AS gen_ai_agent_name, COALESCE(agent_tool_archetype, 'non_tool') AS agent_tool_archetype, COUNT(span_id) AS span_events, COUNT(DISTINCT gen_ai_conversation_id) AS conversations FROM \"default\" WHERE service_name = 'agent-otel-bridge' AND ('$workspace_project_name' IN ('', 'All', '*') OR workspace_project_name = '$workspace_project_name') AND ('$gen_ai_agent_name' IN ('', 'All', '*') OR gen_ai_agent_name = '$gen_ai_agent_name') AND ('$gen_ai_conversation_id' IN ('', 'All', '*') OR gen_ai_conversation_id = '$gen_ai_conversation_id') GROUP BY gen_ai_agent_name, agent_tool_archetype ORDER BY span_events DESC",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "gen_ai_agent_name",
+                    "alias": "gen_ai_agent_name",
+                    "column": "gen_ai_agent_name",
+                    "color": null
+                  },
+                  {
+                    "label": "agent_tool_archetype",
+                    "alias": "agent_tool_archetype",
+                    "column": "agent_tool_archetype",
+                    "color": null
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "span_events",
+                    "alias": "span_events",
+                    "column": "span_events",
+                    "color": null
+                  },
+                  {
+                    "label": "conversations",
+                    "alias": "conversations",
+                    "column": "conversations",
+                    "color": null
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 0,
+            "w": 96,
+            "h": 8,
+            "i": 2
+          },
+          "htmlContent": "",
+          "markdownContent": "",
+          "customChartContent": ""
+        },
+        {
+          "id": "agent-workflow-conversations",
+          "type": "table",
+          "title": "Active Agent Conversations",
+          "description": "Recent agent conversations with workspace project context, span counts, and latest activity timestamp.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "no_value_replacement": "N/A",
+            "drilldown": [
+              {
+                "name": "Navigate to Agent Telemetry L4: Session Turn",
+                "type": "dashboard",
+                "targetBlank": false,
+                "findBy": "",
+                "data": {
+                  "dashboard": "${dashboard_id:session-turn}",
+                  "folder": "default",
+                  "tab": "default",
+                  "url": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+                  "passAllVariables": true,
+                  "variables": [
+                    {
+                      "name": "workspace_project_name",
+                      "value": "$workspace_project_name"
+                    },
+                    {
+                      "name": "gen_ai_agent_name",
+                      "value": "$gen_ai_agent_name"
+                    },
+                    {
+                      "name": "gen_ai_conversation_id",
+                      "value": "$gen_ai_conversation_id"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "Navigate to Agent Telemetry L2: Workspace Project",
+                "type": "dashboard",
+                "targetBlank": false,
+                "findBy": "",
+                "data": {
+                  "dashboard": "${dashboard_id:workspace-project}",
+                  "folder": "default",
+                  "tab": "default",
+                  "url": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aworkspace-project%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+                  "passAllVariables": true,
+                  "variables": [
+                    {
+                      "name": "workspace_project_name",
+                      "value": "$workspace_project_name"
+                    },
+                    {
+                      "name": "gen_ai_agent_name",
+                      "value": "$gen_ai_agent_name"
+                    },
+                    {
+                      "name": "gen_ai_conversation_id",
+                      "value": "$gen_ai_conversation_id"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT COALESCE(gen_ai_conversation_id, 'untracked') AS gen_ai_conversation_id, COALESCE(gen_ai_agent_name, 'unknown') AS gen_ai_agent_name, COALESCE(workspace_project_name, 'unscoped') AS workspace_project_name, COUNT(span_id) AS span_events, MAX(_timestamp) AS latest_timestamp FROM \"default\" WHERE service_name = 'agent-otel-bridge' AND ('$workspace_project_name' IN ('', 'All', '*') OR workspace_project_name = '$workspace_project_name') AND ('$gen_ai_agent_name' IN ('', 'All', '*') OR gen_ai_agent_name = '$gen_ai_agent_name') AND ('$gen_ai_conversation_id' IN ('', 'All', '*') OR gen_ai_conversation_id = '$gen_ai_conversation_id') GROUP BY gen_ai_conversation_id, gen_ai_agent_name, workspace_project_name ORDER BY latest_timestamp DESC LIMIT 50",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "gen_ai_conversation_id",
+                    "alias": "gen_ai_conversation_id",
+                    "column": "gen_ai_conversation_id",
+                    "color": null
+                  },
+                  {
+                    "label": "gen_ai_agent_name",
+                    "alias": "gen_ai_agent_name",
+                    "column": "gen_ai_agent_name",
+                    "color": null
+                  },
+                  {
+                    "label": "workspace_project_name",
+                    "alias": "workspace_project_name",
+                    "column": "workspace_project_name",
+                    "color": null
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "span_events",
+                    "alias": "span_events",
+                    "column": "span_events",
+                    "color": null
+                  },
+                  {
+                    "label": "latest_timestamp",
+                    "alias": "latest_timestamp",
+                    "column": "latest_timestamp",
+                    "color": null
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 8,
+            "w": 128,
+            "h": 8,
+            "i": 3
+          },
+          "htmlContent": "",
+          "markdownContent": "",
+          "customChartContent": ""
+        },
+        {
+          "id": "agent-workflow-status",
+          "type": "table",
+          "title": "Workflow Hook Status by Event Type",
+          "description": "Status outcome counts per agent_hook_event and span_status.",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "base_map": null,
+            "map_view": null,
+            "no_value_replacement": "N/A",
+            "drilldown": [
+              {
+                "name": "Navigate to Agent Telemetry L5: Telemetry Operations",
+                "type": "dashboard",
+                "targetBlank": false,
+                "findBy": "",
+                "data": {
+                  "dashboard": "${dashboard_id:telemetry-operations}",
+                  "folder": "default",
+                  "tab": "default",
+                  "url": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Atelemetry-operations%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+                  "passAllVariables": true,
+                  "variables": [
+                    {
+                      "name": "workspace_project_name",
+                      "value": "$workspace_project_name"
+                    },
+                    {
+                      "name": "gen_ai_agent_name",
+                      "value": "$gen_ai_agent_name"
+                    },
+                    {
+                      "name": "gen_ai_conversation_id",
+                      "value": "$gen_ai_conversation_id"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT COALESCE(agent_hook_event, 'unspecified') AS agent_hook_event, COALESCE(span_status, 'UNSET') AS span_status, COUNT(span_id) AS span_count FROM \"default\" WHERE service_name = 'agent-otel-bridge' AND ('$workspace_project_name' IN ('', 'All', '*') OR workspace_project_name = '$workspace_project_name') AND ('$gen_ai_agent_name' IN ('', 'All', '*') OR gen_ai_agent_name = '$gen_ai_agent_name') AND ('$gen_ai_conversation_id' IN ('', 'All', '*') OR gen_ai_conversation_id = '$gen_ai_conversation_id') GROUP BY agent_hook_event, span_status ORDER BY span_count DESC",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "traces",
+                "x": [
+                  {
+                    "label": "agent_hook_event",
+                    "alias": "agent_hook_event",
+                    "column": "agent_hook_event",
+                    "color": null
+                  },
+                  {
+                    "label": "span_status",
+                    "alias": "span_status",
+                    "column": "span_status",
+                    "color": null
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "span_count",
+                    "alias": "span_count",
+                    "column": "span_count",
+                    "color": null
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": ""
+              }
+            }
+          ],
+          "layout": {
+            "x": 128,
+            "y": 8,
+            "w": 64,
+            "h": 8,
+            "i": 4
+          },
+          "htmlContent": "",
+          "markdownContent": "",
+          "customChartContent": ""
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "list": [
+      {
+        "name": "workspace_project_name",
+        "label": "Workspace Project",
+        "type": "query_values",
+        "query_data": {
+          "stream": "default",
+          "stream_type": "traces",
+          "field": "workspace_project_name",
+          "max_record_size": 1000,
+          "filter": [
+            {
+              "name": "service_name",
+              "operator": "=",
+              "value": "agent-otel-bridge"
+            }
+          ]
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": false,
+        "customMultiSelectValue": [],
+        "escapeSingleQuotes": true,
+        "hideOnDashboard": false
+      },
+      {
+        "name": "gen_ai_agent_name",
+        "label": "Agent Name",
+        "type": "query_values",
+        "query_data": {
+          "stream": "default",
+          "stream_type": "traces",
+          "field": "gen_ai_agent_name",
+          "max_record_size": 1000,
+          "filter": [
+            {
+              "name": "service_name",
+              "operator": "=",
+              "value": "agent-otel-bridge"
+            }
+          ]
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": false,
+        "customMultiSelectValue": [],
+        "escapeSingleQuotes": true,
+        "hideOnDashboard": false
+      },
+      {
+        "name": "gen_ai_conversation_id",
+        "label": "Conversation ID",
+        "type": "query_values",
+        "query_data": {
+          "stream": "default",
+          "stream_type": "traces",
+          "field": "gen_ai_conversation_id",
+          "max_record_size": 1000,
+          "filter": [
+            {
+              "name": "service_name",
+              "operator": "=",
+              "value": "agent-otel-bridge"
+            }
+          ]
+        },
+        "value": "",
+        "options": [],
+        "multiSelect": false,
+        "customMultiSelectValue": [],
+        "escapeSingleQuotes": true,
+        "hideOnDashboard": false
+      }
+    ],
+    "showDynamicFilters": true
+  },
+  "defaultDatetimeDuration": {
+    "type": "relative",
+    "relativeTimePeriod": "1h"
+  }
+}

@@ -1,0 +1,278 @@
+{
+  "package": "agent-otel-bridge-openobserve-dashboards",
+  "schemaVersion": 1,
+  "openobserveDashboardVersion": 5,
+  "targetRuntime": "openobserve-v1.1.2",
+  "serviceName": "agent-otel-bridge",
+  "markerPrefix": "agent-otel-bridge:openobserve:",
+  "gridColumns": 192,
+  "traceStream": {
+    "name": "default",
+    "type": "traces",
+    "requiredFilter": "service_name = 'agent-otel-bridge'",
+    "fields": [
+      "_timestamp",
+      "service_name",
+      "gen_ai_agent_name",
+      "gen_ai_conversation_id",
+      "workspace_path",
+      "workspace_project_name",
+      "agent_tool_archetype",
+      "agent_hook_event",
+      "span_status",
+      "trace_id",
+      "span_id",
+      "duration"
+    ],
+    "zeroDurationHookInvariant": true
+  },
+  "metricStreams": {
+    "agent_bridge_queue_items": {
+      "stream": "agent_bridge_queue_items",
+      "stream_type": "metrics",
+      "fields": [
+        "_timestamp",
+        "service_name",
+        "host_name",
+        "service_instance_id",
+        "value",
+        "queue"
+      ],
+      "description": "Current items queued in the background daemon micro-batcher."
+    },
+    "agent_bridge_dropped_total": {
+      "stream": "agent_bridge_dropped_total",
+      "stream_type": "metrics",
+      "fields": [
+        "_timestamp",
+        "service_name",
+        "host_name",
+        "service_instance_id",
+        "value",
+        "reason"
+      ],
+      "description": "Total telemetry items dropped by backpressure or framing guardrails."
+    },
+    "agent_bridge_export_attempts_total": {
+      "stream": "agent_bridge_export_attempts_total",
+      "stream_type": "metrics",
+      "fields": [
+        "_timestamp",
+        "service_name",
+        "host_name",
+        "service_instance_id",
+        "value",
+        "result"
+      ],
+      "description": "Total OTLP export attempts grouped by result."
+    },
+    "agent_bridge_events_total": {
+      "stream": "agent_bridge_events_total",
+      "stream_type": "metrics",
+      "fields": [
+        "_timestamp",
+        "service_name",
+        "host_name",
+        "service_instance_id",
+        "value",
+        "stage",
+        "outcome"
+      ],
+      "description": "Total bridge events processed across daemon pipeline stages and outcomes."
+    },
+    "agent_quota_remaining_fraction": {
+      "stream": "agent_quota_remaining_fraction",
+      "stream_type": "metrics",
+      "fields": [
+        "_timestamp",
+        "service_name",
+        "host_name",
+        "service_instance_id",
+        "value",
+        "gen_ai_provider_name",
+        "bucket",
+        "group"
+      ],
+      "description": "Remaining provider quota headroom fraction (0.0 to 1.0)."
+    },
+    "agent_quota_seconds_to_reset": {
+      "stream": "agent_quota_seconds_to_reset",
+      "stream_type": "metrics",
+      "fields": [
+        "_timestamp",
+        "service_name",
+        "host_name",
+        "service_instance_id",
+        "value",
+        "gen_ai_provider_name",
+        "bucket",
+        "group"
+      ],
+      "description": "Seconds remaining until provider quota window reset."
+    }
+  },
+  "variables": [
+    {
+      "name": "workspace_project_name",
+      "label": "Workspace Project",
+      "field": "workspace_project_name",
+      "type": "query_values",
+      "escapeSingleQuotes": true,
+      "substitutionPattern": "'$workspace_project_name'"
+    },
+    {
+      "name": "gen_ai_agent_name",
+      "label": "Agent Name",
+      "field": "gen_ai_agent_name",
+      "type": "query_values",
+      "escapeSingleQuotes": true,
+      "substitutionPattern": "'$gen_ai_agent_name'"
+    },
+    {
+      "name": "gen_ai_conversation_id",
+      "label": "Conversation ID",
+      "field": "gen_ai_conversation_id",
+      "type": "query_values",
+      "escapeSingleQuotes": true,
+      "substitutionPattern": "'$gen_ai_conversation_id'"
+    }
+  ],
+  "dashboards": [
+    {
+      "level": 1,
+      "key": "fleet-portfolio",
+      "marker": "agent-otel-bridge:openobserve:fleet-portfolio",
+      "fileName": "01-fleet-portfolio.json",
+      "path": "dashboards/01-fleet-portfolio.json",
+      "title": "Agent Telemetry L1: Fleet Portfolio",
+      "persona": "Platform / Engineering Lead",
+      "summary": "Fleet-wide portfolio view of active workspaces, AI agent harnesses, provider quota headroom, and bridge event volume.",
+      "panelCount": 4,
+      "panelIds": [
+        "fleet-portfolio-workspaces",
+        "fleet-portfolio-agents",
+        "fleet-portfolio-quota",
+        "fleet-portfolio-pipeline"
+      ],
+      "navigationTargets": [
+        "workspace-project",
+        "agent-workflow",
+        "telemetry-operations"
+      ],
+      "resolvedLinks": {
+        "workspace-project": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aworkspace-project%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "agent-workflow": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aagent-workflow%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "telemetry-operations": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Atelemetry-operations%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id"
+      }
+    },
+    {
+      "level": 2,
+      "key": "workspace-project",
+      "marker": "agent-otel-bridge:openobserve:workspace-project",
+      "fileName": "02-workspace-project.json",
+      "path": "dashboards/02-workspace-project.json",
+      "title": "Agent Telemetry L2: Workspace Project",
+      "persona": "Tech Lead / Repository Owner",
+      "summary": "Workspace-scoped execution breakdown across project roots, active agents, behavioral tool archetypes, and span statuses.",
+      "panelCount": 4,
+      "panelIds": [
+        "workspace-project-paths",
+        "workspace-project-agents",
+        "workspace-project-archetypes",
+        "workspace-project-status"
+      ],
+      "navigationTargets": [
+        "fleet-portfolio",
+        "agent-workflow",
+        "session-turn"
+      ],
+      "resolvedLinks": {
+        "fleet-portfolio": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Afleet-portfolio%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "agent-workflow": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aagent-workflow%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "session-turn": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id"
+      }
+    },
+    {
+      "level": 3,
+      "key": "agent-workflow",
+      "marker": "agent-otel-bridge:openobserve:agent-workflow",
+      "fileName": "03-agent-workflow.json",
+      "path": "dashboards/03-agent-workflow.json",
+      "title": "Agent Telemetry L3: Agent Workflow",
+      "persona": "AI Workflow Engineer",
+      "summary": "Agent harness lifecycle analysis across hook events, behavioral tool archetypes, and conversation activity.",
+      "panelCount": 4,
+      "panelIds": [
+        "agent-workflow-hooks",
+        "agent-workflow-archetypes",
+        "agent-workflow-conversations",
+        "agent-workflow-status"
+      ],
+      "navigationTargets": [
+        "workspace-project",
+        "session-turn",
+        "telemetry-operations"
+      ],
+      "resolvedLinks": {
+        "workspace-project": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aworkspace-project%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "session-turn": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "telemetry-operations": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Atelemetry-operations%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id"
+      }
+    },
+    {
+      "level": 4,
+      "key": "session-turn",
+      "marker": "agent-otel-bridge:openobserve:session-turn",
+      "fileName": "04-session-turn.json",
+      "path": "dashboards/04-session-turn.json",
+      "title": "Agent Telemetry L4: Session Turn",
+      "persona": "Developer / Session Debugger",
+      "summary": "Single-conversation turn timeline inspecting ordered trace/span IDs, hook events, tool archetypes, and recorded span duration facts.",
+      "panelCount": 4,
+      "panelIds": [
+        "session-turn-timeline",
+        "session-turn-hooks",
+        "session-turn-archetypes",
+        "session-turn-traces"
+      ],
+      "navigationTargets": [
+        "workspace-project",
+        "agent-workflow",
+        "telemetry-operations"
+      ],
+      "resolvedLinks": {
+        "workspace-project": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aworkspace-project%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "agent-workflow": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aagent-workflow%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "telemetry-operations": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Atelemetry-operations%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id"
+      }
+    },
+    {
+      "level": 5,
+      "key": "telemetry-operations",
+      "marker": "agent-otel-bridge:openobserve:telemetry-operations",
+      "fileName": "05-telemetry-operations.json",
+      "path": "dashboards/05-telemetry-operations.json",
+      "title": "Agent Telemetry L5: Telemetry Operations",
+      "persona": "SRE / Bridge Operator",
+      "summary": "Daemon pipeline health covering queue depth, dropped items, OTLP export attempts, stage/outcome event counters, and quota reset clocks.",
+      "panelCount": 5,
+      "panelIds": [
+        "telemetry-ops-queue",
+        "telemetry-ops-dropped",
+        "telemetry-ops-exports",
+        "telemetry-ops-events",
+        "telemetry-ops-quota-reset"
+      ],
+      "navigationTargets": [
+        "fleet-portfolio",
+        "agent-workflow",
+        "session-turn"
+      ],
+      "resolvedLinks": {
+        "fleet-portfolio": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Afleet-portfolio%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "agent-workflow": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Aagent-workflow%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id",
+        "session-turn": "/web/dashboards/view?org_identifier=default&dashboard=%24%7Bdashboard_id%3Asession-turn%7D&folder=default&tab=default&from=$__from&to=$__to&period=$__period&var-workspace_project_name=$workspace_project_name&var-gen_ai_agent_name=$gen_ai_agent_name&var-gen_ai_conversation_id=$gen_ai_conversation_id"
+      }
+    }
+  ]
+}

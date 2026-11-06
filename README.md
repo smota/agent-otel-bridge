@@ -318,6 +318,7 @@ curl -X POST http://localhost:8080/api/v2/dashboards \
 ### 📊 Telemetry Standards & Dashboards
 * [Telemetry Taxonomy & Variable Dictionary](docs/TELEMETRY_DICTIONARY.md) — Complete captured attribute dictionary and GenAI SemConv mappings.
 * [SigNoz Dashboard Catalog](contrib/dashboards/signoz/README.md) — Ready-to-import production templates and ClickHouse SQL queries.
+* [OpenObserve Dashboard Catalog](contrib/dashboards/openobserve/README.md) — Five persona views, preview-first provisioning, guarded rollback, and SQL validation.
 
 ### ⚡ Benchmarks & Verification
 * [Fleet Smoke Laboratory](dev/fleet-smoke/README.md) — Development-only Rust scenarios, controlled failures, and trace verification; excluded from installed binaries.
