@@ -52,8 +52,8 @@ and config; AN lanes own AOB native modules.
 
 | WP | Repo / issue | Size | Depends on | Lane | Scope → acceptance evidence | Executor |
 |---|---|---:|---|---|---|---|
-| G0a | AOB#24, dendro#142 | M | S7 | captures-hook/log | Pinned identities and historical git provenance → sanitized matrix, receipt hashes | agy |
-| G0b* | AOB#24 | M | S7 | captures-native | Claude Code native discovery → field, content and outage matrix | agy |
+| G0a | AOB#24, dendro#142 | M | — | captures-hook/log | Pinned identities and historical git provenance → sanitized matrix, receipt hashes | agy |
+| G0b* | AOB#24 | M | — | captures-native | Claude Code native discovery → field, content and outage matrix | agy |
 | C1a | AOB NEW | M | G0a | contract-identity | Identity and keys → independently checked collision and rotation vectors | codex + claude review |
 | C1b | AOB NEW | M | C1a | contract-facts | Tables, snapshots, coverage → schema and replay vectors | codex |
 | A0 | AOB#21 (split) | S | — | AOB-docs | Claims → evidence-linked corrections | agy |
@@ -88,7 +88,7 @@ This projects the family waves onto AOB packages only; it does not certify downs
 
 | Wave | AOB packages | AOB exit evidence |
 |---|---|---|
-| 0 | G0a (after S7), A0; G0b optional (after S7) | Capture hashes and provenance; sanitized capture matrix; evidence-linked claim corrections. |
+| 0 | G0a, A0; G0b optional | Capture hashes and provenance; sanitized capture matrix; evidence-linked claim corrections. |
 | 1 | C1a → C1b | Reviewed contract and vector digests; relevant maintainer decisions recorded. |
 | 2 | A1 → A2 → A3 | Spans with a keyed link ID and no paths or emails; shared link vectors; inherited-trace preservation; collision and shutdown fixtures; independent security acceptance. |
 | 3 | No AOB packages assigned | No separate AOB exit gate. |
@@ -106,4 +106,4 @@ Decided 2026-11-11:
 |---|---|---|---|
 | S6 | MVP scope cut | Approved: the deferrals above apply. | Scope cut approved for MVP execution. |
 | S7 | Authorize Gate-0 captures | Approved: run Claude Code 2.1.322 and Codex 0.167.0 in disposable synthetic workspaces with a loopback fixture collector, using synthetic content and sentinels only. | Raw captures stay private; only sanitized derivatives may be committed. G0a and G0b are ready to start. |
-| S8 | High-assurance approval | The maintainer delegates approval to the coordinating agent, including high-assurance work such as C1a, A1, and A2. | The coordinating agent may approve and merge only when acceptance commands and repository gates pass, an independent reviewer has passed the work (Claude security review for high-assurance work), no finding is unresolved, and no gate is overridden. Escalate to the maintainer for invariant, licence, or release changes, data deletion, overrides, or reviewer disagreement. |
+| S8 | High-assurance approval | The maintainer delegates approval to the coordinating agent, including high-assurance WPs such as C1a, A1, A2, and A5a. | The coordinating agent may approve and merge only when (a) the WP's acceptance commands and repository gates pass, run by the coordinator in the WP's worktree, (b) an independent reviewer has passed the work (Claude security review for high-assurance WPs, a second model otherwise; the builder never reviews its own work), (c) no finding is unresolved and no gate is overridden, and (d) the PR touches only its WP's lane. Escalate to the maintainer for changes to stated product promises or invariants; licences, releases, tags, publications or version bumps; deleting or rewriting existing user data; gate overrides or reviewer disagreement; a WP failing twice; or materially more subscription quota than briefed. Every delegated merge is recorded in this backlog with PR, reviewer and evidence run. |
