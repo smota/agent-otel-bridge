@@ -306,6 +306,8 @@ curl -X POST http://localhost:8080/api/v2/dashboards \
 ## Documentation Index
 
 ### 🏛️ Architecture & Core Principles
+
+* [MVP Backlog](docs/BACKLOG.md) — AOB council recommendations, work packages, evidence, and pending maintainer decisions.
 * [Why agent-otel-bridge vs. Native Telemetry](docs/WHY_AGENT_OTEL_BRIDGE.md) — Architectural comparison, hot-path SLAs, and semantic unification.
 * [AI Agent Architectural Invariants & SLAs](AGENTS.md) — Enforced performance invariants, binary size SLAs, and agent operating rules.
 * [Local Runtime & Station Installation Contract](docs/local-runtime-contract.md) — Isolated versioning, atomic activation, and safe hook updates.
