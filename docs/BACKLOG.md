@@ -1,8 +1,8 @@
 # AOB MVP backlog
 
-Origin: cross-product council, 2026-11-11. **Status: recommendation pending maintainer decisions.**
-This records the agent-otel-bridge (AOB) portion of the family MVP plan; it does not accept an ADR
-or authorize implementation, captures, or merges.
+Origin: cross-product council, 2026-11-11. **Status: approved 2026-11-11.**
+This records the agent-otel-bridge (AOB) portion of the family MVP plan. Execution, captures,
+and merges follow the decisions and approval conditions below.
 
 ## Verified AOB facts
 
@@ -64,6 +64,8 @@ and config; AN lanes own AOB native modules.
 | A5a* | AOB#13 | M | C1b | AN-ingress | Bounded authenticated loopback ingress → flood, auth and limit tests | codex + claude review |
 | A5b* | AOB#13, #15, #16 rest | M | A3, A4, A5a | AO | Integration and `enable`/`doctor` → privacy, source and outage receipts | codex |
 
+G0a, G0b, and A0 are **ready to start** under the approved decisions below.
+
 Native discovery and integration are narrowed to Claude Code only (G0b, A4, A5a, A5b), on a
 parallel P1 track outside the pilot's critical path. Hook signals are never held back waiting
 for native ones. The council routes security review for C1a, A1, A2, and A5a to Claude;
@@ -71,7 +73,7 @@ standard-path review goes to Grok or Agy.
 
 ## Deferred AOB issues
 
-Outside the MVP gate, subject to S6:
+Outside the MVP gate, as approved in S6:
 
 - #18: thin hook.
 - #19: spool.
@@ -98,10 +100,10 @@ matrix, captured-version equivalence, ingress tests, and integration receipts.
 
 ## Maintainer decisions relevant to AOB
 
-These decisions remain pending:
+Decided 2026-11-11:
 
-| # | Decision | Council recommendation | Blocks |
+| # | Decision | Outcome | Conditions |
 |---|---|---|---|
-| S6 | MVP scope cut | Approve the deferrals above. | All MVP execution. |
-| S7 | Authorize Gate-0 captures | Run Claude Code 2.1.322 and Codex 0.167.0 in disposable synthetic workspaces with a loopback fixture collector, using synthetic sentinels only. | G0a, G0b. |
-| S8 | Human approval for high-assurance work | The sponsor is the human approver on PRs for C1a, A1, and A2. | Relevant merges. |
+| S6 | MVP scope cut | Approved: the deferrals above apply. | Scope cut approved for MVP execution. |
+| S7 | Authorize Gate-0 captures | Approved: run Claude Code 2.1.322 and Codex 0.167.0 in disposable synthetic workspaces with a loopback fixture collector, using synthetic content and sentinels only. | Raw captures stay private; only sanitized derivatives may be committed. G0a and G0b are ready to start. |
+| S8 | High-assurance approval | The maintainer delegates approval to the coordinating agent, including high-assurance work such as C1a, A1, and A2. | The coordinating agent may approve and merge only when acceptance commands and repository gates pass, an independent reviewer has passed the work (Claude security review for high-assurance work), no finding is unresolved, and no gate is overridden. Escalate to the maintainer for invariant, licence, or release changes, data deletion, overrides, or reviewer disagreement. |
