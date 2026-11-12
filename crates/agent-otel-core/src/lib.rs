@@ -1,6 +1,7 @@
 pub mod archetype;
 pub mod capability;
 pub mod context;
+pub mod link_id;
 pub mod model;
 pub mod otlp;
 pub mod platform;
