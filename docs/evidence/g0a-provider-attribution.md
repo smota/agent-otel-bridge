@@ -1,15 +1,15 @@
 # G0a Provider Attribution Investigation (`MTN-51` / `agent-otel-bridge#29`)
 
 - **Issue**: [`smota/agent-otel-bridge#29`](https://github.com/smota/agent-otel-bridge/issues/29) (`MTN-51`)
-- **Evidence Corpus Under Investigation**: Draft PR `#28` (`docs/g0a-sanitized-captures`, commit `aa71997ed1365179b43c1ef23a176a27b5d8f4d0`, 52 files under [`docs/contracts/fact-export-v1/captures/`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/README.md))
+- **Evidence Corpus Under Investigation**: Draft PR `#28` (`docs/g0a-sanitized-captures`, commit `aa71997ed1365179b43c1ef23a176a27b5d8f4d0`, 52 files under [`docs/contracts/fact-export-v1/captures/`](../contracts/fact-export-v1/captures/README.md))
 - **Downstream Consumer Unblocked**: Contract package **`C1a` (`contract-identity`: identity and keys)** under `#24`
-- **Root-Cause Verdict**: **`(b) Bridge attribution bug`** in `agent-otel-core` (`build_span_from_resolved`, [`crates/agent-otel-core/src/otlp.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/otlp.rs#L296-L350))
+- **Root-Cause Verdict**: **`(b) Bridge attribution bug`** in `agent-otel-core` (`build_span_from_resolved`, [`crates/agent-otel-core/src/otlp.rs`](../../crates/agent-otel-core/src/otlp.rs#L296-L358))
 
 ---
 
 ## 1. Executive Summary & Classification
 
-In all five Claude Code `2.1.322` capture scenarios (`S1`–`S5`) under [`docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/capture-matrix.md), every exported OTLP trace span in `otlp-traces-sanitized.json` (14 spans total) carries:
+In all five Claude Code `2.1.322` capture scenarios (`S1`–`S5`) under [`docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/`](../contracts/fact-export-v1/captures/g0a-20261112/capture-matrix.md), every exported OTLP trace span in `otlp-traces-sanitized.json` (14 spans total) carries:
 
 - `gen_ai.agent.name = "claude-code"`
 - `gen_ai.provider.name = "google"`
@@ -21,8 +21,8 @@ In all five Claude Code `2.1.322` capture scenarios (`S1`–`S5`) under [`docs/c
 | Candidate | Verdict | Evidence Summary |
 | :--- | :--- | :--- |
 | **`(a)` Capture / labelling mistake** | **Ruled out** | Binary provenance (`claude` `2.1.322`, SHA-256 `bfb3703a...`), IPC wire headers (`client_id: 2` = `ClientKind::ClaudeCode`), span agent attribution (`gen_ai.agent.name = "claude-code"`), Claude-specific hook fields (`transcript_path`, `permission_mode`, `tool_use_id`), and coordinator-verified joins (`session_id` $\leftrightarrow$ `sessionId`, `tool_use_id` `CALL_...` across hook and session JSONL) confirm the captures are genuine Claude Code `2.1.322` runs. |
-| **`(b)` Bridge attribution bug** | **CONFIRMED** | Real Claude Code `2.1.322` hook `stdin` JSON (`PreToolUse`, `PostToolUse`, `Stop`) does not include a `"model"` field. In [`crates/agent-otel-daemon/src/transform.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-daemon/src/transform.rs#L124-L128), the daemon populates `input.agent_name = Some("claude-code")` from `WireHeader.client_id == 2`, while `input.model` remains `None`. Then [`crates/agent-otel-core/src/otlp.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/otlp.rs#L296-L350) computes `inferred_provider = input.model.as_deref().map(infer_provider)` (`None`) and unconditionally falls back to `inferred_provider.unwrap_or(GEN_AI_PROVIDER_GOOGLE)` (`"google"`), ignoring `input.agent_name`. |
-| **`(c)` Legitimate Google-hosted Claude route** | **Ruled out** | `agent-otel-bridge` does not inspect HTTP endpoints, Vertex AI / Antigravity routing headers, or session logs when building hook spans. In `agent-otel-core`, `"google"` is produced solely by `infer_provider(model)` when `model` contains `"gemini"` or by `.unwrap_or(GEN_AI_PROVIDER_GOOGLE)` when `input.model` is `None`. None of the 14 spans has `gen_ai.request.model` (which is always emitted at [`otlp.rs:359-361`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/otlp.rs#L359-L361) whenever `input.model.is_some()`), proving `input.model` was `None`. |
+| **`(b)` Bridge attribution bug** | **CONFIRMED** | Real Claude Code `2.1.322` hook `stdin` JSON (`PreToolUse`, `PostToolUse`, `Stop`) does not include a `"model"` field. In [`crates/agent-otel-daemon/src/transform.rs`](../../crates/agent-otel-daemon/src/transform.rs#L124-L128), the daemon previously populated `input.agent_name = Some("claude-code")` from `WireHeader.client_id == 2`, while `input.model` remained `None`. Then [`crates/agent-otel-core/src/otlp.rs`](../../crates/agent-otel-core/src/otlp.rs#L296-L358) computed `inferred_provider = input.model.as_deref().map(infer_provider)` (`None`) and unconditionally fell back to `inferred_provider.unwrap_or(GEN_AI_PROVIDER_GOOGLE)` (`"google"`), ignoring the wire header `ClientKind` and `input.agent_name`. |
+| **`(c)` Legitimate Google-hosted Claude route** | **Ruled out** | `agent-otel-bridge` does not inspect HTTP endpoints, Vertex AI / Antigravity routing headers, or session logs when building hook spans. In `agent-otel-core`, `"google"` was produced solely by `infer_provider(model)` when `model` contained `"gemini"` or by `.unwrap_or(GEN_AI_PROVIDER_GOOGLE)` when `input.model` was `None`. None of the 14 spans has `gen_ai.request.model` (which is always emitted at [`otlp.rs:367-369`](../../crates/agent-otel-core/src/otlp.rs#L367-L369) whenever `input.model.is_some()`), proving `input.model` was `None`. |
 | **`(d)` Undetermined** | **Ruled out** | The mechanism is 100% deterministic and reproducible from the sanitized `hook-sanitized.jsonl` frames and `agent-otel-core` / `agent-otel-daemon` source code. |
 
 ---
@@ -38,7 +38,7 @@ The G0a corpus in commit `aa71997` consists of **52 files**:
 
 | File / Surface Pattern | Files | Records / Spans | Harness / Client Attribution | Provider / System Attribution | Model Attribution | SDK / Scope Attribution |
 | :--- | :---: | :---: | :--- | :--- | :--- | :--- |
-| [`capture-matrix.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/capture-matrix.json) & [`capture-matrix.md`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/capture-matrix.md) | 2 | 2 harness entries, 10 scenario entries | `harnesses.claude-code`: `version = "2.1.322"`, `binary_sha256 = "bfb3703a..."`<br>`harnesses.codex`: `version = "0.167.0"`, `binary_sha256 = "cdcb45aa..."`<br>Finding `F12` notes `gen_ai.agent.name = "claude-code"` vs canonical `"claude"`. | None in matrix metadata | `"model"` listed in `session_jsonl.fields_present` for both harnesses; absent from `hook_stdin.fields_present` | `agent-otel-bridge` (`0.5.0`, binary SHA-256 `f4cf2ec8...`) |
+| [`capture-matrix.json`](../contracts/fact-export-v1/captures/g0a-20261112/capture-matrix.json) & [`capture-matrix.md`](../contracts/fact-export-v1/captures/g0a-20261112/capture-matrix.md) | 2 | 2 harness entries, 10 scenario entries | `harnesses.claude-code`: `version = "2.1.322"`, `binary_sha256 = "bfb3703a..."`<br>`harnesses.codex`: `version = "0.167.0"`, `binary_sha256 = "cdcb45aa..."`<br>Finding `F12` notes `gen_ai.agent.name = "claude-code"` vs canonical `"claude"`. | None in matrix metadata | `"model"` listed in `session_jsonl.fields_present` for both harnesses; absent from `hook_stdin.fields_present` | `agent-otel-bridge` (`0.5.0`, binary SHA-256 `f4cf2ec8...`) |
 | `claude-2.1.322/S1..S5/otlp-traces-sanitized.json` | 5 | 14 spans (`S1`: 4, `S2`: 4, `S3`: 2, `S4`: 2, `S5`: 2) | Span attr `gen_ai.agent.name = "claude-code"` on all 14 spans (`S5` stop span also has `name = "agent.stop"`). | Span attrs **`gen_ai.provider.name = "google"`** and **`gen_ai.system = "google"`** on all 14 spans (**BUG**). | **Absent** on all 14 spans (no `gen_ai.request.model` or `gen_ai.response.model`). | Resource: `telemetry.sdk.name = "agent-otel-bridge"`, `telemetry.distro.name = "agent-otel-bridge"`, `telemetry.sdk.language = "rust"`, `os.type = "linux"`.<br>Scope: `name = "agent-otel-bridge"`. |
 | `claude-2.1.322/S1..S5/hook-sanitized.jsonl` | 5 | 43 lines (`34` `"origin": "harness"`, `4` `"origin": "synthetic"` collision in `S2`, `5` `"origin": "synthetic"` shutdown) | `header.client_id = 2` (`ClientKind::ClaudeCode`) on all 34 harness frames and all 4 `S2` collision frames (`client_id = 0` on the 5 `MsgType = 2` shutdown frames). | **Absent** in all hook payloads. | **Absent** in all hook payloads. | Captured by G0a IPC wire tee (`msg_type = 1` `HookPayload` / `msg_type = 3` `HookPayloadWithContext`). |
 | `codex-0.167.0/S1..S5/hook-sanitized.jsonl` | 5 | 9 lines (`0` `"origin": "harness"`, `4` `"origin": "synthetic"` collision in `S2`, `5` `"origin": "synthetic"` shutdown) | **Secondary fixture finding**: `S2` lines 1–4 have `"origin": "synthetic"`, `"synthetic_kind": "collision"`, and **`header.client_id = 2`** (synthetic collision injector hardcoded `ClientKind::ClaudeCode` wire ID `2`). Real Codex hooks were disabled (`0` harness frames). | **Absent** in all hook payloads. | **Absent** in all hook payloads. | Captured by G0a IPC wire tee. |
@@ -53,36 +53,36 @@ Every span exported across `claude-2.1.322/S1..S5/otlp-traces-sanitized.json` ex
 
 | File | Span # | `name` | `agent.hook.event` | `gen_ai.operation.name` | `gen_ai.agent.name` | `gen_ai.provider.name` | `gen_ai.system` | `gen_ai.request.model` | `gen_ai.tool.call.id` |
 | :--- | :---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_df62ccdb7d1b495f` |
-| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_df62ccdb7d1b495f` |
-| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 3 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_d7b89c8a885873e1` |
-| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 4 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_d7b89c8a885873e1` |
-| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_07e2be8f7825a75f` |
-| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_07e2be8f7825a75f` |
-| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 3 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_c4ed59d704a78202` |
-| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 4 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_c4ed59d704a78202` |
-| [`claude-2.1.322/S3/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S3/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_83dddf1641fd28f1` |
-| [`claude-2.1.322/S3/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S3/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_83dddf1641fd28f1` |
-| [`claude-2.1.322/S4/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S4/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_f4d197b1e7b8d7e7` |
-| [`claude-2.1.322/S4/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S4/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_f4d197b1e7b8d7e7` |
-| [`claude-2.1.322/S5/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S5/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_aa5a5943c17ccbb4` |
-| [`claude-2.1.322/S5/otlp-traces-sanitized.json`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S5/otlp-traces-sanitized.json) | 2 | `agent.stop` | `Stop` | `agent.stop` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | *(absent)* |
+| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_df62ccdb7d1b495f` |
+| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_df62ccdb7d1b495f` |
+| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 3 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_d7b89c8a885873e1` |
+| [`claude-2.1.322/S1/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S1/otlp-traces-sanitized.json) | 4 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_d7b89c8a885873e1` |
+| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_07e2be8f7825a75f` |
+| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_07e2be8f7825a75f` |
+| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 3 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_c4ed59d704a78202` |
+| [`claude-2.1.322/S2/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S2/otlp-traces-sanitized.json) | 4 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_c4ed59d704a78202` |
+| [`claude-2.1.322/S3/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S3/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_83dddf1641fd28f1` |
+| [`claude-2.1.322/S3/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S3/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_83dddf1641fd28f1` |
+| [`claude-2.1.322/S4/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S4/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_f4d197b1e7b8d7e7` |
+| [`claude-2.1.322/S4/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S4/otlp-traces-sanitized.json) | 2 | `execute_tool Bash` | `PostToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_f4d197b1e7b8d7e7` |
+| [`claude-2.1.322/S5/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S5/otlp-traces-sanitized.json) | 1 | `execute_tool Bash` | `PreToolUse` | `execute_tool` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | `CALL_aa5a5943c17ccbb4` |
+| [`claude-2.1.322/S5/otlp-traces-sanitized.json`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S5/otlp-traces-sanitized.json) | 2 | `agent.stop` | `Stop` | `agent.stop` | `"claude-code"` | `"google"` | `"google"` | *(absent)* | *(absent)* |
 
 ---
 
 ## 3. End-to-End Mechanism & Code Trace
 
 ### Step 1: Hook Registration Sets `--client claude`
-When `agent-otel-bridge install-hooks` configures Claude Code (`~/.claude/settings.json`), [`crates/agent-otel-cli/src/hooks/command.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-cli/src/hooks/command.rs#L252) emits hook commands of the form:
+When `agent-otel-bridge install-hooks` configures Claude Code (`~/.claude/settings.json`), [`crates/agent-otel-cli/src/hooks/command.rs`](../../crates/agent-otel-cli/src/hooks/command.rs#L252) emits hook commands of the form:
 ```text
 "/path/to/agent-hook" PreToolUse --client claude
 ```
 
 ### Step 2: `agent-hook` Encodes `WireHeader.client_id = 2`
-In [`crates/agent-otel-client/src/main.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-client/src/main.rs#L127-L132), `resolve_client_id` parses `--client claude` via `ClientKind::from_str_name("claude")` ([`crates/agent-otel-core/src/model.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/model.rs#L67-L99)) to `ClientKind::ClaudeCode` (`to_wire() == 2`).
+In [`crates/agent-otel-client/src/main.rs`](../../crates/agent-otel-client/src/main.rs#L127-L132), `resolve_client_id` parses `--client claude` via `ClientKind::from_str_name("claude")` ([`crates/agent-otel-core/src/model.rs`](../../crates/agent-otel-core/src/model.rs#L211-L238)) to `ClientKind::ClaudeCode` (`to_wire() == 2`).
 `agent-hook` sends the 3-byte `WireHeader { version: 1, client_id: 2, event_id }` followed by the raw `stdin` JSON bytes without parsing or modifying the JSON payload.
 
-Every harness-originated frame in [`claude-2.1.322/S1..S5/hook-sanitized.jsonl`](file:///C:/Users/samue/code/aob-29/docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S5/hook-sanitized.jsonl) confirms this wire header:
+Every harness-originated frame in [`claude-2.1.322/S1..S5/hook-sanitized.jsonl`](../contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322/S5/hook-sanitized.jsonl) confirms this wire header:
 ```json
 {
   "header": {"client_id": 2, "event_id": 3, "version": 1},
@@ -110,8 +110,8 @@ Consequently, `AgentHookInput::parse_slice(bytes)` deserializes:
 - `input.model = None`
 - `input.agent_name = None`
 
-### Step 4: Daemon Wire Transform Populates `input.agent_name` Only
-In [`crates/agent-otel-daemon/src/transform.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-daemon/src/transform.rs#L124-L128):
+### Step 4: Daemon Wire Transform Previously Populated `input.agent_name` Only
+In [`crates/agent-otel-daemon/src/transform.rs`](../../crates/agent-otel-daemon/src/transform.rs#L124-L128), the daemon previously ran:
 ```rust
 if input.agent_name.is_none() {
     input.agent_name = ClientKind::from_wire(header.client_id)
@@ -119,10 +119,10 @@ if input.agent_name.is_none() {
         .map(str::to_owned);
 }
 ```
-For `header.client_id == 2`, `ClientKind::ClaudeCode.as_str()` sets `input.agent_name = Some("claude-code".to_string())`. `input.model` remains `None`.
+For `header.client_id == 2`, `ClientKind::ClaudeCode.as_str()` set `input.agent_name = Some("claude-code".to_string())` when `agent_name` was absent (and discarded `header.client_id` altogether when the payload supplied a subagent `agent_name` such as `"planner"`). `input.model` remained `None`.
 
-### Step 5: `build_span_from_resolved` Unconditionally Defaults Missing `model` to `"google"`
-In [`crates/agent-otel-core/src/otlp.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/otlp.rs#L296-L350):
+### Step 5: `build_span_from_resolved` Unconditionally Defaulted Missing `model` to `"google"`
+In [`crates/agent-otel-core/src/otlp.rs`](../../crates/agent-otel-core/src/otlp.rs#L296-L358), `build_span_from_resolved` previously ran:
 ```rust
 let inferred_provider = input.model.as_deref().map(infer_provider);
 
@@ -143,33 +143,35 @@ if gen_ai_latest_experimental {
     attributes.push(kv_string(GEN_AI_SYSTEM, provider));
 }
 ```
-Because `inferred_provider` only inspects `input.model` and never consults `input.agent_name`:
-1. When `input.model` is `None`, `inferred_provider` is `None`.
-2. In default stability mode (`gen_ai_latest_experimental == false`), `inferred_provider.unwrap_or(GEN_AI_PROVIDER_GOOGLE)` evaluates to `"google"`.
-3. The span is emitted with `gen_ai.agent.name = "claude-code"`, `gen_ai.provider.name = "google"`, and `gen_ai.system = "google"`.
+Because `inferred_provider` only inspected `input.model` and never consulted the wire header `ClientKind` or `input.agent_name`:
+1. When `input.model` was `None`, `inferred_provider` was `None`.
+2. In default stability mode (`gen_ai_latest_experimental == false`), `inferred_provider.unwrap_or(GEN_AI_PROVIDER_GOOGLE)` evaluated to `"google"`.
+3. The span was emitted with `gen_ai.agent.name = "claude-code"`, `gen_ai.provider.name = "google"`, and `gen_ai.system = "google"`.
 
 ### Historical Provenance & Why Existing Tests Missed It
 - This fallback dates back to `v0.1` (`26b8ce0` / `f9f456a`), when `agent-otel-bridge` only supported Antigravity (`agy`).
-- The existing unit test `test_claude_code_payload_parsing` ([`crates/agent-otel-core/tests/core_tests.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/tests/core_tests.rs#L153-L197)) did not catch this bug because its synthetic JSON fixture manually included `"model": "claude-3-5-sonnet-20241022"`.
+- The existing unit test `test_claude_code_payload_parsing` ([`crates/agent-otel-core/tests/core_tests.rs`](../../crates/agent-otel-core/tests/core_tests.rs#L153-L197)) did not catch this bug because its synthetic JSON fixture manually included `"model": "claude-3-5-sonnet-20241022"`.
 - The exact same defect is visible in earlier M2 captures in this repository whenever hook `stdin` lacked `"model"`:
-  - [`docs/production-refinement/evidence/M2/real-cli/claude-spans.json`](file:///C:/Users/samue/code/aob-29/docs/production-refinement/evidence/M2/real-cli/claude-spans.json#L25-L45) (`gen_ai.agent.name = "claude-code"`, `gen_ai.provider.name = "google"`)
-  - [`docs/production-refinement/evidence/M2/real-cli/grok-spans.json`](file:///C:/Users/samue/code/aob-29/docs/production-refinement/evidence/M2/real-cli/grok-spans.json#L25-L45) (`gen_ai.agent.name = "grok"`, `gen_ai.provider.name = "google"`)
+  - [`docs/production-refinement/evidence/M2/real-cli/claude-spans.json`](../production-refinement/evidence/M2/real-cli/claude-spans.json#L25-L45) (`gen_ai.agent.name = "claude-code"`, `gen_ai.provider.name = "google"`)
+  - [`docs/production-refinement/evidence/M2/real-cli/grok-spans.json`](../production-refinement/evidence/M2/real-cli/grok-spans.json#L25-L45) (`gen_ai.agent.name = "grok"`, `gen_ai.provider.name = "google"`)
 
 ---
 
 ## 4. Minimal Fix & Deterministic Fixture-Backed Reproduction
 
 ### 4.1 Fix Summary
-1. Add `infer_provider_from_agent(agent_name: &str) -> Option<&'static str>` in [`crates/agent-otel-core/src/semconv.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/semconv.rs):
-   - `"antigravity" | "agy" | "gemini"` $\rightarrow$ `Some(GEN_AI_PROVIDER_GOOGLE)` (`"google"`)
-   - `"claude" | "claude-code" | "claudecode"` $\rightarrow$ `Some(GEN_AI_PROVIDER_ANTHROPIC)` (`"anthropic"`)
-   - `"codex" | "codex-cli" | "openai"` $\rightarrow$ `Some(GEN_AI_PROVIDER_OPENAI)` (`"openai"`)
-   - `"grok" | "grok-cli" | "xai"` $\rightarrow$ `Some(GEN_AI_PROVIDER_XAI)` (`"xai"`)
-   - `"pi" | "pi-cli"` $\rightarrow$ `Some(GEN_AI_PROVIDER_PI)` (`"pi"`)
-   - Any unknown/unrecognized agent $\rightarrow$ `None`
-2. In [`crates/agent-otel-core/src/otlp.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/src/otlp.rs) (`build_span_from_resolved`, default path `gen_ai_latest_experimental == false`):
+1. Add `ClientKind::default_provider(&self) -> Option<&'static str>` in [`crates/agent-otel-core/src/model.rs`](../../crates/agent-otel-core/src/model.rs#L200-L209) and implement `infer_provider_from_agent(agent_name: &str) -> Option<&'static str>` in [`crates/agent-otel-core/src/semconv.rs`](../../crates/agent-otel-core/src/semconv.rs#L186-L193) via `ClientKind::from_str_name(agent_name).default_provider()` (using zero-allocation `eq_ignore_ascii_case`):
+   - `ClientKind::Antigravity` (`"antigravity" | "agy" | "gemini"`) $\rightarrow$ `Some(GEN_AI_PROVIDER_GOOGLE)` (`"google"`)
+   - `ClientKind::ClaudeCode` (`"claude" | "claude-code" | "claudecode"`) $\rightarrow$ `Some(GEN_AI_PROVIDER_ANTHROPIC)` (`"anthropic"`)
+   - `ClientKind::Codex` (`"codex" | "codex-cli" | "openai"`) $\rightarrow$ `Some(GEN_AI_PROVIDER_OPENAI)` (`"openai"`)
+   - `ClientKind::Grok` (`"grok" | "grok-cli" | "xai"`) $\rightarrow$ `Some(GEN_AI_PROVIDER_XAI)` (`"xai"`)
+   - `ClientKind::Pi` (`"pi" | "pi-cli"`) $\rightarrow$ `Some(GEN_AI_PROVIDER_PI)` (`"pi"`, documented as a harness default provider rather than a verified model vendor)
+   - `ClientKind::Unspecified` / any unknown agent $\rightarrow$ `None`
+2. Preserve wire-header harness identity independently of payload `agent_name` via `#[serde(skip)] pub harness_provider: Option<&'static str>` on `AgentHookInput` ([`crates/agent-otel-core/src/model.rs`](../../crates/agent-otel-core/src/model.rs#L501-L504)), populated from `ClientKind::from_wire(header.client_id).default_provider()` in [`crates/agent-otel-daemon/src/transform.rs`](../../crates/agent-otel-daemon/src/transform.rs#L124-L128).
+3. In [`crates/agent-otel-core/src/otlp.rs`](../../crates/agent-otel-core/src/otlp.rs#L347-L355) (`build_span_from_resolved`, default path `gen_ai_latest_experimental == false`), resolve provider with precedence **explicit `model` $\rightarrow$ header `ClientKind` default provider $\rightarrow$ payload `agent_name` inference $\rightarrow$ `"google"` fallback**:
    ```rust
    let provider = inferred_provider
+       .or(input.harness_provider)
        .or_else(|| {
            input
                .agent_name
@@ -178,19 +180,20 @@ Because `inferred_provider` only inspects `input.model` and never consults `inpu
        })
        .unwrap_or(GEN_AI_PROVIDER_GOOGLE);
    ```
-3. **Preserved Contracts**:
-   - **Explicit `input.model` takes precedence**: If a harness supplies `input.model` (for example, `antigravity` hosting a Claude model with `"model": "claude-..."`), `inferred_provider` is `Some("anthropic")` and takes precedence over `input.agent_name`.
-   - **Experimental 1.41.0 opt-in unchanged**: When `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` is enabled (`gen_ai_latest_experimental == true`), `gen_ai.provider.name` continues to be emitted **only** when `input.model` is present and recognized, preserving the documented contract in [`docs/CONFIGURATION.md`](file:///C:/Users/samue/code/aob-29/docs/CONFIGURATION.md#L64) and [`crates/agent-otel-core/tests/semconv_opt_in.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/tests/semconv_opt_in.rs#L100-L116).
-   - **Legacy empty input fallback unchanged**: When both `input.model` and `input.agent_name` are `None`, the default path still falls back to `GEN_AI_PROVIDER_GOOGLE`.
+4. **Preserved Contracts**:
+   - **Explicit `input.model` takes precedence**: If a harness supplies `input.model` (for example, `antigravity` hosting a Claude model with `"model": "claude-..."`), `inferred_provider` is `Some("anthropic")` and takes precedence over `input.harness_provider` and `input.agent_name`.
+   - **Subagent payload `agent_name` does not clobber header harness provider**: When `header.client_id == 2` (`ClaudeCode`) and the payload sets `agent_name = "planner"` without `model`, `gen_ai.agent.name` remains `"planner"` while `input.harness_provider` attributes `gen_ai.provider.name = "anthropic"` and `gen_ai.system = "anthropic"`.
+   - **Experimental 1.41.0 opt-in unchanged**: When `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` is enabled (`gen_ai_latest_experimental == true`), `gen_ai.provider.name` continues to be emitted **only** when `input.model` is present and recognized, preserving the documented contract in [`docs/CONFIGURATION.md`](../CONFIGURATION.md#L64) and [`crates/agent-otel-core/tests/semconv_opt_in.rs`](../../crates/agent-otel-core/tests/semconv_opt_in.rs#L100-L116).
+   - **Legacy unknown/empty input fallback unchanged**: When `input.model`, `input.harness_provider`, and `infer_provider_from_agent` all resolve to `None`, the default path still falls back to `GEN_AI_PROVIDER_GOOGLE`.
 
-### 4.2 Deterministic Fixture Test
+### 4.2 Deterministic Fixture Tests
 The regression is locked in by deterministic tests in:
-- [`crates/agent-otel-core/tests/semconv_opt_in.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-core/tests/semconv_opt_in.rs) (`g0a_claude_code_2_1_322_hook_without_model_infers_anthropic_provider`)
-- [`crates/agent-otel-daemon/src/transform.rs`](file:///C:/Users/samue/code/aob-29/crates/agent-otel-daemon/src/transform.rs) (`production_transform_g0a_claude_2_1_322_wire_frame_attributes_anthropic_provider`)
+- [`crates/agent-otel-core/tests/semconv_opt_in.rs`](../../crates/agent-otel-core/tests/semconv_opt_in.rs#L363-L462) (`g0a_claude_code_2_1_322_hook_without_model_infers_anthropic_provider`)
+- [`crates/agent-otel-daemon/src/transform.rs`](../../crates/agent-otel-daemon/src/transform.rs#L418-L489) (`production_transform_g0a_claude_2_1_322_wire_frame_attributes_anthropic_provider` and `production_transform_header_client_kind_attributes_provider_when_payload_sets_subagent_name`)
 
-These tests replay the exact sanitized `claude-2.1.322/S5/hook-sanitized.jsonl` frame (`WireHeader::new(2, HookEvent::PreToolUse.to_wire())` with the 8-key Claude Code `2.1.322` `PreToolUse` JSON payload lacking `"model"`):
-- **Before fix**: `gen_ai.agent.name = "claude-code"`, `gen_ai.provider.name = "google"`, `gen_ai.system = "google"`.
-- **After fix**: `gen_ai.agent.name = "claude-code"`, `gen_ai.provider.name = "anthropic"`, `gen_ai.system = "anthropic"`.
+These tests replay the exact sanitized `claude-2.1.322/S5/hook-sanitized.jsonl` frame (`WireHeader::new(2, HookEvent::PreToolUse.to_wire())` with the 8-key Claude Code `2.1.322` `PreToolUse` JSON payload lacking `"model"`) as well as subagent payload overrides (`agent_name: "planner"` with `client_id = 2`):
+- **Before fix**: `gen_ai.provider.name = "google"`, `gen_ai.system = "google"`.
+- **After fix**: `gen_ai.provider.name = "anthropic"`, `gen_ai.system = "anthropic"`.
 
 ---
 

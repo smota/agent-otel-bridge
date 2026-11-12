@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Model-less hook events now attribute `gen_ai.provider.name` and `gen_ai.system` to the harness default provider (resolved from the wire header `ClientKind` or payload `agent_name` in legacy mode; omitted in `gen_ai_latest_experimental` mode when the model is absent) instead of unconditionally falling back to `"google"`. AI provider breakdown dashboards will shift accordingly for harnesses whose hook payloads omit `"model"` (such as Claude Code).
+
 ## [0.9.0] - 2026-11-06
 
 See the [release notes](docs/releases/v0.9.0.md).
