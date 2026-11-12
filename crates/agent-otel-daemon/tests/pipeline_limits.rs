@@ -106,6 +106,7 @@ async fn blocked_exporter_does_not_block_transform_and_shutdown_reconciles() {
         gen_ai_latest_experimental: false,
         enrich_email: false,
         workspace_path_mode: agent_otel_daemon::config::WorkspacePathMode::Absolute,
+        capture_mode: agent_otel_daemon::config::CaptureMode::Minimal,
         traces: SignalExportConfig::http_protobuf(format!(
             "{}/v1/traces",
             collector.endpoint.trim_end_matches('/')

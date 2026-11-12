@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0 */
 use crate::{
     batch::SpanBatcher,
-    config::{DaemonConfig, WorkspacePathMode},
+    config::{CaptureMode, DaemonConfig, WorkspacePathMode},
     context_cache::ContextCache,
     diagnostics::Diagnostics,
     exporter::{ExporterBuildError, OtlpExporter},
@@ -158,7 +158,11 @@ impl Daemon {
         let mut span_assembler = SpanAssembler::default();
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
-        let user_email = ambient_user_email(self.config.enrich_email);
+        let user_email = if self.config.capture_mode == CaptureMode::Minimal {
+            None
+        } else {
+            ambient_user_email(self.config.enrich_email)
+        };
         let terminal_type = std::env::var("TERM_PROGRAM")
             .ok()
             .or_else(|| std::env::var_os("WT_SESSION").map(|_| "windows-terminal".to_string()))
@@ -216,7 +220,7 @@ impl Daemon {
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break; };
                     last_activity = Instant::now();
-                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, &mut span_assembler);
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, self.config.capture_mode, &mut span_assembler);
                     processed += 1;
                 }
                 _ = tick.tick() => {
@@ -257,6 +261,7 @@ impl Daemon {
                     self.config.gen_ai_latest_experimental,
                     metadata,
                     self.config.workspace_path_mode,
+                    self.config.capture_mode,
                     &mut span_assembler,
                 );
             }
@@ -320,6 +325,7 @@ fn process_frame(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
     assembler: &mut SpanAssembler,
 ) {
     transform(
@@ -335,6 +341,7 @@ fn process_frame(
         gen_ai_latest_experimental,
         metadata,
         workspace_path_mode,
+        capture_mode,
         assembler,
     );
 }
@@ -351,6 +358,7 @@ fn process_frame_without_quota(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
     assembler: &mut SpanAssembler,
 ) {
     transform(
@@ -366,6 +374,7 @@ fn process_frame_without_quota(
         gen_ai_latest_experimental,
         metadata,
         workspace_path_mode,
+        capture_mode,
         assembler,
     );
 }
@@ -383,6 +392,7 @@ fn transform(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
     assembler: &mut SpanAssembler,
 ) {
     let now_instant = Instant::now();
@@ -392,7 +402,7 @@ fn transform(
         .as_nanos() as u64;
     let next_salt = salt.wrapping_add(1);
 
-    let outcome = match crate::transform::production_transform_with_workspace(
+    let outcome = match crate::transform::production_transform_with_capture_mode(
         frame.msg_type,
         &frame.payload,
         contexts,
@@ -404,6 +414,7 @@ fn transform(
         now_instant,
         now_nanos,
         workspace_path_mode,
+        capture_mode,
     ) {
         Ok(res) => {
             *salt = next_salt;

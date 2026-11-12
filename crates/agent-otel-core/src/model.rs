@@ -405,10 +405,20 @@ pub struct AgentHookInput {
     #[serde(alias = "vcs_system", alias = "vcsSystem", default)]
     pub vcs_system: Option<String>,
 
-    #[serde(alias = "vcs_repository", alias = "vcsRepository", default)]
+    #[serde(
+        alias = "vcs_repository",
+        alias = "vcsRepository",
+        alias = "vcs.repository.name",
+        default
+    )]
     pub vcs_repository: Option<String>,
 
-    #[serde(alias = "vcs_branch", alias = "vcsBranch", default)]
+    #[serde(
+        alias = "vcs_branch",
+        alias = "vcsBranch",
+        alias = "vcs.branch.name",
+        default
+    )]
     pub vcs_branch: Option<String>,
 
     #[serde(alias = "vcs_commit", alias = "vcsCommit", default)]

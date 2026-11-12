@@ -14,13 +14,17 @@ pub mod git;
 pub mod pipeline;
 pub mod platform;
 pub mod platforms;
+pub mod privacy;
 pub mod quota;
 mod quota_worker;
 pub mod span_assembler;
 pub mod transform;
 
-pub use config::DaemonConfig;
+pub use config::{CaptureMode, DaemonConfig};
 pub use daemon::Daemon;
 pub use exporter::OtlpExporter;
 pub use quota::QuotaEngine;
-pub use transform::{production_transform, ProductionTransformOutcome, TransformError};
+pub use transform::{
+    production_transform, production_transform_with_capture_mode, ProductionTransformOutcome,
+    TransformError,
+};

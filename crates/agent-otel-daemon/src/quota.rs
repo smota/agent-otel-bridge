@@ -66,7 +66,10 @@ impl QuotaEngine {
             (base.bucket, p.burn_per_token(), base.group)
         } else {
             (
-                agent_name.to_ascii_lowercase(),
+                crate::privacy::project_agent_name(
+                    agent_name,
+                    crate::privacy::CaptureMode::Minimal,
+                ),
                 1.0 / 500_000.0,
                 "ai-agent".to_string(),
             )

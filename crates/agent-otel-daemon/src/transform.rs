@@ -5,6 +5,7 @@
 
 use crate::config::WorkspacePathMode;
 use crate::context_cache::{ContextCache, ContextState};
+use crate::privacy::{project_input_and_metadata, project_span, CaptureMode};
 use agent_otel_core::model::{AgentHookInput, ClientKind, ExecutionMode, HookEvent};
 use agent_otel_core::otlp::{build_span_from_resolved, kv_int, kv_string, ResolvedSpanMetadata};
 use agent_otel_core::trace_id::resolve_trace_context;
@@ -81,7 +82,7 @@ pub fn production_transform(
     now_instant: Instant,
     now_unix_nanos: u64,
 ) -> Result<ProductionTransformOutcome, TransformError> {
-    production_transform_with_workspace(
+    production_transform_with_capture_mode(
         msg_type,
         payload,
         contexts,
@@ -92,12 +93,14 @@ pub fn production_transform(
         metadata,
         now_instant,
         now_unix_nanos,
-        WorkspacePathMode::Absolute,
+        WorkspacePathMode::Hash,
+        CaptureMode::Minimal,
     )
 }
 
+/// Shared production transformation with explicit [`WorkspacePathMode`] and [`CaptureMode`].
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn production_transform_with_workspace(
+pub fn production_transform_with_capture_mode(
     msg_type: MsgType,
     payload: &[u8],
     contexts: &ContextCache,
@@ -105,10 +108,11 @@ pub(crate) fn production_transform_with_workspace(
     mode: ExecutionMode,
     aliases: bool,
     gen_ai_latest_experimental: bool,
-    metadata: ResolvedSpanMetadata<'_>,
+    mut metadata: ResolvedSpanMetadata<'_>,
     now_instant: Instant,
     now_unix_nanos: u64,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
 ) -> Result<ProductionTransformOutcome, TransformError> {
     let (header, traceparent, bytes) =
         decode_wire_payload(msg_type, payload).ok_or(TransformError::InvalidEnvelope)?;
@@ -132,10 +136,6 @@ pub(crate) fn production_transform_with_workspace(
         (None, None) => None,
         (a, b) => Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)).max(0) as u64),
     };
-    let meta = ParsedEventMeta {
-        agent_name: input.agent_name.clone(),
-        total_tokens,
-    };
 
     let context = resolve_trace_context(
         input.traceparent.as_deref(),
@@ -144,17 +144,23 @@ pub(crate) fn production_transform_with_workspace(
     );
     let lookup = contexts.lookup(&input, now_instant);
     input.normalize_with_context(lookup.context.as_ref());
-    let mut redacted = None;
-    if workspace_path_mode != WorkspacePathMode::Absolute {
-        let mut clone = input.clone();
-        apply_workspace_path_mode(&mut clone, workspace_path_mode);
-        redacted = Some(clone);
-    }
-    let span_input = redacted.as_ref().unwrap_or(&input);
+
+    let provided = lookup.context.is_none()
+        && input
+            .workspace_path
+            .as_ref()
+            .is_some_and(|p| std::path::Path::new(p).is_absolute());
+
+    project_input_and_metadata(&mut input, &mut metadata, capture_mode, workspace_path_mode);
+
+    let meta = ParsedEventMeta {
+        agent_name: input.agent_name.clone(),
+        total_tokens,
+    };
 
     let mut span = build_span_from_resolved(
         event,
-        span_input,
+        &input,
         now_unix_nanos,
         now_unix_nanos,
         salt,
@@ -163,12 +169,8 @@ pub(crate) fn production_transform_with_workspace(
         aliases,
         gen_ai_latest_experimental,
     );
+    project_span(&mut span, capture_mode);
 
-    let provided = lookup.context.is_none()
-        && input
-            .workspace_path
-            .as_ref()
-            .is_some_and(|p| std::path::Path::new(p).is_absolute());
     let state = if provided {
         "provided"
     } else {
@@ -211,66 +213,10 @@ pub(crate) fn production_transform_with_workspace(
     })
 }
 
-fn apply_workspace_path_mode(input: &mut AgentHookInput, mode: WorkspacePathMode) {
-    match mode {
-        WorkspacePathMode::Absolute => {}
-        WorkspacePathMode::Relative => apply_relative_workspace(input),
-        WorkspacePathMode::Hash => {
-            if let Some(path) = input.workspace_path.clone() {
-                input.workspace_path = Some(sha256_hex(&path));
-            }
-            if let Some(root) = input.project_root.clone() {
-                input.project_root = Some(sha256_hex(&root));
-            }
-        }
-    }
-}
-
-fn apply_relative_workspace(input: &mut AgentHookInput) {
-    let root = input.project_root.clone();
-    input.workspace_path = match (input.workspace_path.as_deref(), root.as_deref()) {
-        (Some(path), Some(root)) => relative_workspace_path(path, root),
-        (Some(_), None) => None,
-        (None, _) => None,
-    };
-    if let Some(root) = root.as_deref() {
-        input.project_root = final_path_component(root);
-    }
-}
-
-fn relative_workspace_path(path: &str, root: &str) -> Option<String> {
-    let relative = std::path::Path::new(path)
-        .strip_prefix(std::path::Path::new(root))
-        .ok()?;
-    if relative.as_os_str().is_empty() {
-        Some(".".to_string())
-    } else {
-        relative.to_str().map(str::to_owned)
-    }
-}
-
-fn final_path_component(path: &str) -> Option<String> {
-    std::path::Path::new(path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
-}
-
-fn sha256_hex(value: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let digest = Sha256::digest(value.as_bytes());
-    let mut hex = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        hex.push(char::from(b"0123456789abcdef"[usize::from(byte >> 4)]));
-        hex.push(char::from(b"0123456789abcdef"[usize::from(byte & 0x0f)]));
-    }
-    hex
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::privacy::{apply_workspace_path_mode, sha256_hex};
     use agent_otel_ipc::frame::{encode_context_payload, WireHeader};
     use opentelemetry_proto::tonic::common::v1::any_value;
 
@@ -358,13 +304,39 @@ mod tests {
     }
 
     #[test]
-    fn production_transform_hashes_workspace_paths_only_in_hash_mode() {
+    fn production_transform_hashes_workspace_paths_in_default_minimal_and_respects_opt_in_modes() {
         let contexts = ContextCache::new();
         let header = WireHeader::new(1, HookEvent::PostToolUse.to_wire());
         let json = br#"{"conversationId":"privacy","workspacePath":"/work/repo/src","projectRoot":"/work/repo","projectName":"repo"}"#;
         let frame = encode_context_payload(header, None, json);
         let metadata = ResolvedSpanMetadata::default();
-        let hashed = production_transform_with_workspace(
+        let default_minimal = production_transform(
+            MsgType::HookPayloadWithContext,
+            &frame,
+            &contexts,
+            1,
+            ExecutionMode::Interactive,
+            false,
+            false,
+            metadata,
+            Instant::now(),
+            1,
+        )
+        .expect("default minimal transform");
+        assert_eq!(
+            string_attr(&default_minimal.span, "workspace.path"),
+            Some("cc324a191f87ae3da5bbdb78642ab3bc058214e6341c6480b674884778ebe947")
+        );
+        assert_eq!(
+            string_attr(&default_minimal.span, "workspace.project_root"),
+            Some("ddc5e473a09bd156b4eb7c426367aa59c37909a35241b49fbfa0631b9b532a39")
+        );
+        assert_eq!(
+            string_attr(&default_minimal.span, "workspace.project_name"),
+            Some("proj_071ca22277547058")
+        );
+
+        let metadata_hashed = production_transform_with_capture_mode(
             MsgType::HookPayloadWithContext,
             &frame,
             &contexts,
@@ -376,22 +348,23 @@ mod tests {
             Instant::now(),
             1,
             WorkspacePathMode::Hash,
+            CaptureMode::MetadataOnly,
         )
-        .expect("hash transform");
+        .expect("metadata_only hash transform");
         assert_eq!(
-            string_attr(&hashed.span, "workspace.path"),
+            string_attr(&metadata_hashed.span, "workspace.path"),
             Some("cc324a191f87ae3da5bbdb78642ab3bc058214e6341c6480b674884778ebe947")
         );
         assert_eq!(
-            string_attr(&hashed.span, "workspace.project_root"),
+            string_attr(&metadata_hashed.span, "workspace.project_root"),
             Some("ddc5e473a09bd156b4eb7c426367aa59c37909a35241b49fbfa0631b9b532a39")
         );
         assert_eq!(
-            string_attr(&hashed.span, "workspace.project_name"),
+            string_attr(&metadata_hashed.span, "workspace.project_name"),
             Some("repo")
         );
 
-        let absolute = production_transform(
+        let metadata_absolute = production_transform_with_capture_mode(
             MsgType::HookPayloadWithContext,
             &frame,
             &contexts,
@@ -402,15 +375,21 @@ mod tests {
             metadata,
             Instant::now(),
             1,
+            WorkspacePathMode::Absolute,
+            CaptureMode::MetadataOnly,
         )
-        .expect("absolute transform");
+        .expect("metadata_only absolute transform");
         assert_eq!(
-            string_attr(&absolute.span, "workspace.path"),
+            string_attr(&metadata_absolute.span, "workspace.path"),
             Some("/work/repo/src")
         );
         assert_eq!(
-            string_attr(&absolute.span, "workspace.project_root"),
+            string_attr(&metadata_absolute.span, "workspace.project_root"),
             Some("/work/repo")
+        );
+        assert_eq!(
+            string_attr(&metadata_absolute.span, "workspace.project_name"),
+            Some("repo")
         );
     }
 

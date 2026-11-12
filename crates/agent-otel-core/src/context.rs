@@ -376,24 +376,33 @@ fn read_text_limited(path: &Path, max_file_bytes: usize, budget: &HarvestBudget)
 }
 
 fn sanitize_git_url(raw_url: &str) -> String {
+    let without_query = raw_url.split(['?', '#']).next().unwrap_or(raw_url);
     // Strip user/tokens like https://x-access-token:ghp_xxx@github.com/...
-    if let Some(at_idx) = raw_url.find('@') {
-        if let Some(proto_idx) = raw_url.find("://") {
+    if let Some(at_idx) = without_query.find('@') {
+        if let Some(proto_idx) = without_query.find("://") {
             if proto_idx < at_idx {
-                let proto = &raw_url[..proto_idx + 3];
-                let host_and_path = &raw_url[at_idx + 1..];
+                let proto = &without_query[..proto_idx + 3];
+                let host_and_path = &without_query[at_idx + 1..];
                 return format!("{proto}{host_and_path}");
+            }
+        } else {
+            let user_part = &without_query[..at_idx];
+            let host_and_path = &without_query[at_idx + 1..];
+            if user_part.contains(':') {
+                return format!("git@{host_and_path}");
             }
         }
     }
-    raw_url.to_string()
+    without_query.to_string()
 }
 
 fn extract_repo_name(url: &str) -> Option<String> {
-    let clean = url.trim_end_matches(".git").trim_end_matches('/');
+    let without_query = url.split(['?', '#']).next().unwrap_or(url);
+    let clean = without_query.trim_end_matches(".git").trim_end_matches('/');
     clean
         .split(['/', ':', '\\'])
         .next_back()
+        .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
 }
 

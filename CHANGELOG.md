@@ -7,15 +7,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- Model-less hook events now attribute `gen_ai.provider.name` and `gen_ai.system` to the harness default provider (resolved from the wire header `ClientKind` or payload `agent_name` in legacy mode; omitted in `gen_ai_latest_experimental` mode when the model is absent) instead of unconditionally falling back to `"google"`. AI provider breakdown dashboards will shift accordingly for harnesses whose hook payloads omit `"model"` (such as Claude Code).
+- Explicit daemon-side ingress privacy projection (`AGENT_OTEL_CAPTURE_MODE`: `minimal` default, `metadata_only` / `metadata-only`, `full`) stamped as `agent.capture.mode` on every exported trace and metric `Resource` (`AOB#17` / `F5`).
 
 ### Changed
 
+- **Default capture mode is now content-free and identifier-safe (`minimal`):** By default, `host.name` and `user.email` are omitted; `workspace.path` and `workspace.project_root` default to SHA-256 hex digests (`WorkspacePathMode::Hash`); `workspace.project_name` and `vcs.repository.name` emit pseudonyms (`proj_<16hex>`, `repo_<16hex>`); `vcs.branch.name` / `vcs.ref.head.name` emit closed branch categories (`main`, `develop`, `feature`, `fix`, `release`, `docs`, `chore`, `detached`, `other`); error `span.status.message` emits the closed `agent.error.category` value instead of raw error text; and tool/agent/termination fields enforce closed allowlists or pseudonyms. Dashboards grouping on raw project names, branch names, hostnames, emails, or error messages will shift unless `AGENT_OTEL_CAPTURE_MODE=metadata_only` (or `full`) is configured. Credentials are scrubbed in all capture modes.
 - **Upgrade note (`local install` staging vs activation):** `agent-otel-bridge local install` now stages candidate binaries and `manifest.json` under `versions/<version_id>/` by default without activating; pass `--activate` (`agent-otel-bridge local install --activate`) to promote the staged version into `bin/`, `current`, `active.json`, and `previous/`.
 - **Digest-suffixed version IDs (`<id>-<8hex>`):** When staging a build whose base `<semver>-<short_commit>[-dirty]` directory already exists with different binary SHA-256 hashes (or when rollback detects a hash mismatch in `versions/<id>/` and stages from `previous/`), the runtime derives `<id>-<8hex>` from the first 8 hex characters of `SHA256(<hook_sha256>:<bridge_sha256>)` instead of overwriting existing version directories.
 - **Canonical `bin/` symlink layout:** Where the OS and process privileges allow symlinks, `bin/agent-hook(.exe)` and `bin/agent-otel-bridge(.exe)` are now file symlinks pointing directly to `../versions/<version_id>/<binary>` rather than regular file copies or links through `current`, falling back to staged file copies only when symlink privilege is unavailable (such as Windows OS error 1314 without Developer Mode).
+
+### Fixed
+
+- Model-less hook events now attribute `gen_ai.provider.name` and `gen_ai.system` to the harness default provider (resolved from the wire header `ClientKind` or payload `agent_name` in legacy mode; omitted in `gen_ai_latest_experimental` mode when the model is absent) instead of unconditionally falling back to `"google"`. AI provider breakdown dashboards will shift accordingly for harnesses whose hook payloads omit `"model"` (such as Claude Code).
 
 ## [0.9.0] - 2026-11-06
 

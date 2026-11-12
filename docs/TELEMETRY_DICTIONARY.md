@@ -64,10 +64,11 @@ The table below describes bridge schema mappings for the five [built-in harness 
 | Taxonomy Dimension | Canonical OTel Attribute / Metric | OTel Signal | Type | Antigravity | Claude Code | OpenAI Codex | xAI Grok | Pi (pi.dev) | Source & Description |
 |---|---|---|---|:---:|:---:|:---:|:---:|:---:|---|
 | **Identity & Session** | `gen_ai.conversation.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Conversation / session identifier when supplied. The fallback trace ID is an unkeyed SHA-256 derivation; valid inbound trace context wins, so a session-to-trace hash join is unreliable ([F6](BACKLOG.md#verified-aob-facts)). |
-| **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email from the payload or `$USER_EMAIL`, which is eligible for every harness even when enrichment is off. Git config and `$GIT_AUTHOR_EMAIL` require `AGENT_OTEL_ENRICH_EMAIL`. See [§5.1.1 privacy behaviour](#511-current-path-email-and-error-export-behaviour). |
-| **Identity & Session** | `terminal.type` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Terminal emulator (e.g. `windows-terminal`, `xterm-256color`, `vscode`). Enriched from env. |
+| **Identity & Session** | `user.email` | Span Attr | `string` | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | Omitted in default `minimal` capture mode. In `metadata_only` / `full` modes, resolved from the payload or `$USER_EMAIL` (and git config / `$GIT_AUTHOR_EMAIL` when `AGENT_OTEL_ENRICH_EMAIL=true\|1`). See [§5.1.1 privacy projection](#511-current-path-email-and-error-export-behaviour). |
+| **Identity & Session** | `terminal.type` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Terminal emulator (closed vocabulary in `minimal` mode, e.g. `windows-terminal`, `xterm-256color`, `vscode`, `other`). |
 | **Identity & Session** | `service.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Standard OTel service name (`agent-otel-bridge` or custom via `OTEL_SERVICE_NAME`). |
-| **Identity & Session** | `host.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Hostname of the developer workstation. Enriched automatically from OS. |
+| **Identity & Session** | `agent.capture.mode` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Active daemon ingress privacy capture mode (`minimal` default, `metadata_only`, `full`) configured via `AGENT_OTEL_CAPTURE_MODE`. |
+| **Identity & Session** | `host.name` | Resource | `string` | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | Omitted in default `minimal` capture mode; emitted in `metadata_only` and `full` modes. |
 | **Identity & Session** | `os.type` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Operating system type (`windows`, `linux`, `macos`). Enriched automatically. |
 | **Agent Lifecycle** | `gen_ai.agent.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Canonical agent identifier (`antigravity`, `claude-code`, `codex`, `grok`, `pi`). |
 | **Agent Lifecycle** | `agent.hook.event` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Universal lifecycle event (`PreToolUse`, `PostToolUse`, `PostInvocation`, `Stop`). |
@@ -187,14 +188,25 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 | Branch and repository names | Emitted in plaintext when present; changing the workspace path mode does not redact them. | [otlp.rs:459–469](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L459-L469) |
 | Error status messages | Full raw error text is exported by default. Experimental truncation limits length, not sensitive content. | [otlp.rs:579–587](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L579-L587) |
 
-[Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection with a forbidden-field sentinel audit. That protection is planned, not implemented by this documentation change. Existing controls have narrower scope:
+[Work package A1](BACKLOG.md#aob-work-packages) (`AOB#17`) enforces an explicit daemon-side ingress privacy projection before OTLP export, controlled by `AGENT_OTEL_CAPTURE_MODE` and stamped on every exported `Resource` as `agent.capture.mode`:
 
-- `user.email` comes from the hook payload or `$USER_EMAIL`. `$GIT_AUTHOR_EMAIL` and git config are read only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
-- `AGENT_OTEL_WORKSPACE_PATH` controls `workspace.path` and `workspace.project_root`:
-  - `absolute` (default): both values are emitted as harvested.
-  - `relative`: when the path is under the project root, `workspace.path` is that relative path; otherwise it is omitted. `workspace.project_root` is only the final directory name. `workspace.project_name` is unchanged.
-  - `hash`: both values are the lowercase hex SHA-256 of the absolute path string.
-- When `OTEL_SEMCONV_STABILITY_OPT_IN` includes `gen_ai_latest_experimental` and the span is an error, the status message is truncated to 160 bytes on a character boundary and `…` is appended if it was cut. `error.type` stays the error category (or `_OTHER`), not the raw message. The default export keeps the full status message.
+- **`minimal` (default — content-free and identifier-safe):**
+  - `agent.capture.mode` = `"minimal"` on every trace and metric `Resource`.
+  - `host.name` and `user.email` are omitted on resources and spans (`ambient_user_email` is not harvested).
+  - `workspace.path` and `workspace.project_root` are always emitted as 64-character lowercase SHA-256 hex digests.
+  - `workspace.project_name` and `vcs.repository.name` are replaced with deterministic pseudonyms (`proj_<16hex>` and `repo_<16hex>`).
+  - `vcs.branch.name` (and `vcs.ref.head.name` under `gen_ai_latest_experimental`) is mapped to a closed category set: `main`, `develop`, `feature`, `fix`, `release`, `docs`, `chore`, `detached`, or `other`.
+  - `span.status.message` on error spans is set to the closed `agent.error.category` (`provider_quota_exhausted`, `user_interrupted`, `schema_validation_error`, or `tool_verification_failed`); raw error text and span events are never exported.
+  - `agent.tool.binary` and `agent.tool.wrapped_binary` are restricted to a closed allowlist of standard developer binaries; unrecognized or custom script names are omitted.
+  - Unrecognized custom `gen_ai.tool.name`, `capability.namespace`, `capability.name`, `gen_ai.agent.name`, and `gen_ai.agent.parent_name` values are pseudonymized (`tool_<12hex>`, `ns_<12hex>`, `cap_<12hex>`, `agent_<12hex>`), and `agent.termination_reason` / `agent.decision` / `terminal.type` are mapped to closed vocabularies.
+- **`metadata_only` (`AGENT_OTEL_CAPTURE_MODE=metadata_only` or `metadata-only`):**
+  - `agent.capture.mode` = `"metadata_only"`.
+  - Exports operational metadata (`workspace.project_name`, credential-sanitized `vcs.repository.name`, `vcs.branch.name`, `host.name`, and `user.email` from payload/`$USER_EMAIL` or git config when `AGENT_OTEL_ENRICH_EMAIL=true|1`).
+  - `AGENT_OTEL_WORKSPACE_PATH` controls `workspace.path` and `workspace.project_root` (`hash` default, `relative`, or `absolute`).
+  - Content remains dropped (`span.status.message` uses the closed `agent.error.category` set; prompts, tool inputs/outputs, and span events are omitted), and credentials/tokens are scrubbed across all attributes.
+- **`full` (`AGENT_OTEL_CAPTURE_MODE=full`):**
+  - `agent.capture.mode` = `"full"`.
+  - Exports operational metadata plus bounded `span.status.message` (truncated to 160 UTF-8 bytes), while still scrubbing credentials (URL userinfo, secret query parameters, bearer tokens, and `ghp_`/`github_pat_`/`glpat-`/`sk-`/`xox`/`AKIA`/`AIza`/JWT tokens) across all exported signals.
 
 ### 5.2 Behavioral Tool Execution Archetypes
 Decouples observability from specific CLI tools (`rtk`, `jq`, `bat`, `delta`) by modeling functional intent:
