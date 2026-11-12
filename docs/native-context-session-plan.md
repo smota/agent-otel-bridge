@@ -94,7 +94,7 @@ Usar somente candidatos em target com endpoint/pipe/socket próprios. Processos 
 
 Guardar no código apenas implementação, regressões e documentação. Capturas e relatórios de execução ficam transitórios; identificadores/evidências essenciais são reportados e a telemetria segue para o canal habilitado. Não salvar credenciais.
 
-Ativação autorizada: após merge, compilar o par release da revisão limpa, parar o receptor antigo quando presente, usar `local install --from-build target/release`, conferir hashes e iniciar o receptor canônico atualizado. O intervalo sem receptor permanece fail-open. Verificar manifesto, processo e hooks sem executar a campanha; rollback restaura o par. Não confundir teste do candidato com validação da instalação ativa.
+Ativação autorizada: após merge, compilar o par release da revisão limpa, parar o receptor antigo quando presente, fazer stage com `local install --from-build target/release`, conferir hashes, ativar com `local install --activate --from-build target/release` e iniciar o receptor canônico atualizado. O intervalo sem receptor permanece fail-open. Verificar manifesto, processo e hooks sem executar a campanha; rollback restaura o par. Não confundir teste do candidato com validação da instalação ativa.
 
 ## Conclusão e condição de parada
 

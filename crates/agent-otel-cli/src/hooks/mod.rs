@@ -474,7 +474,7 @@ pub fn run_status() -> Result<(), Box<dyn std::error::Error>> {
         if local_installed {
             format!("[ok] present ({})", canonical_hook.display())
         } else {
-            "[info] not staged in local runtime bin/ (run 'agent-otel-bridge local install')"
+            "[info] not active in local runtime bin/ (run 'agent-otel-bridge local install --activate')"
                 .to_string()
         }
     );
