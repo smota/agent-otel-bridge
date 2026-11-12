@@ -1,0 +1,2038 @@
+{
+  "contract_id": "fact-export-v1",
+  "contract_version": 1,
+  "description": "Validates rejection of out-of-order sequence gaps, stale source_generations, stale snapshot_sequences, and resurrection attempts after an EN5c source_generation purge.",
+  "expected_final_state": {
+    "active_source_generations": {
+      "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b": 3
+    },
+    "active_tables": {
+      "coverage": [],
+      "invocations": [],
+      "outcomes": [],
+      "sessions": [],
+      "tool_calls": [],
+      "usage": []
+    },
+    "committed_sequences": [
+      1,
+      2
+    ],
+    "high_water_sequence": 2,
+    "purged_source_generations": {
+      "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b": 3
+    },
+    "tombstoned_session_keys": {}
+  },
+  "expected_producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+  "expected_schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+  "expected_stream": "station-facts-default",
+  "expected_tenant_placeholder": "tn_acme_prod",
+  "steps": [
+    {
+      "committed_manifest": {
+        "contract_id": "fact-export-v1",
+        "contract_version": 1,
+        "files": [
+          {
+            "byte_length": 785,
+            "format": "canonical_json_rows",
+            "path": "tables/sessions.parquet",
+            "row_count": 1,
+            "sha256": "d2a7dac0525cdc53bc7f89756e710b21017dff01c3680819d43e8bc304412a27",
+            "table": "sessions"
+          },
+          {
+            "byte_length": 710,
+            "format": "canonical_json_rows",
+            "path": "tables/invocations.parquet",
+            "row_count": 1,
+            "sha256": "24d6af9291af896d1d160ab227a2a8cf3dfb6ebac2834a7d73ed0c662908c1e3",
+            "table": "invocations"
+          },
+          {
+            "byte_length": 1008,
+            "format": "canonical_json_rows",
+            "path": "tables/tool_calls.parquet",
+            "row_count": 1,
+            "sha256": "dac969559f138c783c4c5a417b5f36feea122744d884b107f2290ea3312ae302",
+            "table": "tool_calls"
+          },
+          {
+            "byte_length": 1016,
+            "format": "canonical_json_rows",
+            "path": "tables/usage.parquet",
+            "row_count": 1,
+            "sha256": "d57e8a1fd5a040b26bbb8a114ef4b1b3f3529f6e80e224896345b192c1cf52f3",
+            "table": "usage"
+          },
+          {
+            "byte_length": 1001,
+            "format": "canonical_json_rows",
+            "path": "tables/outcomes.parquet",
+            "row_count": 1,
+            "sha256": "b51c4adc3bd3c54163239af9223854006ddf9abc5f5da65dabcc081431f71751",
+            "table": "outcomes"
+          },
+          {
+            "byte_length": 4217,
+            "format": "canonical_json_rows",
+            "path": "tables/coverage.parquet",
+            "row_count": 6,
+            "sha256": "2f71f6979c1f19042a08924049d643175f1ba4ef383d18446f5f09f1976f6386",
+            "table": "coverage"
+          }
+        ],
+        "manifest_digest": "fb06fdce9e3bb039112a765b7cf22e47bfa6445c85233c8c3c0bbb8939be4a3d",
+        "producer": {
+          "producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+          "producer_kind": "dendro_cli",
+          "producer_version": "0.5.0",
+          "pseudonym_key_id": "kh_customer_v1"
+        },
+        "published_at_us": 1762900100000000,
+        "replacement_scope": {
+          "operation": "upsert_replace",
+          "reason": "initial_export",
+          "scope_mode": "source_generation",
+          "session_keys": [],
+          "source_generation": 2,
+          "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+          "supersedes_generations": [
+            1
+          ]
+        },
+        "schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+        "snapshot_sequence": 1,
+        "stream": "station-facts-default",
+        "tenant_placeholder": "tn_acme_prod"
+      },
+      "description": "Commit snapshot_sequence=1 at source_generation=2.",
+      "expected_step_result": {
+        "active_row_counts": {
+          "coverage": 6,
+          "invocations": 1,
+          "outcomes": 1,
+          "sessions": 1,
+          "tool_calls": 1,
+          "usage": 1
+        },
+        "high_water_sequence": 1,
+        "status": "APPLIED"
+      },
+      "staged_tables": {
+        "coverage": [
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "session_link_id",
+            "coverage_key": "d4a6f149c5e45e2059b580ca1aabc70906bcc611d6f76d6a1e3986eac215f364",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "timestamp_fidelity",
+            "coverage_key": "d92aeaff9e1787c65fbfccc1ea68a04f74c72ace02ed9107dcab5f8929ca646b",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "tool_outcome_pairing",
+            "coverage_key": "e639b1a45f5caacdbdd91e228498e9d5554b4a66fcd5e8415103ed0a9051283a",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_tool_calls",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "tool_calls",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "model_attribution",
+            "coverage_key": "a18aca1f5de7aad3343aa0e82832352abbca457e98a4f324301649cc0bf048a7",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "observed_cost_usd",
+            "coverage_key": "f105e23fcb181f82ebb9767fbf080700baa87ac0fbb4d0be16cf211296bf5735",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "git_outcome_evidence",
+            "coverage_key": "91c2c13912a433b76193c0a26d8448470e494fb9f802c8f7ec0e20b58153be9b",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_outcome_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "outcomes",
+            "unknown_or_missing_count": 0
+          }
+        ],
+        "invocations": [
+          {
+            "call_id_missing_reason": null,
+            "canonical_harness": "claude",
+            "effort": "high",
+            "invocation_grain": "call",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_status": "succeeded",
+            "message_key": "883db0e25257f78ce561c368e259659348fef2217a9d81cc10866f98779562c6",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900010000000,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b"
+          }
+        ],
+        "outcomes": [
+          {
+            "base_commit_hmac": "4901707d13778103def307a84faccf0b95d7bcde5875960e5ef6194f85de6b53",
+            "base_commit_status": "observed",
+            "branch_name_hmac": "62009e0a30785e91d895c8d49055f1f97416cb0309797ba0070ef61ecd7b9ed7",
+            "branch_status": "named_branch",
+            "canonical_harness": "claude",
+            "evidence_source": "session_record_header",
+            "evidence_status": "observed_full",
+            "head_commit_hmac": "f623038003cda1f782a43b0897d5826434271cbf3b53bfaa7fe46ee6e6c5fe71",
+            "head_commit_status": "observed",
+            "missing_reason": null,
+            "observed_at_status": "observed",
+            "observed_at_us": 1762900055000000,
+            "outcome_key": "3782fc33b5931c5ae9554082b44d1ca56707e0cf978bd97464f66b8a5814e249",
+            "pseudonym_key_id": "kh_customer_v1",
+            "remote_status": "observed",
+            "repo_remote_hmac": "e180586f1463c5fe08556a5c211693bbe3cbec1383cd725adffe1b5b89cbf23e",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "worktree_state": "clean"
+          }
+        ],
+        "sessions": [
+          {
+            "agent.session.link_id": "75688a43283f1c6b3a441a15b7837a4f1b096fccb3e5bec2fcd76df8b77496ac",
+            "canonical_harness": "claude",
+            "ended_at_us": 1762900060000000,
+            "endpoint_scope": "ep-ws-alpha-01",
+            "harness_version": "1.4.2",
+            "harness_version_status": "observed",
+            "is_root": true,
+            "lineage_relation": "root",
+            "lineage_status": "root",
+            "link_epoch": "2026-Q4",
+            "org": "acme-corp",
+            "origin": "harness",
+            "parent_session_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "session_status": "completed",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "started_at_us": 1762900000000000,
+            "team": "platform-eng",
+            "timestamp_status": "complete",
+            "unlinked_reason": null
+          }
+        ],
+        "tool_calls": [
+          {
+            "call_id_hmac": "391c5f49001e051b6a660456aafeb1aed5339539de4b5354ef757fd1f388faf4",
+            "call_id_status": "observed",
+            "canonical_harness": "claude",
+            "duration_status": "observed",
+            "duration_us": 18500,
+            "fingerprint_status": "observed",
+            "input_fingerprint_hmac": "d753539ccfd7790b3cd48d8b0c766cad4ba55cf8ed278588143331fcaed52d57",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900015000000,
+            "outcome_status": "succeeded",
+            "outcome_unknown_reason": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "structured_write": false,
+            "tool_archetype": "file_read",
+            "tool_call_key": "6ff0363f492e0ebc705e3e7314b50bef31c8cc619a4ef2f67d25cfd3be44c8d3",
+            "tool_category": "inspect_read",
+            "tool_name": "Read"
+          }
+        ],
+        "usage": [
+          {
+            "cache_read_tokens": 3000,
+            "cache_write_tokens": 200,
+            "canonical_harness": "claude",
+            "cost_provenance": "harness_observed_exact",
+            "cost_unknown_reason": null,
+            "counter_semantics": "per_turn_delta",
+            "effort": "high",
+            "input_uncached_tokens": 1200,
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "observed_usd": "0.018500",
+            "observed_usd_micros": 18500,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900020000000,
+            "output_tokens": 450,
+            "predecessor_usage_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "reasoning_status": "observed",
+            "reasoning_tokens": 180,
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "total_tokens": 4850,
+            "usage_key": "e2c5e19a35e3b2b5bd0d262770fb2b8804d58b449099cb1d05ce4c051271cc5a"
+          }
+        ]
+      },
+      "step_id": "step_01_seq1_gen2_applied"
+    },
+    {
+      "committed_manifest": {
+        "contract_id": "fact-export-v1",
+        "contract_version": 1,
+        "files": [
+          {
+            "byte_length": 785,
+            "format": "canonical_json_rows",
+            "path": "tables/sessions.parquet",
+            "row_count": 1,
+            "sha256": "d2a7dac0525cdc53bc7f89756e710b21017dff01c3680819d43e8bc304412a27",
+            "table": "sessions"
+          },
+          {
+            "byte_length": 710,
+            "format": "canonical_json_rows",
+            "path": "tables/invocations.parquet",
+            "row_count": 1,
+            "sha256": "24d6af9291af896d1d160ab227a2a8cf3dfb6ebac2834a7d73ed0c662908c1e3",
+            "table": "invocations"
+          },
+          {
+            "byte_length": 1008,
+            "format": "canonical_json_rows",
+            "path": "tables/tool_calls.parquet",
+            "row_count": 1,
+            "sha256": "dac969559f138c783c4c5a417b5f36feea122744d884b107f2290ea3312ae302",
+            "table": "tool_calls"
+          },
+          {
+            "byte_length": 1016,
+            "format": "canonical_json_rows",
+            "path": "tables/usage.parquet",
+            "row_count": 1,
+            "sha256": "d57e8a1fd5a040b26bbb8a114ef4b1b3f3529f6e80e224896345b192c1cf52f3",
+            "table": "usage"
+          },
+          {
+            "byte_length": 1001,
+            "format": "canonical_json_rows",
+            "path": "tables/outcomes.parquet",
+            "row_count": 1,
+            "sha256": "b51c4adc3bd3c54163239af9223854006ddf9abc5f5da65dabcc081431f71751",
+            "table": "outcomes"
+          },
+          {
+            "byte_length": 4217,
+            "format": "canonical_json_rows",
+            "path": "tables/coverage.parquet",
+            "row_count": 6,
+            "sha256": "2f71f6979c1f19042a08924049d643175f1ba4ef383d18446f5f09f1976f6386",
+            "table": "coverage"
+          }
+        ],
+        "manifest_digest": "b6e083b34689743296013880ffd40bc1f17e929efd6b5d05af4d75eeb74f6484",
+        "producer": {
+          "producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+          "producer_kind": "dendro_cli",
+          "producer_version": "0.5.0",
+          "pseudonym_key_id": "kh_customer_v1"
+        },
+        "published_at_us": 1762900200000000,
+        "replacement_scope": {
+          "operation": "upsert_replace",
+          "reason": "in_generation_outcome_or_attribution_update",
+          "scope_mode": "source_generation",
+          "session_keys": [],
+          "source_generation": 2,
+          "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+          "supersedes_generations": []
+        },
+        "schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+        "snapshot_sequence": 4,
+        "stream": "station-facts-default",
+        "tenant_placeholder": "tn_acme_prod"
+      },
+      "description": "Reject out-of-order snapshot_sequence=4 when high_water_sequence is 1.",
+      "expected_step_result": {
+        "active_row_counts": {
+          "coverage": 6,
+          "invocations": 1,
+          "outcomes": 1,
+          "sessions": 1,
+          "tool_calls": 1,
+          "usage": 1
+        },
+        "high_water_sequence": 1,
+        "status": "REJECTED_OUT_OF_ORDER_SEQUENCE_GAP"
+      },
+      "staged_tables": {
+        "coverage": [
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "session_link_id",
+            "coverage_key": "d4a6f149c5e45e2059b580ca1aabc70906bcc611d6f76d6a1e3986eac215f364",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "timestamp_fidelity",
+            "coverage_key": "d92aeaff9e1787c65fbfccc1ea68a04f74c72ace02ed9107dcab5f8929ca646b",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "tool_outcome_pairing",
+            "coverage_key": "e639b1a45f5caacdbdd91e228498e9d5554b4a66fcd5e8415103ed0a9051283a",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_tool_calls",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "tool_calls",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "model_attribution",
+            "coverage_key": "a18aca1f5de7aad3343aa0e82832352abbca457e98a4f324301649cc0bf048a7",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "observed_cost_usd",
+            "coverage_key": "f105e23fcb181f82ebb9767fbf080700baa87ac0fbb4d0be16cf211296bf5735",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "git_outcome_evidence",
+            "coverage_key": "91c2c13912a433b76193c0a26d8448470e494fb9f802c8f7ec0e20b58153be9b",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_outcome_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "outcomes",
+            "unknown_or_missing_count": 0
+          }
+        ],
+        "invocations": [
+          {
+            "call_id_missing_reason": null,
+            "canonical_harness": "claude",
+            "effort": "high",
+            "invocation_grain": "call",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_status": "succeeded",
+            "message_key": "883db0e25257f78ce561c368e259659348fef2217a9d81cc10866f98779562c6",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900010000000,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b"
+          }
+        ],
+        "outcomes": [
+          {
+            "base_commit_hmac": "4901707d13778103def307a84faccf0b95d7bcde5875960e5ef6194f85de6b53",
+            "base_commit_status": "observed",
+            "branch_name_hmac": "62009e0a30785e91d895c8d49055f1f97416cb0309797ba0070ef61ecd7b9ed7",
+            "branch_status": "named_branch",
+            "canonical_harness": "claude",
+            "evidence_source": "session_record_header",
+            "evidence_status": "observed_full",
+            "head_commit_hmac": "f623038003cda1f782a43b0897d5826434271cbf3b53bfaa7fe46ee6e6c5fe71",
+            "head_commit_status": "observed",
+            "missing_reason": null,
+            "observed_at_status": "observed",
+            "observed_at_us": 1762900055000000,
+            "outcome_key": "3782fc33b5931c5ae9554082b44d1ca56707e0cf978bd97464f66b8a5814e249",
+            "pseudonym_key_id": "kh_customer_v1",
+            "remote_status": "observed",
+            "repo_remote_hmac": "e180586f1463c5fe08556a5c211693bbe3cbec1383cd725adffe1b5b89cbf23e",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "worktree_state": "clean"
+          }
+        ],
+        "sessions": [
+          {
+            "agent.session.link_id": "75688a43283f1c6b3a441a15b7837a4f1b096fccb3e5bec2fcd76df8b77496ac",
+            "canonical_harness": "claude",
+            "ended_at_us": 1762900060000000,
+            "endpoint_scope": "ep-ws-alpha-01",
+            "harness_version": "1.4.2",
+            "harness_version_status": "observed",
+            "is_root": true,
+            "lineage_relation": "root",
+            "lineage_status": "root",
+            "link_epoch": "2026-Q4",
+            "org": "acme-corp",
+            "origin": "harness",
+            "parent_session_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "session_status": "completed",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "started_at_us": 1762900000000000,
+            "team": "platform-eng",
+            "timestamp_status": "complete",
+            "unlinked_reason": null
+          }
+        ],
+        "tool_calls": [
+          {
+            "call_id_hmac": "391c5f49001e051b6a660456aafeb1aed5339539de4b5354ef757fd1f388faf4",
+            "call_id_status": "observed",
+            "canonical_harness": "claude",
+            "duration_status": "observed",
+            "duration_us": 18500,
+            "fingerprint_status": "observed",
+            "input_fingerprint_hmac": "d753539ccfd7790b3cd48d8b0c766cad4ba55cf8ed278588143331fcaed52d57",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900015000000,
+            "outcome_status": "succeeded",
+            "outcome_unknown_reason": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "structured_write": false,
+            "tool_archetype": "file_read",
+            "tool_call_key": "6ff0363f492e0ebc705e3e7314b50bef31c8cc619a4ef2f67d25cfd3be44c8d3",
+            "tool_category": "inspect_read",
+            "tool_name": "Read"
+          }
+        ],
+        "usage": [
+          {
+            "cache_read_tokens": 3000,
+            "cache_write_tokens": 200,
+            "canonical_harness": "claude",
+            "cost_provenance": "harness_observed_exact",
+            "cost_unknown_reason": null,
+            "counter_semantics": "per_turn_delta",
+            "effort": "high",
+            "input_uncached_tokens": 1200,
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "observed_usd": "0.018500",
+            "observed_usd_micros": 18500,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900020000000,
+            "output_tokens": 450,
+            "predecessor_usage_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "reasoning_status": "observed",
+            "reasoning_tokens": 180,
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "total_tokens": 4850,
+            "usage_key": "e2c5e19a35e3b2b5bd0d262770fb2b8804d58b449099cb1d05ce4c051271cc5a"
+          }
+        ]
+      },
+      "step_id": "step_02_seq4_out_of_order_gap"
+    },
+    {
+      "committed_manifest": {
+        "contract_id": "fact-export-v1",
+        "contract_version": 1,
+        "files": [
+          {
+            "byte_length": 785,
+            "format": "canonical_json_rows",
+            "path": "tables/sessions.parquet",
+            "row_count": 1,
+            "sha256": "6e00b5e6c4e4b6e99b7f445b4b5e5ce457e773a37c863df7feaf5720dccccb8e",
+            "table": "sessions"
+          },
+          {
+            "byte_length": 710,
+            "format": "canonical_json_rows",
+            "path": "tables/invocations.parquet",
+            "row_count": 1,
+            "sha256": "085c0f354b39ee3b5227293ba5dd9593de208cd0575d7b26757bbad6af469155",
+            "table": "invocations"
+          },
+          {
+            "byte_length": 1008,
+            "format": "canonical_json_rows",
+            "path": "tables/tool_calls.parquet",
+            "row_count": 1,
+            "sha256": "a3879a1fae750f6d6fa4885890001b3de45d01d581ea201c35104421e31d1226",
+            "table": "tool_calls"
+          },
+          {
+            "byte_length": 1016,
+            "format": "canonical_json_rows",
+            "path": "tables/usage.parquet",
+            "row_count": 1,
+            "sha256": "46746b9005a88f236cd8edc51c19d63eb846a756e5e4e301b93fac59c6f7822b",
+            "table": "usage"
+          },
+          {
+            "byte_length": 1001,
+            "format": "canonical_json_rows",
+            "path": "tables/outcomes.parquet",
+            "row_count": 1,
+            "sha256": "6263b006411bee99b6b931c516fb260906bb059909b7ff6fbb9c7d3c2e9713cc",
+            "table": "outcomes"
+          },
+          {
+            "byte_length": 4217,
+            "format": "canonical_json_rows",
+            "path": "tables/coverage.parquet",
+            "row_count": 6,
+            "sha256": "dd64652d4241743197082136e7ea495fbb50ff18d1e6706221f77706b6cb6770",
+            "table": "coverage"
+          }
+        ],
+        "manifest_digest": "50fa7f0529e3e109cdc26617f3cbc5bb3b80ba2dc8a6bbba3074f44b04e48394",
+        "producer": {
+          "producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+          "producer_kind": "dendro_cli",
+          "producer_version": "0.5.0",
+          "pseudonym_key_id": "kh_customer_v1"
+        },
+        "published_at_us": 1762900250000000,
+        "replacement_scope": {
+          "operation": "upsert_replace",
+          "reason": "source_generation_advance",
+          "scope_mode": "source_generation",
+          "session_keys": [],
+          "source_generation": 1,
+          "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+          "supersedes_generations": []
+        },
+        "schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+        "snapshot_sequence": 2,
+        "stream": "station-facts-default",
+        "tenant_placeholder": "tn_acme_prod"
+      },
+      "description": "Reject snapshot_sequence=2 carrying stale source_generation=1 when active_source_generation is 2.",
+      "expected_step_result": {
+        "active_row_counts": {
+          "coverage": 6,
+          "invocations": 1,
+          "outcomes": 1,
+          "sessions": 1,
+          "tool_calls": 1,
+          "usage": 1
+        },
+        "high_water_sequence": 1,
+        "status": "REJECTED_STALE_GENERATION_OR_TOMBSTONE"
+      },
+      "staged_tables": {
+        "coverage": [
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "session_link_id",
+            "coverage_key": "0e6931d09c01deecdce2afeb6c46ba4049591119c248f634a30d96ba3cb92450",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "timestamp_fidelity",
+            "coverage_key": "c4dc0da2bab2f041728143c8eb9945f990ab6bc166c228684050b65a784271b2",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "tool_outcome_pairing",
+            "coverage_key": "6c06b3a94fe3bb411388a0b16833a3924a61e7b5474d69fcb08064f06030f907",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_tool_calls",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "tool_calls",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "model_attribution",
+            "coverage_key": "c3852bd3cbf3799138480368b1f2cf067e0e7756c7ac3ee609b4fe3fc55e6722",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "observed_cost_usd",
+            "coverage_key": "f4153ebbc8daf979ab9ab15a472f0985dc01e3a8aacbc4313ceebd44bb3ca5a2",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "git_outcome_evidence",
+            "coverage_key": "d297655e7c31bc0c96f8f299a033c5a2d946bee3ef6a5d0104c89008480bc1ce",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_outcome_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "outcomes",
+            "unknown_or_missing_count": 0
+          }
+        ],
+        "invocations": [
+          {
+            "call_id_missing_reason": null,
+            "canonical_harness": "claude",
+            "effort": "high",
+            "invocation_grain": "call",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_status": "succeeded",
+            "message_key": "883db0e25257f78ce561c368e259659348fef2217a9d81cc10866f98779562c6",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900010000000,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b"
+          }
+        ],
+        "outcomes": [
+          {
+            "base_commit_hmac": "4901707d13778103def307a84faccf0b95d7bcde5875960e5ef6194f85de6b53",
+            "base_commit_status": "observed",
+            "branch_name_hmac": "62009e0a30785e91d895c8d49055f1f97416cb0309797ba0070ef61ecd7b9ed7",
+            "branch_status": "named_branch",
+            "canonical_harness": "claude",
+            "evidence_source": "session_record_header",
+            "evidence_status": "observed_full",
+            "head_commit_hmac": "f623038003cda1f782a43b0897d5826434271cbf3b53bfaa7fe46ee6e6c5fe71",
+            "head_commit_status": "observed",
+            "missing_reason": null,
+            "observed_at_status": "observed",
+            "observed_at_us": 1762900055000000,
+            "outcome_key": "3782fc33b5931c5ae9554082b44d1ca56707e0cf978bd97464f66b8a5814e249",
+            "pseudonym_key_id": "kh_customer_v1",
+            "remote_status": "observed",
+            "repo_remote_hmac": "e180586f1463c5fe08556a5c211693bbe3cbec1383cd725adffe1b5b89cbf23e",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "worktree_state": "clean"
+          }
+        ],
+        "sessions": [
+          {
+            "agent.session.link_id": "75688a43283f1c6b3a441a15b7837a4f1b096fccb3e5bec2fcd76df8b77496ac",
+            "canonical_harness": "claude",
+            "ended_at_us": 1762900060000000,
+            "endpoint_scope": "ep-ws-alpha-01",
+            "harness_version": "1.4.2",
+            "harness_version_status": "observed",
+            "is_root": true,
+            "lineage_relation": "root",
+            "lineage_status": "root",
+            "link_epoch": "2026-Q4",
+            "org": "acme-corp",
+            "origin": "harness",
+            "parent_session_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "session_status": "completed",
+            "signal_source": "session_log",
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "started_at_us": 1762900000000000,
+            "team": "platform-eng",
+            "timestamp_status": "complete",
+            "unlinked_reason": null
+          }
+        ],
+        "tool_calls": [
+          {
+            "call_id_hmac": "391c5f49001e051b6a660456aafeb1aed5339539de4b5354ef757fd1f388faf4",
+            "call_id_status": "observed",
+            "canonical_harness": "claude",
+            "duration_status": "observed",
+            "duration_us": 18500,
+            "fingerprint_status": "observed",
+            "input_fingerprint_hmac": "d753539ccfd7790b3cd48d8b0c766cad4ba55cf8ed278588143331fcaed52d57",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900015000000,
+            "outcome_status": "succeeded",
+            "outcome_unknown_reason": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "structured_write": false,
+            "tool_archetype": "file_read",
+            "tool_call_key": "6ff0363f492e0ebc705e3e7314b50bef31c8cc619a4ef2f67d25cfd3be44c8d3",
+            "tool_category": "inspect_read",
+            "tool_name": "Read"
+          }
+        ],
+        "usage": [
+          {
+            "cache_read_tokens": 3000,
+            "cache_write_tokens": 200,
+            "canonical_harness": "claude",
+            "cost_provenance": "harness_observed_exact",
+            "cost_unknown_reason": null,
+            "counter_semantics": "per_turn_delta",
+            "effort": "high",
+            "input_uncached_tokens": 1200,
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "observed_usd": "0.018500",
+            "observed_usd_micros": 18500,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900020000000,
+            "output_tokens": 450,
+            "predecessor_usage_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "reasoning_status": "observed",
+            "reasoning_tokens": 180,
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 1,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "total_tokens": 4850,
+            "usage_key": "e2c5e19a35e3b2b5bd0d262770fb2b8804d58b449099cb1d05ce4c051271cc5a"
+          }
+        ]
+      },
+      "step_id": "step_03_seq2_stale_source_generation"
+    },
+    {
+      "committed_manifest": {
+        "contract_id": "fact-export-v1",
+        "contract_version": 1,
+        "files": [
+          {
+            "byte_length": 0,
+            "format": "canonical_json_rows",
+            "path": "tables/sessions.parquet",
+            "row_count": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "table": "sessions"
+          },
+          {
+            "byte_length": 0,
+            "format": "canonical_json_rows",
+            "path": "tables/invocations.parquet",
+            "row_count": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "table": "invocations"
+          },
+          {
+            "byte_length": 0,
+            "format": "canonical_json_rows",
+            "path": "tables/tool_calls.parquet",
+            "row_count": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "table": "tool_calls"
+          },
+          {
+            "byte_length": 0,
+            "format": "canonical_json_rows",
+            "path": "tables/usage.parquet",
+            "row_count": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "table": "usage"
+          },
+          {
+            "byte_length": 0,
+            "format": "canonical_json_rows",
+            "path": "tables/outcomes.parquet",
+            "row_count": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "table": "outcomes"
+          },
+          {
+            "byte_length": 0,
+            "format": "canonical_json_rows",
+            "path": "tables/coverage.parquet",
+            "row_count": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "table": "coverage"
+          }
+        ],
+        "manifest_digest": "b98b27cebdeaed54c77448227dda0668ff008a326d41ec949d2368a3b8ecf194",
+        "producer": {
+          "producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+          "producer_kind": "dendro_cli",
+          "producer_version": "0.5.0",
+          "pseudonym_key_id": "kh_customer_v1"
+        },
+        "published_at_us": 1762900300000000,
+        "replacement_scope": {
+          "operation": "purge_delete",
+          "reason": "retention_or_redaction_purge",
+          "scope_mode": "source_generation",
+          "session_keys": [],
+          "source_generation": 3,
+          "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+          "supersedes_generations": [
+            1,
+            2
+          ]
+        },
+        "schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+        "snapshot_sequence": 2,
+        "stream": "station-facts-default",
+        "tenant_placeholder": "tn_acme_prod"
+      },
+      "description": "Commit snapshot_sequence=2 purging SRC_ALPHA through source_generation=3.",
+      "expected_step_result": {
+        "active_row_counts": {
+          "coverage": 0,
+          "invocations": 0,
+          "outcomes": 0,
+          "sessions": 0,
+          "tool_calls": 0,
+          "usage": 0
+        },
+        "high_water_sequence": 2,
+        "status": "APPLIED"
+      },
+      "staged_tables": {
+        "coverage": [],
+        "invocations": [],
+        "outcomes": [],
+        "sessions": [],
+        "tool_calls": [],
+        "usage": []
+      },
+      "step_id": "step_04_seq2_purge_gen3_applied"
+    },
+    {
+      "committed_manifest": {
+        "contract_id": "fact-export-v1",
+        "contract_version": 1,
+        "files": [
+          {
+            "byte_length": 785,
+            "format": "canonical_json_rows",
+            "path": "tables/sessions.parquet",
+            "row_count": 1,
+            "sha256": "d2a7dac0525cdc53bc7f89756e710b21017dff01c3680819d43e8bc304412a27",
+            "table": "sessions"
+          },
+          {
+            "byte_length": 710,
+            "format": "canonical_json_rows",
+            "path": "tables/invocations.parquet",
+            "row_count": 1,
+            "sha256": "24d6af9291af896d1d160ab227a2a8cf3dfb6ebac2834a7d73ed0c662908c1e3",
+            "table": "invocations"
+          },
+          {
+            "byte_length": 1008,
+            "format": "canonical_json_rows",
+            "path": "tables/tool_calls.parquet",
+            "row_count": 1,
+            "sha256": "dac969559f138c783c4c5a417b5f36feea122744d884b107f2290ea3312ae302",
+            "table": "tool_calls"
+          },
+          {
+            "byte_length": 1016,
+            "format": "canonical_json_rows",
+            "path": "tables/usage.parquet",
+            "row_count": 1,
+            "sha256": "d57e8a1fd5a040b26bbb8a114ef4b1b3f3529f6e80e224896345b192c1cf52f3",
+            "table": "usage"
+          },
+          {
+            "byte_length": 1001,
+            "format": "canonical_json_rows",
+            "path": "tables/outcomes.parquet",
+            "row_count": 1,
+            "sha256": "b51c4adc3bd3c54163239af9223854006ddf9abc5f5da65dabcc081431f71751",
+            "table": "outcomes"
+          },
+          {
+            "byte_length": 4217,
+            "format": "canonical_json_rows",
+            "path": "tables/coverage.parquet",
+            "row_count": 6,
+            "sha256": "2f71f6979c1f19042a08924049d643175f1ba4ef383d18446f5f09f1976f6386",
+            "table": "coverage"
+          }
+        ],
+        "manifest_digest": "458add7f3d2fafe8278ea7be769a2dac2db80853272451d3ccc2d78e4617f46f",
+        "producer": {
+          "producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+          "producer_kind": "dendro_cli",
+          "producer_version": "0.5.0",
+          "pseudonym_key_id": "kh_customer_v1"
+        },
+        "published_at_us": 1762900350000000,
+        "replacement_scope": {
+          "operation": "upsert_replace",
+          "reason": "initial_export",
+          "scope_mode": "source_generation",
+          "session_keys": [],
+          "source_generation": 2,
+          "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+          "supersedes_generations": []
+        },
+        "schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+        "snapshot_sequence": 1,
+        "stream": "station-facts-default",
+        "tenant_placeholder": "tn_acme_prod"
+      },
+      "description": "Reject modified manifest replayed at stale snapshot_sequence=1 (< high_water_sequence=2).",
+      "expected_step_result": {
+        "active_row_counts": {
+          "coverage": 0,
+          "invocations": 0,
+          "outcomes": 0,
+          "sessions": 0,
+          "tool_calls": 0,
+          "usage": 0
+        },
+        "high_water_sequence": 2,
+        "status": "REJECTED_STALE_SEQUENCE"
+      },
+      "staged_tables": {
+        "coverage": [
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "session_link_id",
+            "coverage_key": "d4a6f149c5e45e2059b580ca1aabc70906bcc611d6f76d6a1e3986eac215f364",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "timestamp_fidelity",
+            "coverage_key": "d92aeaff9e1787c65fbfccc1ea68a04f74c72ace02ed9107dcab5f8929ca646b",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "tool_outcome_pairing",
+            "coverage_key": "e639b1a45f5caacdbdd91e228498e9d5554b4a66fcd5e8415103ed0a9051283a",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_tool_calls",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "tool_calls",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "model_attribution",
+            "coverage_key": "a18aca1f5de7aad3343aa0e82832352abbca457e98a4f324301649cc0bf048a7",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "observed_cost_usd",
+            "coverage_key": "f105e23fcb181f82ebb9767fbf080700baa87ac0fbb4d0be16cf211296bf5735",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "git_outcome_evidence",
+            "coverage_key": "91c2c13912a433b76193c0a26d8448470e494fb9f802c8f7ec0e20b58153be9b",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_outcome_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "outcomes",
+            "unknown_or_missing_count": 0
+          }
+        ],
+        "invocations": [
+          {
+            "call_id_missing_reason": null,
+            "canonical_harness": "claude",
+            "effort": "high",
+            "invocation_grain": "call",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_status": "succeeded",
+            "message_key": "883db0e25257f78ce561c368e259659348fef2217a9d81cc10866f98779562c6",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900010000000,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b"
+          }
+        ],
+        "outcomes": [
+          {
+            "base_commit_hmac": "4901707d13778103def307a84faccf0b95d7bcde5875960e5ef6194f85de6b53",
+            "base_commit_status": "observed",
+            "branch_name_hmac": "62009e0a30785e91d895c8d49055f1f97416cb0309797ba0070ef61ecd7b9ed7",
+            "branch_status": "named_branch",
+            "canonical_harness": "claude",
+            "evidence_source": "session_record_header",
+            "evidence_status": "observed_full",
+            "head_commit_hmac": "f623038003cda1f782a43b0897d5826434271cbf3b53bfaa7fe46ee6e6c5fe71",
+            "head_commit_status": "observed",
+            "missing_reason": null,
+            "observed_at_status": "observed",
+            "observed_at_us": 1762900055000000,
+            "outcome_key": "3782fc33b5931c5ae9554082b44d1ca56707e0cf978bd97464f66b8a5814e249",
+            "pseudonym_key_id": "kh_customer_v1",
+            "remote_status": "observed",
+            "repo_remote_hmac": "e180586f1463c5fe08556a5c211693bbe3cbec1383cd725adffe1b5b89cbf23e",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "worktree_state": "clean"
+          }
+        ],
+        "sessions": [
+          {
+            "agent.session.link_id": "75688a43283f1c6b3a441a15b7837a4f1b096fccb3e5bec2fcd76df8b77496ac",
+            "canonical_harness": "claude",
+            "ended_at_us": 1762900060000000,
+            "endpoint_scope": "ep-ws-alpha-01",
+            "harness_version": "1.4.2",
+            "harness_version_status": "observed",
+            "is_root": true,
+            "lineage_relation": "root",
+            "lineage_status": "root",
+            "link_epoch": "2026-Q4",
+            "org": "acme-corp",
+            "origin": "harness",
+            "parent_session_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "session_status": "completed",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "started_at_us": 1762900000000000,
+            "team": "platform-eng",
+            "timestamp_status": "complete",
+            "unlinked_reason": null
+          }
+        ],
+        "tool_calls": [
+          {
+            "call_id_hmac": "391c5f49001e051b6a660456aafeb1aed5339539de4b5354ef757fd1f388faf4",
+            "call_id_status": "observed",
+            "canonical_harness": "claude",
+            "duration_status": "observed",
+            "duration_us": 18500,
+            "fingerprint_status": "observed",
+            "input_fingerprint_hmac": "d753539ccfd7790b3cd48d8b0c766cad4ba55cf8ed278588143331fcaed52d57",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900015000000,
+            "outcome_status": "succeeded",
+            "outcome_unknown_reason": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "structured_write": false,
+            "tool_archetype": "file_read",
+            "tool_call_key": "6ff0363f492e0ebc705e3e7314b50bef31c8cc619a4ef2f67d25cfd3be44c8d3",
+            "tool_category": "inspect_read",
+            "tool_name": "Read"
+          }
+        ],
+        "usage": [
+          {
+            "cache_read_tokens": 3000,
+            "cache_write_tokens": 200,
+            "canonical_harness": "claude",
+            "cost_provenance": "harness_observed_exact",
+            "cost_unknown_reason": null,
+            "counter_semantics": "per_turn_delta",
+            "effort": "high",
+            "input_uncached_tokens": 1200,
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "observed_usd": "0.018500",
+            "observed_usd_micros": 18500,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900020000000,
+            "output_tokens": 450,
+            "predecessor_usage_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "reasoning_status": "observed",
+            "reasoning_tokens": 180,
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 2,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "total_tokens": 4850,
+            "usage_key": "e2c5e19a35e3b2b5bd0d262770fb2b8804d58b449099cb1d05ce4c051271cc5a"
+          }
+        ]
+      },
+      "step_id": "step_05_seq1_stale_sequence_rejected"
+    },
+    {
+      "committed_manifest": {
+        "contract_id": "fact-export-v1",
+        "contract_version": 1,
+        "files": [
+          {
+            "byte_length": 785,
+            "format": "canonical_json_rows",
+            "path": "tables/sessions.parquet",
+            "row_count": 1,
+            "sha256": "b5ea5b4dcca563179d97d61076d05d7af2b3a433b6d4f67ac1f9c9e0425b0bc4",
+            "table": "sessions"
+          },
+          {
+            "byte_length": 710,
+            "format": "canonical_json_rows",
+            "path": "tables/invocations.parquet",
+            "row_count": 1,
+            "sha256": "c3b77fa02c69f0472a6a661e6cd7c3646f3a7fbbed25c86e4dc5c848c0f80416",
+            "table": "invocations"
+          },
+          {
+            "byte_length": 1008,
+            "format": "canonical_json_rows",
+            "path": "tables/tool_calls.parquet",
+            "row_count": 1,
+            "sha256": "b742b9899fb41d16a409ee377d6b2e788eac5f72aeed6e546b3b1ff48e08af83",
+            "table": "tool_calls"
+          },
+          {
+            "byte_length": 1016,
+            "format": "canonical_json_rows",
+            "path": "tables/usage.parquet",
+            "row_count": 1,
+            "sha256": "31b4b464b6d3872dbfadfc5d911c08a53571c750d37bfba07afadb5ad9057bc2",
+            "table": "usage"
+          },
+          {
+            "byte_length": 1001,
+            "format": "canonical_json_rows",
+            "path": "tables/outcomes.parquet",
+            "row_count": 1,
+            "sha256": "8065ad9ec7544900e88d5939d7fb88f21050da05c3cdd49d4b929383ffbc248d",
+            "table": "outcomes"
+          },
+          {
+            "byte_length": 4217,
+            "format": "canonical_json_rows",
+            "path": "tables/coverage.parquet",
+            "row_count": 6,
+            "sha256": "9de51dd01c402f069219a6711642274a34a1b4041745aefa195af6733cf1b7cb",
+            "table": "coverage"
+          }
+        ],
+        "manifest_digest": "d55d41079f7e379fecafc3da5586c1b31af1f9f87a7132ea091dc49e17141240",
+        "producer": {
+          "producer_id": "8b230f45b59fd379b71fcfff82cf3ba912110a331b00cebcf19681f547d1eb04",
+          "producer_kind": "dendro_cli",
+          "producer_version": "0.5.0",
+          "pseudonym_key_id": "kh_customer_v1"
+        },
+        "published_at_us": 1762900400000000,
+        "replacement_scope": {
+          "operation": "upsert_replace",
+          "reason": "source_generation_advance",
+          "scope_mode": "source_generation",
+          "session_keys": [],
+          "source_generation": 3,
+          "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+          "supersedes_generations": []
+        },
+        "schema_digest": "6b8401cc087e65249dc673be95edb62519dbefe9f78a6def29df24d6af8ba536",
+        "snapshot_sequence": 3,
+        "stream": "station-facts-default",
+        "tenant_placeholder": "tn_acme_prod"
+      },
+      "description": "Reject snapshot_sequence=3 attempting to resurrect purged source_generation=3.",
+      "expected_step_result": {
+        "active_row_counts": {
+          "coverage": 0,
+          "invocations": 0,
+          "outcomes": 0,
+          "sessions": 0,
+          "tool_calls": 0,
+          "usage": 0
+        },
+        "high_water_sequence": 2,
+        "status": "REJECTED_STALE_GENERATION_OR_TOMBSTONE"
+      },
+      "staged_tables": {
+        "coverage": [
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "session_link_id",
+            "coverage_key": "b5d5ad5073ce27a216bed99fc36cbb79aeaace53bcb91b4b90e054e885ab017f",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "timestamp_fidelity",
+            "coverage_key": "3bbf07da7d493fd9827043ca65f46780d9697576d706af43bdbf4609ab4f8fa8",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_sessions",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "sessions",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "tool_outcome_pairing",
+            "coverage_key": "409f1e6866699d8c0c55c408f779e7d89552d1b40857e079dbdacc0530bcb149",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_tool_calls",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "tool_calls",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "model_attribution",
+            "coverage_key": "e712006be30d42e7a670c12b01300447aebde3304008ecc4ef28bd5772aeecba",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "observed_cost_usd",
+            "coverage_key": "81723a68ec32006791a0bf54154f977c9c765336dc8624369ab35b216b45d0cb",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_usage_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "usage",
+            "unknown_or_missing_count": 0
+          },
+          {
+            "accepted_count": 1,
+            "canonical_harness": "claude",
+            "coverage_dimension": "git_outcome_evidence",
+            "coverage_key": "6008ab59f4e437d03feb6131428b9313502301deb2dbe3834bfe36654d829427",
+            "coverage_status": "complete",
+            "denominator_basis": "accepted_outcome_rows",
+            "discovery_status": "discovered",
+            "encountered_count": 1,
+            "expected_population_count": 1,
+            "field_fidelity": "exact",
+            "gap_reasons": [
+              "none"
+            ],
+            "observable_count": 1,
+            "projection_status": "projected_full",
+            "pseudonym_key_id": "kh_customer_v1",
+            "read_status": "complete",
+            "recognized_unprojected_count": 0,
+            "rejected_count": 0,
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "target_table": "outcomes",
+            "unknown_or_missing_count": 0
+          }
+        ],
+        "invocations": [
+          {
+            "call_id_missing_reason": null,
+            "canonical_harness": "claude",
+            "effort": "high",
+            "invocation_grain": "call",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_status": "succeeded",
+            "message_key": "883db0e25257f78ce561c368e259659348fef2217a9d81cc10866f98779562c6",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900010000000,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b"
+          }
+        ],
+        "outcomes": [
+          {
+            "base_commit_hmac": "4901707d13778103def307a84faccf0b95d7bcde5875960e5ef6194f85de6b53",
+            "base_commit_status": "observed",
+            "branch_name_hmac": "62009e0a30785e91d895c8d49055f1f97416cb0309797ba0070ef61ecd7b9ed7",
+            "branch_status": "named_branch",
+            "canonical_harness": "claude",
+            "evidence_source": "session_record_header",
+            "evidence_status": "observed_full",
+            "head_commit_hmac": "f623038003cda1f782a43b0897d5826434271cbf3b53bfaa7fe46ee6e6c5fe71",
+            "head_commit_status": "observed",
+            "missing_reason": null,
+            "observed_at_status": "observed",
+            "observed_at_us": 1762900055000000,
+            "outcome_key": "3782fc33b5931c5ae9554082b44d1ca56707e0cf978bd97464f66b8a5814e249",
+            "pseudonym_key_id": "kh_customer_v1",
+            "remote_status": "observed",
+            "repo_remote_hmac": "e180586f1463c5fe08556a5c211693bbe3cbec1383cd725adffe1b5b89cbf23e",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "worktree_state": "clean"
+          }
+        ],
+        "sessions": [
+          {
+            "agent.session.link_id": "75688a43283f1c6b3a441a15b7837a4f1b096fccb3e5bec2fcd76df8b77496ac",
+            "canonical_harness": "claude",
+            "ended_at_us": 1762900060000000,
+            "endpoint_scope": "ep-ws-alpha-01",
+            "harness_version": "1.4.2",
+            "harness_version_status": "observed",
+            "is_root": true,
+            "lineage_relation": "root",
+            "lineage_status": "root",
+            "link_epoch": "2026-Q4",
+            "org": "acme-corp",
+            "origin": "harness",
+            "parent_session_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "session_status": "completed",
+            "signal_source": "session_log",
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "started_at_us": 1762900000000000,
+            "team": "platform-eng",
+            "timestamp_status": "complete",
+            "unlinked_reason": null
+          }
+        ],
+        "tool_calls": [
+          {
+            "call_id_hmac": "391c5f49001e051b6a660456aafeb1aed5339539de4b5354ef757fd1f388faf4",
+            "call_id_status": "observed",
+            "canonical_harness": "claude",
+            "duration_status": "observed",
+            "duration_us": 18500,
+            "fingerprint_status": "observed",
+            "input_fingerprint_hmac": "d753539ccfd7790b3cd48d8b0c766cad4ba55cf8ed278588143331fcaed52d57",
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900015000000,
+            "outcome_status": "succeeded",
+            "outcome_unknown_reason": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "structured_write": false,
+            "tool_archetype": "file_read",
+            "tool_call_key": "6ff0363f492e0ebc705e3e7314b50bef31c8cc619a4ef2f67d25cfd3be44c8d3",
+            "tool_category": "inspect_read",
+            "tool_name": "Read"
+          }
+        ],
+        "usage": [
+          {
+            "cache_read_tokens": 3000,
+            "cache_write_tokens": 200,
+            "canonical_harness": "claude",
+            "cost_provenance": "harness_observed_exact",
+            "cost_unknown_reason": null,
+            "counter_semantics": "per_turn_delta",
+            "effort": "high",
+            "input_uncached_tokens": 1200,
+            "invocation_key": "6e7041793a08c2e84d6989f4490d2cce52a432875e54f8b5620815326dd7c4f9",
+            "invocation_link_status": "linked",
+            "model": "claude-opus-4-6",
+            "model_status": "observed",
+            "model_unknown_reason": null,
+            "observed_usd": "0.018500",
+            "observed_usd_micros": 18500,
+            "occurred_at_status": "observed",
+            "occurred_at_us": 1762900020000000,
+            "output_tokens": 450,
+            "predecessor_usage_key": null,
+            "pseudonym_key_id": "kh_customer_v1",
+            "reasoning_status": "observed",
+            "reasoning_tokens": 180,
+            "sequence_no": 0,
+            "session_key": "2f7db9804f49ea6fa3074e6e0a95fe52849f753736c02e674849bff4e0888267",
+            "signal_source": "session_log",
+            "source_generation": 3,
+            "source_id": "fcf2e4d27f7a5ebfb006dee6454d8725e9cd28d73aff90d812d9bbf73d13454b",
+            "total_tokens": 4850,
+            "usage_key": "e2c5e19a35e3b2b5bd0d262770fb2b8804d58b449099cb1d05ce4c051271cc5a"
+          }
+        ]
+      },
+      "step_id": "step_06_seq3_resurrection_of_purged_gen3_rejected"
+    }
+  ],
+  "vector_file": "stale_out_of_order.json"
+}

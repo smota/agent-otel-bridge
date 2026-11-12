@@ -1,0 +1,605 @@
+{
+  "$id": "https://github.com/smota/agent-otel-bridge/blob/main/docs/contracts/fact-export-v1/tables/coverage.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Normative fact-export-v1 schema for the coverage table. Exports explicit denominators, discovery/read/projection statuses, and field-level fidelity/missingness counts per (source_id, source_generation, canonical_harness, target_table, coverage_dimension). Resolves F14, F1, D5, and A5a without nulls.",
+  "properties": {
+    "accepted_count": {
+      "description": "Count of records accepted and projected into target_table for this (source_id, source_generation, canonical_harness).",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3c",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Provides the accepted record numerator against encountered_count.",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 13,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "canonical_harness": {
+      "description": "Canonical harness identifier from the closed link-id-v1 vocabulary.",
+      "enum": [
+        "antigravity",
+        "claude",
+        "codex",
+        "grok",
+        "pi"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 5-value enum (F12).",
+        "why_present": "Partitions coverage and missingness denominators by harness platform (including 'pi' when connector_unimplemented per F1).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 5,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "coverage_dimension": {
+      "description": "Specific ingestion or field-level fidelity dimension measured by this row (D5, F14).",
+      "enum": [
+        "row_ingestion",
+        "session_link_id",
+        "model_attribution",
+        "observed_cost_usd",
+        "tool_outcome_pairing",
+        "git_outcome_evidence",
+        "timestamp_fidelity"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 7-value enum.",
+        "why_present": "Separates row-level ingestion completeness from field-level unknownness such as observed_cost_usd (F14) and git_outcome_evidence (EN6b).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 7,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "coverage_key": {
+      "description": "Globally unique 64-character lowercase hex HMAC-SHA256 primary key of the coverage row, derived from (source_id, source_generation, canonical_harness, target_table, coverage_dimension).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3b",
+          "EN3c",
+          "A5a"
+        ],
+        "missingness_semantics": "Required 64-char hex digest.",
+        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "why_present": "Primary key for deterministic coverage row replacement across snapshots.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 1,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "coverage_status": {
+      "description": "High-level completeness classification derived deterministically from the denominator and numerator counts.",
+      "enum": [
+        "complete",
+        "partial",
+        "empty",
+        "unavailable"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum constrained by x_invariants.",
+        "pseudonymization": "Closed 4-value enum.",
+        "why_present": "Drives UI coverage badges (A5a) and analytical confidence gating (EN6a, EN6b) without ambiguous nulls.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 20,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "denominator_basis": {
+      "description": "Unit of the denominator (expected_population_count) for this coverage row.",
+      "enum": [
+        "discovered_files",
+        "raw_records_encountered",
+        "accepted_sessions",
+        "accepted_invocations",
+        "accepted_tool_calls",
+        "accepted_usage_rows",
+        "accepted_outcome_rows"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 7-value enum.",
+        "why_present": "States the exact denominator unit so downstream consumers can compute unambiguous coverage percentages (e.g. 12/50 accepted_usage_rows with observed_cost_usd).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 12,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "discovery_status": {
+      "description": "Status of local source discovery for this harness root (retrieval_v1).",
+      "enum": [
+        "discovered",
+        "empty_root",
+        "missing_root",
+        "permission_denied",
+        "not_configured"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 5-value enum; never contains filesystem paths.",
+        "why_present": "Distinguishes a harness with 0 sessions because the directory is empty vs not installed or unreadable (AGENTS.md \u00a73.6, D5).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 8,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "encountered_count": {
+      "description": "Total raw records encountered during ingestion for this dimension: accepted_count + rejected_count + recognized_unprojected_count.",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3c",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer; must equal accepted_count + rejected_count + recognized_unprojected_count.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Provides the explicit ingestion denominator so dropped or unprojected records are never silently hidden.",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 16,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "expected_population_count": {
+      "description": "Explicit denominator for coverage_dimension in target_table: observable_count + unknown_or_missing_count.",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer; must equal observable_count + unknown_or_missing_count.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Guarantees every coverage metric carries its exact denominator alongside its numerator (MVP plan \u00a72 Decision 3, F14).",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 17,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "field_fidelity": {
+      "description": "Fidelity tier of the observed values in this coverage dimension (D5).",
+      "enum": [
+        "exact",
+        "inferred_or_partial",
+        "unavailable"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Communicates whether observed values are exact (e.g. harness_observed_exact cost), inferred/partial (e.g. inferred_from_session model or observed_partial git evidence), or unavailable.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 11,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "gap_reasons": {
+      "description": "Non-empty ordered list of closed-vocabulary reason codes explaining any missingness, rejection, or unavailability in this dimension.",
+      "items": {
+        "enum": [
+          "none",
+          "cost_not_reported_by_harness",
+          "cost_deferred_to_enterprise_rate_card",
+          "model_not_reported_by_harness",
+          "link_id_missing_or_unlinked",
+          "tool_result_pending_or_unpaired",
+          "git_evidence_not_recorded",
+          "non_git_workspace",
+          "timestamp_missing",
+          "corrupt_or_truncated_records",
+          "recognized_unprojected_events",
+          "connector_unimplemented",
+          "source_root_unavailable"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true,
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-empty array of closed enum tokens; ['none'] iff coverage_status in ['complete', 'empty'].",
+        "pseudonymization": "Closed 13-token vocabulary.",
+        "why_present": "Provides machine-actionable explanations for partial or unavailable coverage (F1, F14, D5, A5a).",
+        "zero_content": "Closed enum literals only (DE-004)."
+      },
+      "x_parquet": {
+        "element_logical_type": "STRING",
+        "element_physical_type": "BYTE_ARRAY",
+        "field_id": 21,
+        "logical_type": "LIST<STRING>",
+        "physical_type": "GROUP",
+        "repetition": "REQUIRED"
+      }
+    },
+    "observable_count": {
+      "description": "Numerator of records in expected_population_count where the target dimension is known/observed.",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Explicit numerator of known/observed facts for this dimension.",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 18,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "projection_status": {
+      "description": "Status of fact projection for this harness and table (retrieval_v1, F1).",
+      "enum": [
+        "projected_full",
+        "projected_partial",
+        "connector_unimplemented",
+        "no_records"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 4-value enum.",
+        "why_present": "Resolves F1 (Pi enum exists without a connector) by explicitly reporting 'connector_unimplemented' rather than silent zero rows.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 10,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "pseudonym_key_id": {
+      "description": "Identifier of the customer-held HMAC key generation used to pseudonymize identifiers in this row (DE-004, F13).",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "EN3a",
+          "EN3c",
+          "EN5c"
+        ],
+        "missingness_semantics": "Required non-empty identifier.",
+        "pseudonymization": "Key generation label; contains no secret material.",
+        "why_present": "Tracks customer-held key rotation across coverage digests.",
+        "zero_content": "Key generation label only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 4,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "read_status": {
+      "description": "Status of reading discovered source artifacts (retrieval_v1).",
+      "enum": [
+        "complete",
+        "partial_truncated",
+        "corrupt_skipped",
+        "not_attempted"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 4-value enum.",
+        "why_present": "Distinguishes clean artifact reads from truncated JSONL lines or skipped corrupt files.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 9,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "recognized_unprojected_count": {
+      "description": "Count of valid harness records recognized by the parser that intentionally do not project into target_table (retrieval_v1).",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Prevents benign non-fact log lines (e.g. heartbeat/UI events) from inflating rejected_count while still balancing encountered_count.",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 15,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "rejected_count": {
+      "description": "Count of malformed, corrupt, or schema-invalid raw records rejected during extraction.",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3c",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Surfaces parser/validation loss without leaking raw malformed line content (DE-004).",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 14,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_generation": {
+      "description": "Monotonic positive integer generation of the source extraction state.",
+      "minimum": 1,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required integer >= 1.",
+        "pseudonymization": "Generation counter.",
+        "why_present": "Aligns coverage denominators with the exact generation of the fact tables in the snapshot.",
+        "zero_content": "Positive integer counter (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 3,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_id": {
+      "description": "Pseudonymized 64-character lowercase hex HMAC-SHA256 of the logical source root.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3b",
+          "EN3c",
+          "A5a"
+        ],
+        "missingness_semantics": "Required 64-char hex digest.",
+        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "why_present": "Associates coverage denominators with the pseudonymized source root.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 2,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "target_table": {
+      "description": "Fact table whose ingestion or field-level completeness is described by this coverage row.",
+      "enum": [
+        "sessions",
+        "invocations",
+        "tool_calls",
+        "usage",
+        "outcomes"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3c",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 5-table enum.",
+        "why_present": "Binds every coverage denominator to a specific fact-export-v1 table.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 6,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "unknown_or_missing_count": {
+      "description": "Count of records in expected_population_count where the target dimension is explicitly unknown or missing (e.g. cost_provenance == 'unknown' or agent.session.link_id == null).",
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a",
+          "EN6b",
+          "A5a"
+        ],
+        "missingness_semantics": "Required non-negative integer; must equal expected_population_count - observable_count.",
+        "pseudonymization": "Aggregate record count.",
+        "why_present": "Quantifies explicit unknownness (F14) so downstream analytics never mistake missing values for zero.",
+        "zero_content": "Non-negative integer count only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 19,
+        "logical_type": "INT(64, false)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    }
+  },
+  "required": [
+    "coverage_key",
+    "source_id",
+    "source_generation",
+    "pseudonym_key_id",
+    "canonical_harness",
+    "target_table",
+    "coverage_dimension",
+    "discovery_status",
+    "read_status",
+    "projection_status",
+    "field_fidelity",
+    "denominator_basis",
+    "accepted_count",
+    "rejected_count",
+    "recognized_unprojected_count",
+    "encountered_count",
+    "expected_population_count",
+    "observable_count",
+    "unknown_or_missing_count",
+    "coverage_status",
+    "gap_reasons"
+  ],
+  "title": "fact-export-v1 coverage table row",
+  "type": "object",
+  "x_contract": "fact-export-v1",
+  "x_invariants": [
+    "encountered_count == accepted_count + rejected_count + recognized_unprojected_count",
+    "expected_population_count == observable_count + unknown_or_missing_count",
+    "coverage_status == 'complete' <=> (expected_population_count > 0 && observable_count == expected_population_count && unknown_or_missing_count == 0 && rejected_count == 0 && recognized_unprojected_count == 0)",
+    "coverage_status == 'partial' <=> (expected_population_count > 0 && observable_count > 0 && (unknown_or_missing_count > 0 || rejected_count > 0 || recognized_unprojected_count > 0))",
+    "coverage_status == 'empty' <=> (expected_population_count == 0 && (discovery_status == 'discovered' || discovery_status == 'empty_root') && projection_status != 'connector_unimplemented')",
+    "coverage_status == 'unavailable' <=> (observable_count == 0 && (expected_population_count > 0 || projection_status == 'connector_unimplemented' || discovery_status == 'missing_root' || discovery_status == 'permission_denied' || discovery_status == 'not_configured'))",
+    "(coverage_status == 'complete' || coverage_status == 'empty') <=> gap_reasons == ['none']",
+    "(coverage_status == 'partial' || coverage_status == 'unavailable') <=> (len(gap_reasons) >= 1 && !('none' in gap_reasons))"
+  ],
+  "x_primary_key": "coverage_key",
+  "x_replacement_scope_keys": [
+    "source_id",
+    "source_generation",
+    "canonical_harness",
+    "target_table",
+    "coverage_dimension",
+    "coverage_key"
+  ],
+  "x_spdx_license_identifier": "Apache-2.0",
+  "x_table": "coverage",
+  "x_version": 1
+}
