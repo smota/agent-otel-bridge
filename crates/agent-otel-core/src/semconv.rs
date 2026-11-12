@@ -183,6 +183,20 @@ pub fn infer_provider(model: &str) -> &'static str {
 /// `infer_provider` result for a model string that matches no known provider.
 pub const GEN_AI_PROVIDER_UNKNOWN: &str = "unknown";
 
+/// Infers the default AI provider name from a canonical or hinted agent/harness name
+/// when an event does not carry an explicit model identifier.
+pub fn infer_provider_from_agent(agent_name: &str) -> Option<&'static str> {
+    let lower = agent_name.to_ascii_lowercase();
+    match lower.as_str() {
+        "antigravity" | "agy" | "gemini" => Some(GEN_AI_PROVIDER_GOOGLE),
+        "claude" | "claude-code" | "claudecode" => Some(GEN_AI_PROVIDER_ANTHROPIC),
+        "codex" | "codex-cli" | "openai" => Some(GEN_AI_PROVIDER_OPENAI),
+        "grok" | "grok-cli" | "xai" => Some(GEN_AI_PROVIDER_XAI),
+        "pi" | "pi-cli" => Some(GEN_AI_PROVIDER_PI),
+        _ => None,
+    }
+}
+
 /// Infers the agent name from model or client hints.
 pub fn infer_agent_name(model: Option<&str>, client_hint: Option<&str>) -> &'static str {
     if let Some(hint) = client_hint {
