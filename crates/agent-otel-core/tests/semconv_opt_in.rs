@@ -422,6 +422,7 @@ fn g0a_claude_code_2_1_322_hook_without_model_infers_anthropic_provider() {
     // Explicit model continues to take precedence when a harness hosts a foreign model.
     let hosted_foreign = AgentHookInput {
         agent_name: Some("antigravity".to_string()),
+        harness_provider: Some(GEN_AI_PROVIDER_GOOGLE),
         model: Some("claude-3-5-sonnet".to_string()),
         ..Default::default()
     };
@@ -436,6 +437,26 @@ fn g0a_claude_code_2_1_322_hook_without_model_infers_anthropic_provider() {
     );
     assert_eq!(
         string_attr(&hosted_span, GEN_AI_SYSTEM),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+
+    // Header ClientKind default provider takes precedence over a subagent payload agent_name.
+    let subagent_with_header = AgentHookInput {
+        agent_name: Some("planner".to_string()),
+        harness_provider: Some(GEN_AI_PROVIDER_ANTHROPIC),
+        ..Default::default()
+    };
+    let subagent_span = build(&subagent_with_header, false);
+    assert_eq!(
+        string_attr(&subagent_span, GEN_AI_AGENT_NAME),
+        Some("planner")
+    );
+    assert_eq!(
+        string_attr(&subagent_span, GEN_AI_PROVIDER_NAME),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+    assert_eq!(
+        string_attr(&subagent_span, GEN_AI_SYSTEM),
         Some(GEN_AI_PROVIDER_ANTHROPIC)
     );
 }

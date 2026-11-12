@@ -192,14 +192,48 @@ impl ClientKind {
         }
     }
 
+    /// Returns the harness default provider for this client kind when an event
+    /// does not carry an explicit model identifier.
+    ///
+    /// This mapping is a harness default provider (for example, `"pi"` for
+    /// [`ClientKind::Pi`]), not a verified model vendor.
+    pub fn default_provider(&self) -> Option<&'static str> {
+        match self {
+            ClientKind::Unspecified => None,
+            ClientKind::Antigravity => Some(crate::semconv::GEN_AI_PROVIDER_GOOGLE),
+            ClientKind::ClaudeCode => Some(crate::semconv::GEN_AI_PROVIDER_ANTHROPIC),
+            ClientKind::Codex => Some(crate::semconv::GEN_AI_PROVIDER_OPENAI),
+            ClientKind::Grok => Some(crate::semconv::GEN_AI_PROVIDER_XAI),
+            ClientKind::Pi => Some(crate::semconv::GEN_AI_PROVIDER_PI),
+        }
+    }
+
     pub fn from_str_name(s: &str) -> Self {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "antigravity" | "agy" | "gemini" => ClientKind::Antigravity,
-            "claude" | "claude-code" | "claudecode" => ClientKind::ClaudeCode,
-            "codex" | "codex-cli" | "openai" => ClientKind::Codex,
-            "grok" | "grok-cli" | "xai" => ClientKind::Grok,
-            "pi" | "pi-cli" => ClientKind::Pi,
-            _ => ClientKind::Unspecified,
+        let s = s.trim();
+        if s.eq_ignore_ascii_case("antigravity")
+            || s.eq_ignore_ascii_case("agy")
+            || s.eq_ignore_ascii_case("gemini")
+        {
+            ClientKind::Antigravity
+        } else if s.eq_ignore_ascii_case("claude")
+            || s.eq_ignore_ascii_case("claude-code")
+            || s.eq_ignore_ascii_case("claudecode")
+        {
+            ClientKind::ClaudeCode
+        } else if s.eq_ignore_ascii_case("codex")
+            || s.eq_ignore_ascii_case("codex-cli")
+            || s.eq_ignore_ascii_case("openai")
+        {
+            ClientKind::Codex
+        } else if s.eq_ignore_ascii_case("grok")
+            || s.eq_ignore_ascii_case("grok-cli")
+            || s.eq_ignore_ascii_case("xai")
+        {
+            ClientKind::Grok
+        } else if s.eq_ignore_ascii_case("pi") || s.eq_ignore_ascii_case("pi-cli") {
+            ClientKind::Pi
+        } else {
+            ClientKind::Unspecified
         }
     }
 }
@@ -463,6 +497,11 @@ pub struct AgentHookInput {
     // --- Multi-Layer Error Categorization (v0.3) ---
     #[serde(alias = "error_category", alias = "errorCategory", default)]
     pub error_category: Option<String>,
+
+    /// Harness default provider resolved from the IPC wire header (`ClientKind`),
+    /// preserved independently of any payload `agent_name` (such as a subagent name).
+    #[serde(skip)]
+    pub harness_provider: Option<&'static str>,
 }
 
 /// Backward compatibility alias for Antigravity-specific integrations

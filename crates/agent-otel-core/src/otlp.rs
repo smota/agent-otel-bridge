@@ -345,6 +345,7 @@ pub fn build_span_from_resolved(
         }
     } else {
         let provider = inferred_provider
+            .or(input.harness_provider)
             .or_else(|| {
                 input
                     .agent_name
