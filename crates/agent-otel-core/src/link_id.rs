@@ -142,26 +142,26 @@ impl CanonicalHarness {
 
     /// Resolves a raw harness string against the closed `link-id-v1` alias table.
     ///
-    /// Normalization trims leading and trailing ASCII whitespace and performs
-    /// case-insensitive ASCII matching against the closed alias list.
+    /// Normalization requires an ASCII-only input and performs ASCII case-insensitive
+    /// matching (`A-Z` -> `a-z`) without trimming whitespace. Any non-ASCII character
+    /// or leading/trailing whitespace resolves to `None`.
     ///
     /// Provider/vendor names (`"google"`, `"anthropic"`, `"openai"`, `"xai"`, `"gemini"`)
     /// and fallback strings (`"ai-agent"`, `"unknown"`) are intentionally excluded
     /// per the `#29` attribution contract.
     pub fn from_alias(raw: &str) -> Option<Self> {
-        let s = raw.trim();
-        if s.eq_ignore_ascii_case("antigravity") || s.eq_ignore_ascii_case("agy") {
+        if !raw.is_ascii() {
+            return None;
+        }
+        if raw.eq_ignore_ascii_case("antigravity") || raw.eq_ignore_ascii_case("agy") {
             Some(CanonicalHarness::Antigravity)
-        } else if s.eq_ignore_ascii_case("claude")
-            || s.eq_ignore_ascii_case("claude-code")
-            || s.eq_ignore_ascii_case("claudecode")
-        {
+        } else if raw.eq_ignore_ascii_case("claude") || raw.eq_ignore_ascii_case("claude-code") {
             Some(CanonicalHarness::Claude)
-        } else if s.eq_ignore_ascii_case("codex") || s.eq_ignore_ascii_case("codex-cli") {
+        } else if raw.eq_ignore_ascii_case("codex") {
             Some(CanonicalHarness::Codex)
-        } else if s.eq_ignore_ascii_case("grok") || s.eq_ignore_ascii_case("grok-cli") {
+        } else if raw.eq_ignore_ascii_case("grok") {
             Some(CanonicalHarness::Grok)
-        } else if s.eq_ignore_ascii_case("pi") || s.eq_ignore_ascii_case("pi-cli") {
+        } else if raw.eq_ignore_ascii_case("pi") {
             Some(CanonicalHarness::Pi)
         } else {
             None
@@ -174,11 +174,9 @@ impl CanonicalHarness {
 pub enum LinkKeyError {
     /// `K_org` is shorter than [`MIN_ORG_MASTER_KEY_BYTES`] (32 bytes).
     MasterKeyTooShort,
-    /// `team` is empty, whitespace-only, exceeds [`MAX_LINK_FIELD_BYTES`], has outer whitespace,
-    /// or contains ASCII control characters.
+    /// `team` does not conform to the printable ASCII slug grammar `[\x21-\x7E]{1,1024}`.
     InvalidTeam,
-    /// `epoch` is empty, whitespace-only, exceeds [`MAX_LINK_FIELD_BYTES`], has outer whitespace,
-    /// or contains ASCII control characters.
+    /// `epoch` does not conform to the printable ASCII slug grammar `[\x21-\x7E]{1,1024}`.
     InvalidEpoch,
     /// Requested HKDF output length exceeds `255 * 32` bytes (RFC 5869 §2.3).
     InvalidOkmLength,
@@ -191,11 +189,11 @@ pub enum LinkKeyError {
 pub enum UnlinkedReason {
     /// Key derivation inputs (`K_org`, `team`, or `epoch`) were missing or invalid.
     InvalidKeyMaterial,
-    /// Event `origin` is not `"harness"` (for example, `"synthetic"` test/collision fixtures).
+    /// Event `origin` is not `"harness"` (for example, `"synthetic"` or `"Harness"`).
     NonHarnessOrigin,
-    /// `org` is absent, empty, or whitespace-only.
+    /// `org` is absent, empty, or whitespace-only (Unicode `White_Space`).
     MissingOrg,
-    /// `endpoint_scope` is absent, empty, or whitespace-only.
+    /// `endpoint_scope` is absent, empty, or whitespace-only (Unicode `White_Space`).
     MissingEndpointScope,
     /// Neither a valid wire client ID nor a non-empty harness name was supplied.
     MissingHarness,
@@ -203,10 +201,10 @@ pub enum UnlinkedReason {
     UnknownHarness,
     /// Both `wire_client_id` and `raw_harness` were supplied and resolved to different harnesses.
     ConflictingHarness,
-    /// `native_session` is absent, empty, or whitespace-only.
+    /// `native_session` is absent, empty, or whitespace-only (Unicode `White_Space`).
     MissingNativeSession,
-    /// `org`, `endpoint_scope`, or `native_session` contains ASCII control characters, NUL bytes,
-    /// leading/trailing ASCII whitespace, or exceeds [`MAX_LINK_FIELD_BYTES`].
+    /// `org`/`endpoint_scope` violates `[\x21-\x7E]{1,1024}`, or `native_session` contains
+    /// C0/C1 control characters, leading/trailing Unicode `White_Space`, or exceeds [`MAX_LINK_FIELD_BYTES`].
     InvalidFieldCharacters,
 }
 
@@ -229,14 +227,35 @@ impl UnlinkedReason {
 }
 
 /// Intermediate and final outputs of `K_link` derivation via RFC 5869 `HKDF-SHA256`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Key material does not derive `Debug`, `Clone`, or `PartialEq`, and `PRK` is kept private
+/// (`PRK` MUST be treated with `K_org` custody).
 pub struct DerivedLinkKey {
     /// Length-prefixed `info = LP("agent.session.link.key/v1", team, epoch)`.
     pub hkdf_info: Vec<u8>,
-    /// Pseudorandom key `PRK = HMAC-SHA256(salt, K_org)`.
-    pub prk: [u8; 32],
+    /// Pseudorandom key `PRK = HMAC-SHA256(salt, K_org)` (custody equivalent to `K_org`).
+    #[cfg_attr(not(test), expect(dead_code))]
+    prk: [u8; 32],
     /// Derived 32-byte link key `K_link = HKDF-Expand(PRK, info, 32)`.
     pub k_link: [u8; 32],
+}
+
+impl DerivedLinkKey {
+    /// Test-only accessor for verifying intermediate `PRK` against contract vectors.
+    #[cfg(test)]
+    pub const fn prk(&self) -> &[u8; 32] {
+        &self.prk
+    }
+}
+
+impl std::fmt::Debug for DerivedLinkKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DerivedLinkKey")
+            .field("hkdf_info", &self.hkdf_info)
+            .field("prk", &"<redacted>")
+            .field("k_link", &"<redacted>")
+            .finish()
+    }
 }
 
 /// Input parameters for deriving `agent.session.link_id` on an event or session record.
@@ -257,17 +276,40 @@ pub struct LinkIdInput<'a> {
 }
 
 /// Detailed result of `agent.session.link_id` derivation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum LinkIdOutcome {
     /// All inputs were valid; carries the derived 64-character hex link ID and intermediates.
     Linked {
         canonical_harness: CanonicalHarness,
+        #[cfg(test)]
         lp_payload: Vec<u8>,
         tag: [u8; 32],
         link_id: String,
     },
     /// One or more inputs were missing, synthetic, or invalid; resolves to `"unlinked"`.
     Unlinked { reason: UnlinkedReason },
+}
+
+impl std::fmt::Debug for LinkIdOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LinkIdOutcome::Linked {
+                canonical_harness,
+                tag,
+                link_id,
+                ..
+            } => f
+                .debug_struct("Linked")
+                .field("canonical_harness", canonical_harness)
+                .field("lp_payload", &"<redacted>")
+                .field("tag", tag)
+                .field("link_id", link_id)
+                .finish(),
+            LinkIdOutcome::Unlinked { reason } => {
+                f.debug_struct("Unlinked").field("reason", reason).finish()
+            }
+        }
+    }
 }
 
 impl LinkIdOutcome {
@@ -422,18 +464,45 @@ pub fn lp_encode_str(fields: &[&str]) -> Result<Vec<u8>, LinkKeyError> {
     Ok(out)
 }
 
-/// Validates that a non-empty contract field has no leading/trailing ASCII whitespace,
-/// contains no ASCII control characters (`0x00..=0x1F` or `0x7F`), and is at most
-/// [`MAX_LINK_FIELD_BYTES`] bytes long.
+/// Returns `true` if `c` is in the 25-character Unicode `White_Space` set (`char::is_whitespace`).
 #[inline]
-pub fn is_valid_contract_field(value: &str) -> bool {
+pub fn is_unicode_whitespace(c: char) -> bool {
+    c.is_whitespace()
+}
+
+/// Returns `true` if `value` is empty or consists solely of Unicode `White_Space` characters.
+#[inline]
+pub fn is_unicode_whitespace_only(value: &str) -> bool {
+    value.is_empty() || value.chars().all(is_unicode_whitespace)
+}
+
+/// Validates that an administrative slug field (`org`, `endpoint_scope`, `team`, `epoch`)
+/// conforms to the case-sensitive printable ASCII slug grammar `[\x21-\x7E]{1,1024}`
+/// (printable ASCII, no spaces, no control characters, 1..=1024 bytes).
+#[inline]
+pub fn is_valid_ascii_slug(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= MAX_LINK_FIELD_BYTES
+        && bytes.iter().all(|&b| (0x21..=0x7e).contains(&b))
+}
+
+/// Validates that `native_session` is `1..=1024` UTF-8 bytes, has no leading or trailing
+/// Unicode `White_Space` (`char::is_whitespace`), and contains no C0 or C1 control characters
+/// (`U+0000..=U+001F`, `U+007F`, `U+0080..=U+009F`).
+#[inline]
+pub fn is_valid_native_session(value: &str) -> bool {
     if value.is_empty() || value.len() > MAX_LINK_FIELD_BYTES {
         return false;
     }
-    if value.trim() != value {
+    if value.chars().next().is_some_and(is_unicode_whitespace)
+        || value.chars().next_back().is_some_and(is_unicode_whitespace)
+    {
         return false;
     }
-    !value.bytes().any(|b| b <= 0x1f || b == 0x7f)
+    !value
+        .chars()
+        .any(|c| matches!(c as u32, 0x0000..=0x001f | 0x007f..=0x009f))
 }
 
 /// Derives `K_link` and its intermediate `hkdf_info` and `prk` values per `link-id-v1`.
@@ -445,10 +514,10 @@ pub fn derive_link_key_detailed(
     if k_org.len() < MIN_ORG_MASTER_KEY_BYTES {
         return Err(LinkKeyError::MasterKeyTooShort);
     }
-    if !is_valid_contract_field(team) {
+    if !is_valid_ascii_slug(team) {
         return Err(LinkKeyError::InvalidTeam);
     }
-    if !is_valid_contract_field(epoch) {
+    if !is_valid_ascii_slug(epoch) {
         return Err(LinkKeyError::InvalidEpoch);
     }
 
@@ -494,7 +563,7 @@ pub fn resolve_harness_identity(
 
     let str_resolved = match raw_harness {
         None => None,
-        Some(s) if s.trim().is_empty() => {
+        Some(s) if is_unicode_whitespace_only(s) => {
             if wire_resolved.is_none() {
                 return Err(UnlinkedReason::MissingHarness);
             }
@@ -531,28 +600,28 @@ pub fn derive_session_link_with_key(
     }
 
     let org = match input.org {
-        Some(s) if !s.trim().is_empty() => s,
+        Some(s) if !is_unicode_whitespace_only(s) => s,
         _ => {
             return LinkIdOutcome::Unlinked {
                 reason: UnlinkedReason::MissingOrg,
             }
         }
     };
-    if !is_valid_contract_field(org) {
+    if !is_valid_ascii_slug(org) {
         return LinkIdOutcome::Unlinked {
             reason: UnlinkedReason::InvalidFieldCharacters,
         };
     }
 
     let endpoint_scope = match input.endpoint_scope {
-        Some(s) if !s.trim().is_empty() => s,
+        Some(s) if !is_unicode_whitespace_only(s) => s,
         _ => {
             return LinkIdOutcome::Unlinked {
                 reason: UnlinkedReason::MissingEndpointScope,
             }
         }
     };
-    if !is_valid_contract_field(endpoint_scope) {
+    if !is_valid_ascii_slug(endpoint_scope) {
         return LinkIdOutcome::Unlinked {
             reason: UnlinkedReason::InvalidFieldCharacters,
         };
@@ -565,14 +634,14 @@ pub fn derive_session_link_with_key(
     };
 
     let native_session = match input.native_session {
-        Some(s) if !s.trim().is_empty() => s,
+        Some(s) if !is_unicode_whitespace_only(s) => s,
         _ => {
             return LinkIdOutcome::Unlinked {
                 reason: UnlinkedReason::MissingNativeSession,
             }
         }
     };
-    if !is_valid_contract_field(native_session) {
+    if !is_valid_native_session(native_session) {
         return LinkIdOutcome::Unlinked {
             reason: UnlinkedReason::InvalidFieldCharacters,
         };
@@ -598,6 +667,7 @@ pub fn derive_session_link_with_key(
 
     LinkIdOutcome::Linked {
         canonical_harness,
+        #[cfg(test)]
         lp_payload,
         tag,
         link_id,
@@ -802,7 +872,7 @@ mod tests {
     }
 
     #[test]
-    fn canonical_harness_resolves_f12_and_rejects_providers() {
+    fn canonical_harness_resolves_f12_and_rejects_providers_and_unemitted_aliases() {
         assert_eq!(
             CanonicalHarness::from_alias("claude"),
             Some(CanonicalHarness::Claude)
@@ -812,7 +882,7 @@ mod tests {
             Some(CanonicalHarness::Claude)
         );
         assert_eq!(
-            CanonicalHarness::from_alias("claudecode"),
+            CanonicalHarness::from_alias("Claude-Code"),
             Some(CanonicalHarness::Claude)
         );
         assert_eq!(
@@ -824,11 +894,11 @@ mod tests {
             Some(CanonicalHarness::Antigravity)
         );
         assert_eq!(
-            CanonicalHarness::from_alias("codex"),
-            Some(CanonicalHarness::Codex)
+            CanonicalHarness::from_alias("AGY"),
+            Some(CanonicalHarness::Antigravity)
         );
         assert_eq!(
-            CanonicalHarness::from_alias("codex-cli"),
+            CanonicalHarness::from_alias("codex"),
             Some(CanonicalHarness::Codex)
         );
         assert_eq!(
@@ -836,19 +906,11 @@ mod tests {
             Some(CanonicalHarness::Grok)
         );
         assert_eq!(
-            CanonicalHarness::from_alias("grok-cli"),
-            Some(CanonicalHarness::Grok)
-        );
-        assert_eq!(
             CanonicalHarness::from_alias("pi"),
             Some(CanonicalHarness::Pi)
         );
-        assert_eq!(
-            CanonicalHarness::from_alias("pi-cli"),
-            Some(CanonicalHarness::Pi)
-        );
 
-        // Provider/vendor names and fallbacks MUST NOT be accepted as harness aliases.
+        // Provider/vendor names, fallbacks, removed aliases, non-ASCII, and outer whitespace MUST NOT resolve.
         for forbidden in [
             "google",
             "anthropic",
@@ -859,6 +921,13 @@ mod tests {
             "ai-agent",
             "unknown",
             "cursor",
+            "claudecode",
+            "codex-cli",
+            "grok-cli",
+            "pi-cli",
+            " claude",
+            "claude ",
+            "claudé",
             "",
         ] {
             assert_eq!(
@@ -867,6 +936,48 @@ mod tests {
                 "forbidden string '{forbidden}' must not resolve to a canonical harness"
             );
         }
+    }
+
+    #[test]
+    fn unicode_whitespace_matches_exact_25_codepoint_contract_set() {
+        const EXPECTED_WS: [char; 25] = [
+            '\u{0009}', '\u{000A}', '\u{000B}', '\u{000C}', '\u{000D}', '\u{0020}', '\u{0085}',
+            '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+            '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{2028}',
+            '\u{2029}', '\u{202F}', '\u{205F}', '\u{3000}',
+        ];
+        let actual: Vec<char> = (0u32..=0x10FFFF)
+            .filter_map(char::from_u32)
+            .filter(|&c| is_unicode_whitespace(c))
+            .collect();
+        assert_eq!(actual.as_slice(), &EXPECTED_WS);
+    }
+
+    #[test]
+    fn debug_redacts_key_material_and_lp_payload() {
+        let k_org = b"OrgMasterSecret_2026_MTN8_C1a_K1";
+        let derived = derive_link_key_detailed(k_org, "platform-eng", "2026-Q4").unwrap();
+        let derived_dbg = format!("{derived:?}");
+        assert!(derived_dbg.contains("<redacted>"));
+        assert!(!derived_dbg.contains(&hex_encode(derived.prk())));
+        assert!(!derived_dbg.contains(&hex_encode(&derived.k_link)));
+
+        let outcome = derive_session_link_with_key(
+            &derived.k_link,
+            &LinkIdInput {
+                org: Some("secret-org-slug"),
+                endpoint_scope: Some("secret-endpoint-slug"),
+                wire_client_id: Some(2),
+                raw_harness: Some("claude"),
+                native_session: Some("secret-session-token-123"),
+                origin: Some("harness"),
+            },
+        );
+        let outcome_dbg = format!("{outcome:?}");
+        assert!(outcome_dbg.contains("<redacted>"));
+        assert!(!outcome_dbg.contains("secret-org-slug"));
+        assert!(!outcome_dbg.contains("secret-endpoint-slug"));
+        assert!(!outcome_dbg.contains("secret-session-token-123"));
     }
 
     fn contract_dir() -> std::path::PathBuf {
@@ -996,7 +1107,7 @@ mod tests {
                                 "{suite_file}:{vid} hkdf_info_hex mismatch"
                             );
                             assert_eq!(
-                                Some(hex_encode(&derived_key.prk).as_str()),
+                                Some(hex_encode(derived_key.prk()).as_str()),
                                 inter["prk_hex"].as_str(),
                                 "{suite_file}:{vid} prk_hex mismatch"
                             );

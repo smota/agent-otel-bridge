@@ -19,6 +19,10 @@
     [
       "collision_utf8_nfc_precomposed",
       "collision_utf8_nfd_decomposed"
+    ],
+    [
+      "alias_f12_dendro_claude",
+      "collision_org_mixed_case_acme_corp"
     ]
   ],
   "assert_equal_link_id_groups": [
@@ -318,7 +322,7 @@
     },
     {
       "id": "alias_f12_claudecode_compact",
-      "description": "F12 resolution: alias 'claudecode' (case-insensitive with outer ASCII whitespace) maps to canonical 'claude'",
+      "description": "F12 resolution: mixed-case 'Claude-Code' maps to canonical 'claude'",
       "inputs": {
         "k_org_hex": "4f72674d61737465725365637265745f323032365f4d544e385f4331615f4b31",
         "salt_hex": "6167656e742d6f74656c2d6272696467653a6c696e6b2d69642d76313a73616c74",
@@ -327,7 +331,7 @@
         "org": "acme-corp",
         "endpoint_scope": "ws-01",
         "wire_client_id": null,
-        "raw_harness": "  ClaudeCode \n",
+        "raw_harness": "Claude-Code",
         "native_session": "conv-f12-parity-001",
         "origin": "harness"
       },
@@ -453,7 +457,7 @@
     },
     {
       "id": "alias_codex_cli",
-      "description": "Codex CLI alias 'codex-cli' maps to canonical 'codex'",
+      "description": "Codex alias group: wire_client_id=3 and uppercase 'CODEX' agree on canonical 'codex'",
       "inputs": {
         "k_org_hex": "4f72674d61737465725365637265745f323032365f4d544e385f4331615f4b31",
         "salt_hex": "6167656e742d6f74656c2d6272696467653a6c696e6b2d69642d76313a73616c74",
@@ -461,8 +465,8 @@
         "epoch": "2026-Q4",
         "org": "acme-corp",
         "endpoint_scope": "ws-01",
-        "wire_client_id": null,
-        "raw_harness": "codex-cli",
+        "wire_client_id": 3,
+        "raw_harness": "CODEX",
         "native_session": "conv-codex-001",
         "origin": "harness"
       },
@@ -507,7 +511,7 @@
     },
     {
       "id": "alias_grok_cli",
-      "description": "Grok CLI alias 'grok-cli' maps to canonical 'grok'",
+      "description": "Grok alias group: wire_client_id=4 and uppercase 'GROK' agree on canonical 'grok'",
       "inputs": {
         "k_org_hex": "4f72674d61737465725365637265745f323032365f4d544e385f4331615f4b31",
         "salt_hex": "6167656e742d6f74656c2d6272696467653a6c696e6b2d69642d76313a73616c74",
@@ -515,8 +519,8 @@
         "epoch": "2026-Q4",
         "org": "acme-corp",
         "endpoint_scope": "ws-01",
-        "wire_client_id": null,
-        "raw_harness": "grok-cli",
+        "wire_client_id": 4,
+        "raw_harness": "GROK",
         "native_session": "conv-grok-001",
         "origin": "harness"
       },
@@ -561,7 +565,7 @@
     },
     {
       "id": "alias_pi_cli",
-      "description": "Pi CLI alias 'pi-cli' maps to canonical 'pi'",
+      "description": "Pi alias group: wire_client_id=5 and uppercase 'PI' agree on canonical 'pi'",
       "inputs": {
         "k_org_hex": "4f72674d61737465725365637265745f323032365f4d544e385f4331615f4b31",
         "salt_hex": "6167656e742d6f74656c2d6272696467653a6c696e6b2d69642d76313a73616c74",
@@ -569,8 +573,8 @@
         "epoch": "2026-Q4",
         "org": "acme-corp",
         "endpoint_scope": "ws-01",
-        "wire_client_id": null,
-        "raw_harness": "pi-cli",
+        "wire_client_id": 5,
+        "raw_harness": "PI",
         "native_session": "conv-pi-001",
         "origin": "harness"
       },
@@ -583,6 +587,33 @@
       },
       "expected": {
         "link_id": "b458a770df9be8fd0d6fde002f156c7ccf6d5a55f0b91f8104e06de6b7c8e152",
+        "unlinked_reason": null
+      }
+    },
+    {
+      "id": "collision_org_mixed_case_acme_corp",
+      "description": "Case-sensitive org slug: 'Acme-Corp' is valid without case-folding and produces a distinct link_id from lowercase 'acme-corp'",
+      "inputs": {
+        "k_org_hex": "4f72674d61737465725365637265745f323032365f4d544e385f4331615f4b31",
+        "salt_hex": "6167656e742d6f74656c2d6272696467653a6c696e6b2d69642d76313a73616c74",
+        "team": "platform-eng",
+        "epoch": "2026-Q4",
+        "org": "Acme-Corp",
+        "endpoint_scope": "ws-01",
+        "wire_client_id": null,
+        "raw_harness": "claude",
+        "native_session": "conv-f12-parity-001",
+        "origin": "harness"
+      },
+      "intermediates": {
+        "hkdf_info_hex": "000000196167656e742e73657373696f6e2e6c696e6b2e6b65792f76310000000c706c6174666f726d2d656e6700000007323032362d5134",
+        "prk_hex": "45a12bea07c0a084e78cddd2d3da7a2b95a1c06534acc374ebaf937bf05ad2b3",
+        "k_link_hex": "c4ed91ad0f2d1b87a067093c0a2ecea930c784850d759756530a98a29fb331ff",
+        "canonical_harness": "claude",
+        "lp_payload_hex": "000000156167656e742e73657373696f6e2e6c696e6b2f76310000000941636d652d436f72700000000577732d303100000006636c6175646500000013636f6e762d6631322d7061726974792d303031"
+      },
+      "expected": {
+        "link_id": "8d7e8f423a9483442f5b755f17c7c7e56fcd212df95970e54150b7900d059d81",
         "unlinked_reason": null
       }
     }

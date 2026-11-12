@@ -214,7 +214,7 @@
         "org": "smota-org",
         "endpoint_scope": "g0a-wsl-runner-01",
         "wire_client_id": null,
-        "raw_harness": "codex-cli",
+        "raw_harness": "codex",
         "native_session": "SESSION_6460b176b74ce2dc",
         "origin": "harness"
       },

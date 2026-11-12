@@ -77,17 +77,71 @@ def lp_encode_strs(fields: list[str]) -> bytes:
     return lp_encode_bytes([f.encode("utf-8", errors="strict") for f in fields])
 
 
-def is_valid_field(val: str) -> bool:
-    """Check SPEC.md Section 5.3 field constraints (non-empty, <=1024B, no outer ASCII ws, no ASCII ctl)."""
+UNICODE_WHITESPACE: frozenset[str] = frozenset(
+    [
+        "\u0009",  # CHARACTER TABULATION
+        "\u000a",  # LINE FEED
+        "\u000b",  # LINE TABULATION
+        "\u000c",  # FORM FEED
+        "\u000d",  # CARRIAGE RETURN
+        "\u0020",  # SPACE
+        "\u0085",  # NEXT LINE (NEL)
+        "\u00a0",  # NO-BREAK SPACE
+        "\u1680",  # OGHAM SPACE MARK
+        "\u2000",  # EN QUAD
+        "\u2001",  # EM QUAD
+        "\u2002",  # EN SPACE
+        "\u2003",  # EM SPACE
+        "\u2004",  # THREE-PER-EM SPACE
+        "\u2005",  # FOUR-PER-EM SPACE
+        "\u2006",  # SIX-PER-EM SPACE
+        "\u2007",  # FIGURE SPACE
+        "\u2008",  # PUNCTUATION SPACE
+        "\u2009",  # THIN SPACE
+        "\u200a",  # HAIR SPACE
+        "\u2028",  # LINE SEPARATOR
+        "\u2029",  # PARAGRAPH SEPARATOR
+        "\u202f",  # NARROW NO-BREAK SPACE
+        "\u205f",  # MEDIUM MATHEMATICAL SPACE
+        "\u3000",  # IDEOGRAPHIC SPACE
+    ]
+)
+
+
+def is_unicode_whitespace_only(val: str) -> bool:
+    """Return True if val is empty or every code point is in the 25-char Unicode White_Space set."""
+    return len(val) == 0 or all(ch in UNICODE_WHITESPACE for ch in val)
+
+
+def is_valid_ascii_slug(val: str) -> bool:
+    """Check SPEC.md §4.3 ASCII slug grammar [\\x21-\\x7E]{1,1024} (printable ASCII, no spaces)."""
     raw = val.encode("utf-8", errors="strict")
     if len(raw) == 0 or len(raw) > MAX_FIELD_BYTES:
         return False
-    if val.strip(" \t\n\r\x0b\x0c") != val:
+    return all(0x21 <= b <= 0x7E for b in raw)
+
+
+def is_valid_native_session(val: str) -> bool:
+    """Check SPEC.md §4.3 native_session rules (1..=1024 UTF-8 bytes, no C0/C1 ctl, no outer Unicode White_Space)."""
+    raw = val.encode("utf-8", errors="strict")
+    if len(raw) == 0 or len(raw) > MAX_FIELD_BYTES:
         return False
-    for b in raw:
-        if b <= 0x1F or b == 0x7F:
+    if val[0] in UNICODE_WHITESPACE or val[-1] in UNICODE_WHITESPACE:
+        return False
+    for ch in val:
+        cp = ord(ch)
+        if cp <= 0x001F or (0x007F <= cp <= 0x009F):
             return False
     return True
+
+
+def normalize_harness_alias(raw: str) -> str | None:
+    """ASCII lowercase of an ASCII-only input without trimming; non-ASCII returns None."""
+    try:
+        raw_bytes = raw.encode("ascii")
+    except UnicodeEncodeError:
+        return None
+    return raw_bytes.lower().decode("ascii")
 
 
 def verify_rfc_vectors() -> None:
@@ -194,7 +248,9 @@ def load_and_verify_vocabulary(vocab_path: pathlib.Path) -> tuple[dict[str, str]
         if canonical not in aliases:
             raise AssertionError(f"Canonical {canonical} missing from its own aliases list")
         for alias in aliases:
-            norm = alias.strip().lower()
+            norm = normalize_harness_alias(alias)
+            if norm is None or norm != alias or not is_valid_ascii_slug(alias):
+                raise AssertionError(f"Invalid alias token in vocabulary.json: {alias!r}")
             if norm in alias_to_canonical:
                 raise AssertionError(f"Alias collision on {norm!r}")
             alias_to_canonical[norm] = canonical
@@ -211,6 +267,10 @@ def load_and_verify_vocabulary(vocab_path: pathlib.Path) -> tuple[dict[str, str]
 
     if alias_to_canonical.get("claude-code") != "claude" or alias_to_canonical.get("claude") != "claude":
         raise AssertionError("F12 violation: claude-code and claude must both resolve to 'claude'")
+
+    for removed_alias in ("claudecode", "codex-cli", "grok-cli", "pi-cli"):
+        if removed_alias in alias_to_canonical:
+            raise AssertionError(f"Removed un-emitted alias {removed_alias!r} present in alias table")
 
     for provider in ("google", "anthropic", "openai", "xai", "gemini", "inflection", "ai-agent", "unknown"):
         if provider in alias_to_canonical:
@@ -234,13 +294,12 @@ def resolve_harness(
 
     str_canon: str | None = None
     if raw_harness is not None:
-        trimmed = raw_harness.strip(" \t\n\r\x0b\x0c")
-        if not trimmed:
+        if is_unicode_whitespace_only(raw_harness):
             if wire_canon is None:
                 return None, "missing_harness"
         else:
-            lower = trimmed.lower()
-            if lower not in alias_to_canonical:
+            lower = normalize_harness_alias(raw_harness)
+            if lower is None or lower not in alias_to_canonical:
                 return None, "unknown_harness"
             str_canon = alias_to_canonical[lower]
 
@@ -287,8 +346,8 @@ def evaluate_vector(
         len(k_org) < MIN_ORG_MASTER_KEY_BYTES
         or team is None
         or epoch is None
-        or not is_valid_field(team)
-        or not is_valid_field(epoch)
+        or not is_valid_ascii_slug(team)
+        or not is_valid_ascii_slug(epoch)
     ):
         unlinked_reason = "invalid_key_material"
     else:
@@ -301,13 +360,13 @@ def evaluate_vector(
 
         if origin is not None and origin != "harness":
             unlinked_reason = "non_harness_origin"
-        elif org is None or not org.strip(" \t\n\r\x0b\x0c"):
+        elif org is None or is_unicode_whitespace_only(org):
             unlinked_reason = "missing_org"
-        elif not is_valid_field(org):
+        elif not is_valid_ascii_slug(org):
             unlinked_reason = "invalid_field_characters"
-        elif endpoint_scope is None or not endpoint_scope.strip(" \t\n\r\x0b\x0c"):
+        elif endpoint_scope is None or is_unicode_whitespace_only(endpoint_scope):
             unlinked_reason = "missing_endpoint_scope"
-        elif not is_valid_field(endpoint_scope):
+        elif not is_valid_ascii_slug(endpoint_scope):
             unlinked_reason = "invalid_field_characters"
         else:
             canon, h_err = resolve_harness(
@@ -317,9 +376,9 @@ def evaluate_vector(
                 unlinked_reason = h_err
             else:
                 canonical_harness = canon
-                if native_session is None or not native_session.strip(" \t\n\r\x0b\x0c"):
+                if native_session is None or is_unicode_whitespace_only(native_session):
                     unlinked_reason = "missing_native_session"
-                elif not is_valid_field(native_session):
+                elif not is_valid_native_session(native_session):
                     unlinked_reason = "invalid_field_characters"
                 else:
                     assert canonical_harness is not None

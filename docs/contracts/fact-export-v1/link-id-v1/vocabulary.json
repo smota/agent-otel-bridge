@@ -4,7 +4,7 @@
   "spdx_license_identifier": "Apache-2.0",
   "description": "Closed canonical harness vocabulary for agent.session.link_id derivation (resolves F12 and #29).",
   "unknown_behavior": "unlinked",
-  "normalization_rule": "Trim leading and trailing ASCII whitespace, convert ASCII uppercase A-Z to lowercase a-z, then look up in aliases. Any input not present in aliases MUST resolve to unlinked.",
+  "normalization_rule": "Require ASCII-only input (0x00..=0x7F), convert ASCII uppercase A-Z to lowercase a-z without trimming whitespace, then look up in aliases. Any non-ASCII input or input not present in aliases MUST resolve to unlinked.",
   "forbidden_sources": [
     "gen_ai.provider.name",
     "gen_ai.system",
@@ -31,8 +31,7 @@
       "dendro_connector": "claude",
       "aliases": [
         "claude",
-        "claude-code",
-        "claudecode"
+        "claude-code"
       ]
     },
     {
@@ -42,8 +41,7 @@
       "aob_agent_name": "codex",
       "dendro_connector": "codex",
       "aliases": [
-        "codex",
-        "codex-cli"
+        "codex"
       ]
     },
     {
@@ -53,8 +51,7 @@
       "aob_agent_name": "grok",
       "dendro_connector": "grok",
       "aliases": [
-        "grok",
-        "grok-cli"
+        "grok"
       ]
     },
     {
@@ -64,8 +61,7 @@
       "aob_agent_name": "pi",
       "dendro_connector": "pi",
       "aliases": [
-        "pi",
-        "pi-cli"
+        "pi"
       ]
     }
   ],
@@ -74,13 +70,9 @@
     "antigravity": "antigravity",
     "claude": "claude",
     "claude-code": "claude",
-    "claudecode": "claude",
     "codex": "codex",
-    "codex-cli": "codex",
     "grok": "grok",
-    "grok-cli": "grok",
-    "pi": "pi",
-    "pi-cli": "pi"
+    "pi": "pi"
   },
   "wire_client_ids": {
     "1": "antigravity",
