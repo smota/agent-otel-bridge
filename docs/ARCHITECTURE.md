@@ -148,9 +148,9 @@ The transport layer uses a zero-copy binary wire framing protocol:
 | `agent.fully_idle` | Boolean quiescence indicator | `agy.fully_idle` |
 | `agent.termination_reason` | Completion / stop reason | `agy.termination_reason` |
 
-### Deterministic Trace & Span ID Correlation
+### Trace & Span ID Correlation
 
-- **`trace_id`**: Deterministic SHA-256 hash of `conversationId` (or `sessionId`) truncated to 16 bytes. All hook events within the same agent session automatically group into a single trace in your observability backend (Jaeger, Tempo, SigNoz, Datadog) without cross-process context propagation.
+- **`trace_id`**: resolved by [`resolve_trace_context`](../crates/agent-otel-core/src/trace_id.rs) in this order: a valid `traceparent` in the hook payload, then the inherited `TRACEPARENT`, and only then a fallback SHA-256 hash of `conversationId` (or `sessionId`) truncated to 16 bytes. When no inbound context is supplied, the events of one session share the fallback trace. When inbound context is present it wins, so events of one session can land in different traces, and hashing a session ID does not reliably recover its exported trace (see fact F6 in [BACKLOG.md](BACKLOG.md)).
 - **`span_id`**: Deterministic SHA-256 hash of `(conversationId, stepIdx, event, toolName, salt)` truncated to 8 bytes.
 
 ### Agent Quota Gauges

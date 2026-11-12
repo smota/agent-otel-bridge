@@ -59,12 +59,12 @@ Monitors input/output tokens, prompt caching efficiency, and provider quota wind
 
 ## 2. Canonical Telemetry Dictionary & Harness Support Matrix
 
-The table below details all attributes captured, enriched, and emitted by `agent-otel-bridge`, mapped across the 5 primary AI CLI harnesses:
+The table below describes bridge schema mappings for the five [built-in harness identities](../crates/agent-otel-core/src/model.rs#L142-L205), not verified native field availability for every harness version. Optional payload fields are emitted only when supplied or resolved by the bridge ([span builder](../crates/agent-otel-core/src/otlp.rs#L275-L480)). AOB emits `claude-code`; downstream dendro uses `claude` ([F12](BACKLOG.md#verified-aob-facts)). These names must not be assumed identical for joins.
 
 | Taxonomy Dimension | Canonical OTel Attribute / Metric | OTel Signal | Type | Antigravity | Claude Code | OpenAI Codex | xAI Grok | Pi (pi.dev) | Source & Description |
 |---|---|---|---|:---:|:---:|:---:|:---:|:---:|---|
-| **Identity & Session** | `gen_ai.conversation.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Conversation / session identifier. Deterministic trace correlation ID. |
-| **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email from the payload or `$USER_EMAIL`. Git config and `$GIT_AUTHOR_EMAIL` require `AGENT_OTEL_ENRICH_EMAIL`. |
+| **Identity & Session** | `gen_ai.conversation.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Conversation / session identifier when supplied. The fallback trace ID is an unkeyed SHA-256 derivation; valid inbound trace context wins, so a session-to-trace hash join is unreliable ([F6](BACKLOG.md#verified-aob-facts)). |
+| **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email from the payload or `$USER_EMAIL`, which is eligible for every harness even when enrichment is off. Git config and `$GIT_AUTHOR_EMAIL` require `AGENT_OTEL_ENRICH_EMAIL`. See [§5.1.1 privacy behaviour](#511-current-path-email-and-error-export-behaviour). |
 | **Identity & Session** | `terminal.type` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Terminal emulator (e.g. `windows-terminal`, `xterm-256color`, `vscode`). Enriched from env. |
 | **Identity & Session** | `service.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Standard OTel service name (`agent-otel-bridge` or custom via `OTEL_SERVICE_NAME`). |
 | **Identity & Session** | `host.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Hostname of the developer workstation. Enriched automatically from OS. |
@@ -78,7 +78,7 @@ The table below details all attributes captured, enriched, and emitted by `agent
 | **Turn Outcomes** | `gen_ai.response.finish_reasons` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Harness termination string when present (same value as `agent.termination_reason`). Not mapped to the GenAI finish-reason enum, and not emitted as a string array. |
 | **Turn Outcomes** | `agent.decision` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | *Optional* | *Optional* | Policy/Human-in-the-loop decision: `allow`, `deny`, `ask`. |
 | **Turn Outcomes** | `agent.success` | Span Attr | `bool` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Boolean turn success derived from span status and exit codes. |
-| **Tool Invocations** | `gen_ai.operation.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | `execute_tool`, `invoke_agent`, or `chat`. |
+| **Tool Invocations** | `gen_ai.operation.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | `execute_tool`, `invoke_agent`, `agent.stop`, or `agent.unknown` ([operation mapping](../crates/agent-otel-core/src/otlp.rs#L305-L330)). |
 | **Tool Invocations** | `gen_ai.tool.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Specific tool name (`run_command`, `Bash`, `view_file`, `grep_search`, etc.). |
 | **Tool Invocations** | `gen_ai.tool.call.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | *Optional* | Unique call ID associated with the specific tool execution. |
 | **Tool Invocations** | `durationNano` / `duration_ms` | Span Field | `int64` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Observed interval between paired hook deliveries, not a harness CPU timer. See §5.6. Unpaired spans still have equal start and end. |
@@ -91,7 +91,7 @@ The table below details all attributes captured, enriched, and emitted by `agent
 | **Economics & Quota** | `agent.quota.seconds_to_reset` | Metric Gauge | `double` | **Yes** | *Optional* | *Optional* | *Optional* | *Optional* | Countdown time (in seconds) until the quota reset window. |
 
 > **Key to Matrix**:
-> - **Yes**: Provided directly by the harness hook protocol and mapped into the span/metric.
+> - **Yes**: Representable in the bridge schema; this does not prove the native harness supplies it. Resource attributes are resolved by the bridge, and quota metrics use [installed-provider detection](../crates/agent-otel-daemon/src/platforms/mod.rs#L21-L49).
 > - *Enriched*: Automatically detected and populated by `agent-otel-bridge` from workstation environment if omitted by harness.
 > - *Wrapper*: Antigravity does not emit per-turn token counts in its hook payload (it meters quota via rolling weekly buckets). Token counts can be supplied by an optional API wrapper or transcript watcher.
 > - *Optional*: Emitted if the harness version supports that field.
@@ -100,30 +100,30 @@ The table below details all attributes captured, enriched, and emitted by `agent
 
 ## 3. Comparative Evaluation: OpenAI Codex Dashboard vs `agent-otel-bridge`
 
-The OpenAI Codex dashboard (`codex-dashboard.json`) in SigNoz is recognized as one of the most comprehensive agent monitoring dashboards. Below is an item-by-item audit verifying how `agent-otel-bridge` covers every single variable and panel:
+The OpenAI Codex dashboard (`codex-dashboard.json`) in SigNoz is recognized as one of the most comprehensive agent monitoring dashboards. Below is a query-to-schema mapping, not a native capture audit. “Conditional” means a query can use the named bridge fields when present; it does not certify that each harness supplies those fields. “Unmeasured” marks panels whose requested duration semantics are not measured by the bridge. Emission is conditional in the [span builder](../crates/agent-otel-core/src/otlp.rs#L275-L480):
 
 | # | Codex Dashboard Panel | Codex Underlying Attribute | `agent-otel-bridge` Canonical Attribute | Coverage Status | Architectural Notes |
 |---|---|---|---|:---:|---|
-| 1 | **Conversations** | `count_distinct(conversation.id)` | `count_distinct(gen_ai.conversation.id)` | **Full Coverage** | OpenTelemetry GenAI standard convention. |
-| 2 | **Conversations Over Time** | `conversation.id` over time | `gen_ai.conversation.id` over time | **Full Coverage** | Time series aggregation over `agent.stop` or `agent.hook.event`. |
-| 3 | **Conversation Distribution By User** | `user.email` | `user.email` | **Full Coverage** | Emitted from the payload or `$USER_EMAIL`. Git-config enrichment is off unless `AGENT_OTEL_ENRICH_EMAIL` is set. |
-| 4 | **Conversations by Terminal Type** | `terminal.type` | `terminal.type` | **Full Coverage** | Emitted from payload or enriched via `$WT_SESSION` / `$TERM_PROGRAM` / `$TERM`. |
+| 1 | **Conversations** | `count_distinct(conversation.id)` | `count_distinct(gen_ai.conversation.id)` | **Conditional** | OpenTelemetry GenAI standard convention. |
+| 2 | **Conversations Over Time** | `conversation.id` over time | `gen_ai.conversation.id` over time | **Conditional** | Time series aggregation over `agent.stop` or `agent.hook.event`. |
+| 3 | **Conversation Distribution By User** | `user.email` | `user.email` | **Conditional** | Emitted from the payload or `$USER_EMAIL`. Git-config enrichment is off unless `AGENT_OTEL_ENRICH_EMAIL` is set. |
+| 4 | **Conversations by Terminal Type** | `terminal.type` | `terminal.type` | **Conditional** | Emitted from payload or enriched via `$WT_SESSION` / `$TERM_PROGRAM` / `$TERM`. |
 | 5 | **Conversation Details** | `conversation.id`, `sum(duration_ms)`, `count_distinct(call_id)` | `gen_ai.conversation.id`, `sum(durationNano)`, `count_distinct(gen_ai.tool.call.id)` | **Unmeasured** | Paired duration is the daemon's observed interval between hook deliveries, not harness CPU time. See §5.6. |
-| 6 | **Tool Call Distribution** | `tool_name` | `gen_ai.tool.name` | **Full Coverage** | Captured for all tools across all 5 harnesses. |
-| 7 | **Model Calls** | `count_distinct(call_id)` | `count_distinct(gen_ai.tool.call.id)` or span count | **Full Coverage** | Corresponds to `PostInvocation` or tool execution spans. |
-| 8 | **Model Call Distribution** | `model` | `gen_ai.request.model` | **Full Coverage** | Grouped by canonical model identifier. |
-| 9 | **Input Tokens** | `sum(input_token_count)` | `sum(gen_ai.usage.input_tokens)` | **Full Coverage** | Fully supported in schema; provided directly by Codex and Claude Code. |
-| 10 | **Output Tokens** | `sum(output_token_count)` | `sum(gen_ai.usage.output_tokens)` | **Full Coverage** | Fully supported in schema; provided directly by Codex and Claude Code. |
-| 11 | **Cached Tokens** | `sum(cached_token_count)` | `sum(gen_ai.usage.cache_read_tokens)` | **Full Coverage** | Fully supported in schema; provided directly by Codex and Claude Code. |
-| 12 | **Cache Utilization Rate** | `(cached / input) * 100` | `(cache_read_tokens / input_tokens) * 100` | **Full Coverage** | Supported via composite query formula `(B / A) * 100`. |
-| 13 | **Token Usage Over Time** | `input + output` | `input_tokens + output_tokens` | **Full Coverage** | Composite time series formula `A + B`. |
-| 14 | **Token Distribution By Model** | `input + output` by `model` | `input_tokens + output_tokens` by `gen_ai.request.model` | **Full Coverage** | Composite query grouped by model. |
+| 6 | **Tool Call Distribution** | `tool_name` | `gen_ai.tool.name` | **Conditional** | Emitted when a tool name is present in the payload; schema support does not prove complete native harness coverage ([builder](../crates/agent-otel-core/src/otlp.rs#L287-L329)). |
+| 7 | **Model Calls** | `count_distinct(call_id)` | `count_distinct(gen_ai.tool.call.id)` or span count | **Conditional** | Corresponds to `PostInvocation` or tool execution spans. |
+| 8 | **Model Call Distribution** | `model` | `gen_ai.request.model` | **Conditional** | Grouped by canonical model identifier. |
+| 9 | **Input Tokens** | `sum(input_token_count)` | `sum(gen_ai.usage.input_tokens)` | **Conditional** | Emitted when the corresponding token count is supplied in the payload ([builder](../crates/agent-otel-core/src/otlp.rs#L400-L409)). |
+| 10 | **Output Tokens** | `sum(output_token_count)` | `sum(gen_ai.usage.output_tokens)` | **Conditional** | Emitted when the corresponding token count is supplied in the payload ([builder](../crates/agent-otel-core/src/otlp.rs#L400-L409)). |
+| 11 | **Cached Tokens** | `sum(cached_token_count)` | `sum(gen_ai.usage.cache_read_tokens)` | **Conditional** | Emitted when the corresponding token count is supplied in the payload ([builder](../crates/agent-otel-core/src/otlp.rs#L400-L409)). |
+| 12 | **Cache Utilization Rate** | `(cached / input) * 100` | `(cache_read_tokens / input_tokens) * 100` | **Conditional** | Supported via composite query formula `(B / A) * 100`. |
+| 13 | **Token Usage Over Time** | `input + output` | `input_tokens + output_tokens` | **Conditional** | Composite time series formula `A + B`. |
+| 14 | **Token Distribution By Model** | `input + output` by `model` | `input_tokens + output_tokens` by `gen_ai.request.model` | **Conditional** | Composite query grouped by model. |
 | 15 | **Request Duration (P95)** | `P95(duration_ms)` | `quantile(0.95)(durationNano)` | **Unmeasured** | Paired duration is the daemon's observed interval between hook deliveries, not harness CPU time. See §5.6. |
-| 16 | **Success Rate** | `count()` by `success` | `count()` by `agent.success` or `status.code` | **Full Coverage** | Captured directly in span status (`StatusCode::Ok` vs `StatusCode::Error`). |
-| 17 | **User Decision** | `count()` by `decision` | `count()` by `agent.decision` | **Full Coverage** | Captured from `PreToolUse` hooks (`allow`, `deny`, `ask`). |
+| 16 | **Success Rate** | `count()` by `success` | `count()` by `agent.success` or `status.code` | **Conditional** | Captured directly in span status (`StatusCode::Ok` vs `StatusCode::Error`). |
+| 17 | **User Decision** | `count()` by `decision` | `count()` by `agent.decision` | **Conditional** | Captured from `PreToolUse` hooks (`allow`, `deny`, `ask`). |
 
 ### Key Takeaways from Evaluation
-1. **100% Variable Coverage**: Every metric, dimension, and formula in the Codex dashboard is fully represented in `agent-otel-bridge` using canonical OpenTelemetry standards.
+1. **Conditional dashboard coverage**: The table maps dashboard queries to bridge fields; it does not establish complete native capture. Missing payload fields remain missing, and paired hook duration is not model request duration. See the [span builder](../crates/agent-otel-core/src/otlp.rs#L275-L480) and §5.6.
 2. **Multi-Agent Superset**: The `agent-otel-bridge` specification goes beyond the Codex dashboard by also tracking:
    - **Provider Quota Balances** (`agent.quota.remaining_fraction` & `agent.quota.seconds_to_reset`), which Codex does not track.
    - **Runaway Loop Detection** (`agent.step.index` and `PostInvocation` frequency per session).
@@ -176,7 +176,18 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 | `vcs.commit.sha` | `string` | Active commit SHA hash | `6b755a6...` |
 | `vcs.worktree.active` | `bool` | True if operating inside a secondary Git worktree | `true`, `false` |
 
-### 5.1.1 Team-safe path and email defaults
+### 5.1.1 Current path, email, and error export behaviour
+
+**The current defaults are not zero-content or privacy-safe.** [Backlog fact F5](BACKLOG.md#verified-aob-facts) records the following code evidence, pinned to the planning baseline `96f9fdb`:
+
+| Exported data | Current behaviour | Code evidence |
+|---|---|---|
+| Workspace paths | `workspace.path` and `workspace.project_root` are absolute by default. | [config.rs:36–47](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-daemon/src/config.rs#L36-L47) |
+| Operator email | An explicit `USER_EMAIL` is eligible even with `AGENT_OTEL_ENRICH_EMAIL` off; a payload email takes precedence. | [daemon.rs:296–302](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-daemon/src/daemon.rs#L296-L302), [otlp.rs:417–419](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L417-L419) |
+| Branch and repository names | Emitted in plaintext when present; changing the workspace path mode does not redact them. | [otlp.rs:459–469](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L459-L469) |
+| Error status messages | Full raw error text is exported by default. Experimental truncation limits length, not sensitive content. | [otlp.rs:579–587](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L579-L587) |
+
+[Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection with a forbidden-field sentinel audit. That protection is planned, not implemented by this documentation change. Existing controls have narrower scope:
 
 - `user.email` comes from the hook payload or `$USER_EMAIL`. `$GIT_AUTHOR_EMAIL` and git config are read only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
 - `AGENT_OTEL_WORKSPACE_PATH` controls `workspace.path` and `workspace.project_root`:
@@ -212,7 +223,7 @@ Quantifies context tax, payload overhead, and retry thrashing:
 | `capability.is_waste` | `bool` | True if invocation is classified as unproductive loop waste | `true`, `false` |
 
 ### 5.4 Cross-Agent Distributed Tracing & Lineage
-Links heterogeneous subagent sessions into a single distributed trace tree. A hook captures the source process's `TRACEPARENT` into the versioned IPC context envelope (`HookPayloadWithContext`, message type `0x04`); the legacy `HookPayload` (`0x01`) body remains unchanged. The transport carries only `TRACEPARENT`, with a local 512 UTF-8 byte limit. Missing, invalid, or oversized values are omitted without truncation. The daemon resolves context per event and does not use its own environment as a daemon-wide fallback.
+Records inbound trace context; it does not implement spawn-time parent/child linking or produce a unified multi-agent flamegraph. See [lineage limits](WHY_AGENT_OTEL_BRIDGE.md#pillar-2-cross-agent-distributed-tracing--lineage) and the [resolver](../crates/agent-otel-core/src/trace_id.rs#L144-L166). A hook captures the source process's `TRACEPARENT` into the versioned IPC context envelope (`HookPayloadWithContext`, message type `0x04`); the legacy `HookPayload` (`0x01`) body remains unchanged. The transport carries only `TRACEPARENT`, with a local 512 UTF-8 byte limit. Missing, invalid, or oversized values are omitted without truncation. The daemon resolves context per event and does not use its own environment as a daemon-wide fallback.
 
 | Attribute | Type | Description | Example Values |
 | :--- | :--- | :--- | :--- |

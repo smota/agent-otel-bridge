@@ -10,12 +10,14 @@
 
 ## 1. Supported Client Overview & Scope Architecture
 
-Every AI harness has a distinct configuration resolution model when resolving user global settings versus project workspace settings:
+Built-in coverage is Antigravity, Claude Code, Codex, Grok, and Pi ([platform registry](../crates/agent-otel-core/src/platform.rs#L155-L161), [quota providers](../crates/agent-otel-daemon/src/platforms/mod.rs#L21-L27)). Hermes below is an extension blueprint, not a shipped integration. Desktop and IDE live sessions are not certified ([validation limits](releases/v0.8.0.md#validation-limits)). AOB emits `claude-code` even though the CLI accepts `claude`; dendro uses `claude`, so downstream joins need explicit naming alignment ([F12](BACKLOG.md#verified-aob-facts)).
+
+The bridge models configuration resolution as follows:
 
 | Harness | Scope Architecture | Configuration Location (Global) | Configuration Location (Project) | Resolution Behavior |
 |---|---|---|---|---|
 | **Google Antigravity (`agy`)** | `NamespaceMerged` | `~/.gemini/config/hooks.json` | `.gemini/hooks.json` | **Namespace Merged**: Projects preserve sibling keys. Global bridge remains active unless explicitly overwritten by `"agent-otel-bridge"`. |
-| **Claude Code / Desktop** | `ProjectShadowsGlobal` | `~/.claude/settings.json` | `.claude/settings.json` | **Array Override**: If a project defines `"hooks"`, it **completely shadows** user global hooks. Requires project synchronization. |
+| **Claude Code CLI** | `ProjectShadowsGlobal` | `~/.claude/settings.json` | `.claude/settings.json` | **Array Override**: If a project defines `"hooks"`, it **completely shadows** user global hooks. Requires project synchronization. |
 | **OpenAI Codex CLI** | `GlobalOnly` | `~/.codex/hooks.json` | N/A (Global-first) | **Purely Global**: Always evaluates global hooks. Projects do not shadow telemetry. |
 | **xAI Grok CLI** | `GlobalOnly` | `~/.grok/hooks/agent-otel.json` | N/A (Dedicated) | **Isolated File**: Dedicated to the bridge. Completely global. |
 | **Pi CLI (`pi.dev`)** | `GlobalOnly` | `~/.pi/agent/extensions/agent-otel-bridge.ts` | N/A (Dedicated) | Native event extension; legacy JSON retained for compatibility. |

@@ -11,7 +11,7 @@
   <a href="https://crates.io/crates/agent-otel-bridge"><img src="https://img.shields.io/crates/v/agent-otel-bridge?style=for-the-badge&logo=rust&color=blue" alt="Crates.io"/></a>
   <a href="https://docs.rs/agent-otel-core"><img src="https://img.shields.io/docsrs/agent-otel-core?style=for-the-badge&logo=docs.rs&label=docs.rs" alt="docs.rs"/></a>
   <a href="https://github.com/smota/agent-otel-bridge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/smota/agent-otel-bridge/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI" alt="CI Status"/></a>
-  <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OpenTelemetry-OTel_GenAI_v1.28-4B5563?style=for-the-badge&logo=opentelemetry&logoColor=4B78E6" alt="OpenTelemetry"/></a>
+  <a href="AGENTS.md#32-semantic-convention-rules"><img src="https://img.shields.io/badge/Attributes-Bridge_Owned-4B5563?style=for-the-badge&logo=opentelemetry&logoColor=4B78E6" alt="Bridge-owned attributes; no certified GenAI conformance"/></a>
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OTLP-Traces_%26_Metrics-0284C7?style=for-the-badge&logo=opentelemetry&logoColor=white" alt="OTLP Standards"/></a>
   <a href="#benchmarks"><img src="https://img.shields.io/badge/Hot--Path_Latency-%3C_1ms_(~150µs_IPC)-10B981?style=for-the-badge&logo=speedtest&logoColor=white" alt="Latency SLA"/></a>
   <a href="#benchmarks"><img src="https://img.shields.io/badge/Client_Binary-145_KB-7C3AED?style=for-the-badge&logo=rust&logoColor=white" alt="Binary Size SLA"/></a>
@@ -36,6 +36,10 @@
 </p>
 
 ---
+
+The five built-in harness identities are `antigravity`, `claude-code`, `codex`, `grok`, and `pi` ([registry](crates/agent-otel-core/src/platform.rs#L155-L161), [identity mapping](crates/agent-otel-core/src/model.rs#L184-L205)). Registration and schema support do not certify every harness version or desktop/IDE session; see [integration scope](docs/CLIENTS.md#1-supported-client-overview--scope-architecture).
+
+**Current export defaults are not zero-content or privacy-safe.** Workspace paths are absolute by default; an explicit `USER_EMAIL` is eligible for export even with email enrichment off (unless a payload email takes precedence); error status messages are raw; branch and repository names are plaintext. See the [F5 code evidence and controls](docs/TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour). [Work package A1](docs/BACKLOG.md#aob-work-packages) addresses privacy projection; it is planned work, not current protection.
 
 ## The Engineering Problem: Why agent-otel-bridge?
 
@@ -129,7 +133,7 @@ flowchart TD
 ### 3. The Semantic Intelligence Layer
 * **10 Behavioral Execution Archetypes**: Automatically classifies arbitrary commands into 10 preference-agnostic behavioral archetypes (`FilterCompressor`, `StructuredParser`, `InspectorDiff`, `SearchRetrieval`, `BuildTestVerify`, `StateMutation`, `EnvPkgManager`, `VcsLifecycle`, `NetworkTransfer`, `GenericExec`) with option-aware subcommand parsing (`git -C dir commit`, `cargo +nightly test`) in **$< 5\ \mu\text{s}$**.
 * **Zero-Subprocess Context Harvesting**: Reads `.git/HEAD`, detached worktrees, and sanitized remote URLs directly from the filesystem in **$< 150\ \mu\text{s}$**. External processes like `git.exe` are **never spawned** on the telemetry path.
-* **Cross-Agent Distributed Tracing**: Propagates W3C `traceparent` environment variables (`00-{trace_id}-{span_id}-01`). Heterogeneous multi-agent chains (e.g. Antigravity $\to$ Claude Code $\to$ Codex CLI) appear as unified flamegraphs in your APM.
+* **Inbound Trace Context**: Honors W3C `TRACEPARENT` supplied by the harness, with a conversation-ID hash as fallback. Spawn-time parent/child linking is not implemented, so the bridge alone does not produce a unified multi-agent flamegraph. See [lineage limitations](docs/WHY_AGENT_OTEL_BRIDGE.md#pillar-2-cross-agent-distributed-tracing--lineage) and the [resolver](crates/agent-otel-core/src/trace_id.rs#L144-L166).
 * **Machine-Adaptive Quota Intelligence**: Detects installed harnesses (`is_installed`) and emits headroom metrics *only* for tools present on the machine, preventing phantom dashboard clutter.
 
 > 📚 **Deep Dive Guides**:
@@ -159,7 +163,7 @@ Continuously validated across Linux and Windows via `agent-otel-bench` and hardw
 
 ## OpenTelemetry Semantic Conventions
 
-Fully compliant with **CNCF OpenTelemetry GenAI & Agent Semantic Conventions (v1.28+ / v1.36)**:
+The bridge exports OTLP with **bridge-owned attributes**, including existing `gen_ai.*` names. This is **not a certified GenAI v1.28 (or other version) conformance claim**. See [semantic convention policy](AGENTS.md#32-semantic-convention-rules) and the [span builder](crates/agent-otel-core/src/otlp.rs#L276-L331):
 
 * **Spans**: `execute_tool {gen_ai.tool.name}` (`SpanKind::Internal`), `invoke_agent {gen_ai.agent.name}`, `agent.stop`.
 * **GenAI Attributes**: `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.agent.name`, `gen_ai.conversation.id`, `gen_ai.tool.name`, `gen_ai.request.model`.

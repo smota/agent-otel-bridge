@@ -23,7 +23,7 @@ graph LR
         A1["Antigravity (.gemini JSON)"]
         A2["Claude Code (.jsonl session logs)"]
         A3["Codex CLI (raw tool strings)"]
-        A4["Custom / Hermes Agents"]
+        A4["Custom Agents (extension required)"]
     end
 
     subgraph Bridge["agent-otel-bridge (Intelligence Layer)"]
@@ -48,11 +48,15 @@ graph LR
 
 ---
 
+Built-in identities are `antigravity`, `claude-code`, `codex`, `grok`, and `pi` ([registry](../crates/agent-otel-core/src/platform.rs#L155-L161), [mapping](../crates/agent-otel-core/src/model.rs#L184-L205)); Hermes is an [extension example](CLIENTS.md#6-adding-a-new-ai-agent-harness-step-by-step-blueprint-hermes). These mappings do not certify every native harness version or desktop/IDE session.
+
+**Current defaults are not zero-content or privacy-safe**: workspace paths are absolute, an explicit `USER_EMAIL` is eligible with enrichment off (payload email takes precedence), error status messages are raw, and branch and repository names are plaintext. See the [F5 source evidence](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour). [Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection; it is planned work.
+
 ## 2. Comparative Matrix: Native Telemetry vs. `agent-otel-bridge`
 
 | Capability Dimension | Native Harness Telemetry (Ad-Hoc) | `agent-otel-bridge` | Architectural Impact |
 |:---|:---|:---|:---|
-| **Multi-Agent Unification** | ❌ **Siloed**: Each tool emits incompatible formats to different locations. | ✅ **Unified**: Single OTLP collector endpoint for all agents on the workstation. | Eliminates tool-specific dashboard sprawl; unifies developer observability into a single pane of glass. |
+| **Multi-Agent Unification** | ❌ **Siloed**: Each tool emits incompatible formats to different locations. | ✅ **Unified**: Single OTLP collector endpoint for configured built-in harnesses; custom harnesses require integration ([registry](../crates/agent-otel-core/src/platform.rs#L155-L161)). | Eliminates tool-specific dashboard sprawl; unifies developer observability into a single pane of glass. |
 | **Semantic Standards** | ❌ **Proprietary**: Vendor-specific schemas, inconsistent attribute naming. | ✅ **Bridge span names**: Emits `execute_tool` and `invoke_agent` spans and its own capability, archetype, and quota attributes. Not a certified GenAI v1.28 conformance claim. | OTLP export still targets SigNoz, Datadog, and Honeycomb. Attribute names are the bridge's, not a certified GenAI profile. |
 | **Tool Intelligence & Archetypes** | ❌ **Opaque**: Tool execution is labeled as generic `bash` or `exec` with a raw string. | ✅ **Behavioral Archetypes**: Classified as `FilterCompressor`, `StructuredParser`, `InspectorDiff`, `BuildTestVerify`. | Identifies what the agent is *actually doing* (testing vs. filtering vs. diffing) without human inspection. |
 | **Tokenomics & Prompt Waste** | ❌ **Absent**: Only logs total input/output tokens per session. | ✅ **Token Waste Metrics**: Emits `agent.tool.tokens_saved`, `agent.tool.compression_ratio`, and schema bloat waste. | Reveals whether tools like `rtk` or `jq` are saving context tokens or if verbose commands are bloating LLM costs. |
@@ -89,8 +93,8 @@ In modern workflows, agents invoke other agents:
 Without `agent-otel-bridge`, this produces **three disconnected traces** with no causal relationship.  
 With `agent-otel-bridge`, inbound context is recorded; spawn-time linking is not:
 - Inbound W3C `TRACEPARENT` is honored when the harness passes it.
-- A conversation id hashes to a fallback trace id.
-- Parent/child span linking across process spawn is not implemented.
+- A conversation ID uses an unkeyed SHA-256 fallback; valid inbound context wins, so hashing a session ID cannot reliably join it to an exported trace ([F6 and resolver evidence](BACKLOG.md#verified-aob-facts)).
+- Parent/child span linking across process spawn is not implemented ([context resolver](../crates/agent-otel-core/src/trace_id.rs#L144-L166)).
 - `gen_ai.agent.depth`, `gen_ai.agent.parent_name`, and `gen_ai.agent.root_id` are project extensions on the span. They do not produce a unified collector flamegraph.
 
 ### Pillar 3: Machine-Adaptive Quota Intelligence
@@ -121,10 +125,10 @@ Observability must never degrade the user experience or crash an agent session.
 flowchart TD
     Q1{"Are you running AI CLI agents in production or team workflows?"}
     Q1 -->|No, personal toy scripts| Native["Native harness logs are sufficient"]
-    Q1 -->|Yes| Q2{"Do developers use multiple agent harnesses<br/>(Antigravity, Claude, Codex, Grok, Hermes)?"}
+    Q1 -->|Yes| Q2{"Do developers use multiple agent harnesses<br/>(Antigravity, Claude Code, Codex, Grok, Pi)?"}
     
-    Q2 -->|Yes| Adopt["Adopt agent-otel-bridge:<br/>Unifies all harnesses into a single OTLP pipeline"]
-    Q2 -->|No, single agent| Q3{"Do you need enterprise observability<br/>(SigNoz, Datadog, Grafana) with CNCF standards?"}
+    Q2 -->|Yes| Adopt["Adopt agent-otel-bridge:<br/>Routes configured built-in harnesses into one OTLP pipeline"]
+    Q2 -->|No, single agent| Q3{"Do you need enterprise observability<br/>(SigNoz, Datadog, Grafana) with OTLP export?"}
     
     Q3 -->|Yes| Adopt
     Q3 -->|No| Q4{"Do you need tokenomics, archetype intelligence,<br/>or rate-limit quota visibility?"}

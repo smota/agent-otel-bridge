@@ -39,6 +39,10 @@ All environment variables follow standard OpenTelemetry conventions with project
 | `AGENT_OTEL_ENRICH_EMAIL` | `false` | `true` or `1` also reads `$GIT_AUTHOR_EMAIL` and git config for `user.email`. Otherwise only the hook payload and `$USER_EMAIL` are used. |
 | `AGENT_OTEL_WORKSPACE_PATH` | `absolute` | `absolute` emits full paths. `relative` emits a path under the project root, or omits it. `hash` emits a stable SHA-256 hex of the absolute path. |
 
+### Exported content under current defaults
+
+Defaults are **not zero-content or privacy-safe**: absolute workspace paths, an explicit `USER_EMAIL` even with enrichment off (unless a payload email takes precedence), raw error status messages, and plaintext branch and repository names can be exported. See the [F5 code evidence](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour). Path mode changes only path fields; experimental message truncation is not redaction. [Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection and remains planned work.
+
 ### OTLP/HTTP export
 
 The daemon exports OTLP protobuf over HTTP. `Content-Type` is always `application/x-protobuf`; user headers cannot replace it. `Content-Encoding: gzip` is set only when that signal's compression is `gzip`. Retry, partial success, the 1 MiB request limit, and the 4 MiB response limit are unchanged. A disabled signal returns without opening a connection. `OTEL_SDK_DISABLED=true` reports the batch accepted with zero attempts.
