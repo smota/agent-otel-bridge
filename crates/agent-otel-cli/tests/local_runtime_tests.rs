@@ -1058,6 +1058,10 @@ fn test_sweep_leftover_temp_entries_and_reactivate_prints_ondisk_manifest() {
     )
     .unwrap();
     fs::create_dir_all(runtime_home.join(".previous.stage.9999.1.0")).unwrap();
+    fs::create_dir_all(runtime_home.join(".previous.bak.9999.1.0")).unwrap();
+    fs::create_dir_all(runtime_home.join(".0.9.0-abcdef1.stage.9999.1.0")).unwrap();
+    fs::create_dir_all(runtime_home.join(".0.9.0-abcdef1.rollback-stage.9999.1.0")).unwrap();
+    fs::write(runtime_home.join(".active.json.write.9999.1.0"), b"tmp").unwrap();
     fs::create_dir_all(runtime_home.join("bin")).unwrap();
     fs::write(
         runtime_home
@@ -1066,6 +1070,25 @@ fn test_sweep_leftover_temp_entries_and_reactivate_prints_ondisk_manifest() {
         b"old-exe",
     )
     .unwrap();
+    fs::write(
+        runtime_home
+            .join("bin")
+            .join(".agent-hook.exe.copy.9999.1.0"),
+        b"copy-exe",
+    )
+    .unwrap();
+    fs::write(
+        runtime_home
+            .join("bin")
+            .join(".agent-hook.exe.symlink.9999.1.0"),
+        b"symlink-exe",
+    )
+    .unwrap();
+
+    // Seed a valid version directory named `1.old.2` inside versions/ that MUST survive sweeps
+    let version_1_old_2 = runtime_home.join("versions").join("1.old.2");
+    fs::create_dir_all(&version_1_old_2).unwrap();
+    fs::write(version_1_old_2.join("keep.txt"), b"valid-version-dir").unwrap();
 
     // 1. Stage v1 first without activating
     let out_stage = run_bridge_cli(
@@ -1081,16 +1104,34 @@ fn test_sweep_leftover_temp_entries_and_reactivate_prints_ondisk_manifest() {
     assert!(out_stage.status.success());
     assert!(!runtime_home.join(".rollback.stage.9999.1.0").exists());
     assert!(!runtime_home.join(".previous.stage.9999.1.0").exists());
+    assert!(!runtime_home.join(".previous.bak.9999.1.0").exists());
+    assert!(!runtime_home.join(".0.9.0-abcdef1.stage.9999.1.0").exists());
+    assert!(!runtime_home
+        .join(".0.9.0-abcdef1.rollback-stage.9999.1.0")
+        .exists());
+    assert!(!runtime_home.join(".active.json.write.9999.1.0").exists());
     assert!(!runtime_home
         .join("bin")
         .join(".agent-hook.exe.old.9999.1.0")
         .exists());
+    assert!(!runtime_home
+        .join("bin")
+        .join(".agent-hook.exe.copy.9999.1.0")
+        .exists());
+    assert!(!runtime_home
+        .join("bin")
+        .join(".agent-hook.exe.symlink.9999.1.0")
+        .exists());
+    assert!(
+        version_1_old_2.join("keep.txt").is_file(),
+        "version dir versions/1.old.2 must survive temp sweep!"
+    );
 
     // Customize built_at in on-disk manifest of staged v1 to verify re-activation loads & prints it
     let staged_v1_dir = fs::read_dir(runtime_home.join("versions"))
         .unwrap()
-        .next()
-        .unwrap()
+        .filter_map(|e| e.ok())
+        .find(|e| e.file_name().to_string_lossy() != "1.old.2")
         .unwrap()
         .path();
     let mut staged_manifest: LocalVersionManifest =
@@ -1132,6 +1173,10 @@ fn test_sweep_leftover_temp_entries_and_reactivate_prints_ondisk_manifest() {
         .join("bin")
         .join(".agent-hook.exe.old.8888.1.0")
         .exists());
+    assert!(
+        version_1_old_2.join("keep.txt").is_file(),
+        "version dir versions/1.old.2 must survive activate temp sweep!"
+    );
     let stdout_act = String::from_utf8_lossy(&out_act.stdout);
     assert!(
         stdout_act.contains("1234567890"),
@@ -1220,11 +1265,75 @@ fn test_rollback_verifies_version_hashes_and_stages_suffixed_id_on_mismatch() {
     let active_after_rb: LocalVersionManifest =
         serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
             .unwrap();
+    let first_suffixed_id = active_after_rb.version_id.clone();
     assert!(
-        active_after_rb.version_id.starts_with(&format!("{v1_id}-"))
-            && active_after_rb.version_id.len() == v1_id.len() + 1 + 8,
+        first_suffixed_id.starts_with(&format!("{v1_id}-"))
+            && first_suffixed_id.len() == v1_id.len() + 1 + 8,
         "expected suffixed version_id '<v1_id>-<8hex>', got '{}'",
-        active_after_rb.version_id
+        first_suffixed_id
+    );
+
+    // Re-activate v2 so previous/ once again holds v1 (with version_id = first_suffixed_id, or reset previous/manifest.json to v1_id)
+    let out_v2_again = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v2.to_str().unwrap(),
+        ],
+    );
+    assert!(out_v2_again.status.success());
+    // Set previous/manifest.json version_id back to v1_id and tamper with versions/<first_suffixed_id>
+    // to verify rollback never deletes or modifies an existing mismatched suffixed version directory.
+    let mut prev_m: LocalVersionManifest = serde_json::from_str(
+        &fs::read_to_string(runtime_home.join("previous/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    prev_m.version_id = v1_id.clone();
+    fs::write(
+        runtime_home.join("previous/manifest.json"),
+        serde_json::to_string_pretty(&prev_m).unwrap(),
+    )
+    .unwrap();
+    let first_suffixed_dir = runtime_home.join("versions").join(&first_suffixed_id);
+    fs::write(
+        first_suffixed_dir.join(hook_name),
+        b"mismatched-existing-suffixed-hook",
+    )
+    .unwrap();
+    fs::write(
+        first_suffixed_dir.join("sentinel.txt"),
+        b"must-not-be-deleted",
+    )
+    .unwrap();
+
+    let out_rb2 = run_bridge_cli(&runtime_home, &user_home, &["local", "rollback"]);
+    assert!(
+        out_rb2.status.success(),
+        "second rollback with mismatched suffixed dir failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&out_rb2.stdout),
+        String::from_utf8_lossy(&out_rb2.stderr)
+    );
+    assert!(
+        first_suffixed_dir.join("sentinel.txt").is_file(),
+        "rollback deleted or replaced existing versions/{first_suffixed_id} directory!"
+    );
+    assert_eq!(
+        fs::read(first_suffixed_dir.join(hook_name)).unwrap(),
+        b"mismatched-existing-suffixed-hook",
+        "rollback mutated existing versions/{first_suffixed_id} binary!"
+    );
+    let active_after_rb2: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        active_after_rb2.version_id,
+        format!("{first_suffixed_id}-2"),
+        "expected fresh unused suffix '{first_suffixed_id}-2', got '{}'",
+        active_after_rb2.version_id
     );
 
     // Next: if both versions/<id> and previous/ fail hash verification, rollback must fail
@@ -1426,22 +1535,142 @@ fn test_failed_activation_reports_restore_incomplete_and_keeps_rollback_backup()
         "expected 'restore incomplete' in error output, got: {combined}"
     );
 
-    // The .rollback.stage.* backup directory must be preserved in runtime_home
-    let rollback_backups: Vec<_> = fs::read_dir(&runtime_home)
+    // The .rollback.kept.* backup directory must be preserved in runtime_home
+    // and must survive subsequent install/activate runs as well as be reported by `local status`.
+    let kept_backups: Vec<_> = fs::read_dir(&runtime_home)
         .unwrap()
         .filter_map(|e| e.ok())
         .filter(|e| {
             e.file_name()
                 .to_string_lossy()
-                .starts_with(".rollback.stage.")
+                .starts_with(".rollback.kept.")
         })
         .collect();
     assert_eq!(
-        rollback_backups.len(),
+        kept_backups.len(),
         1,
-        "expected .rollback.stage.* directory to be preserved on restore error"
+        "expected .rollback.kept.* directory to be preserved on restore error"
+    );
+    let kept_backup_path = kept_backups[0].path();
+
+    // Unblock active.json and run a subsequent install --activate; the kept backup MUST survive the sweep!
+    fs::remove_dir_all(&active_json_path).unwrap();
+    let out_subsequent = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            candidate_build.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out_subsequent.status.success(),
+        "subsequent install --activate failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&out_subsequent.stdout),
+        String::from_utf8_lossy(&out_subsequent.stderr)
+    );
+    assert!(
+        kept_backup_path.is_dir(),
+        "subsequent install/activate sweep deleted the kept rollback backup at {}!",
+        kept_backup_path.display()
+    );
+
+    let out_status = run_bridge_cli(&runtime_home, &user_home, &["local", "status"]);
+    assert!(out_status.status.success());
+    let status_stdout = String::from_utf8_lossy(&out_status.stdout);
+    assert!(
+        status_stdout.contains(".rollback.kept."),
+        "local status must report kept rollback backups, got: {status_stdout}"
     );
     let _ = hook_name;
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_runtime_lock_blocks_concurrent_runs_and_status_flags_current_mismatch() {
+    let root = create_test_dir("lock_and_status_mismatch_test");
+    let runtime_home = root.join("runtime");
+    let user_home = root.join("home");
+    let build_v1 = root.join("build_v1");
+    fs::create_dir_all(&runtime_home).unwrap();
+    fs::create_dir_all(&user_home).unwrap();
+
+    write_verified_build(&build_v1, b"lock-test-hook", b"lock-test-bridge");
+
+    // 1. Hold `.runtime.lock` and verify install fails with a stale-lock note and does not sweep
+    let lock_path = runtime_home.join(".runtime.lock");
+    fs::write(&lock_path, "pid=99999\nstarted_at=1700000000\n").unwrap();
+    let in_progress_stage = runtime_home.join(".rollback.stage.99999.1.0");
+    fs::create_dir_all(&in_progress_stage).unwrap();
+
+    let locked_out = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !locked_out.status.success(),
+        "install must fail when .runtime.lock is held"
+    );
+    let locked_combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&locked_out.stdout),
+        String::from_utf8_lossy(&locked_out.stderr)
+    );
+    assert!(
+        locked_combined.contains(".runtime.lock") && locked_combined.contains("stale"),
+        "expected lock error with stale-lock note, got: {locked_combined}"
+    );
+    assert!(
+        in_progress_stage.exists(),
+        "locked-out process swept another run's in-progress staging directory!"
+    );
+
+    // Release lock and install + activate v1; lock file must be removed on drop
+    fs::remove_file(&lock_path).unwrap();
+    let out_act = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+    );
+    assert!(out_act.status.success());
+    assert!(
+        !lock_path.exists(),
+        ".runtime.lock must be removed on drop after install/activate completes"
+    );
+
+    // 2. Point `current` at a mismatched version and verify `local status` flags the mismatch
+    let current_link = runtime_home.join("current");
+    if fs::symlink_metadata(&current_link).is_ok() {
+        let _ = fs::remove_file(&current_link).or_else(|_| fs::remove_dir(&current_link));
+    }
+    if try_make_symlink_dir(
+        &std::path::Path::new("versions").join("mismatched-version-id"),
+        &current_link,
+    ) {
+        let status_out = run_bridge_cli(&runtime_home, &user_home, &["local", "status"]);
+        assert!(status_out.status.success());
+        let status_stdout = String::from_utf8_lossy(&status_out.stdout);
+        assert!(
+            status_stdout.contains("mismatch"),
+            "local status must flag a current/active.json mismatch when current exists, got: {status_stdout}"
+        );
+    }
 
     let _ = fs::remove_dir_all(&root);
 }
