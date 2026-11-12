@@ -344,7 +344,15 @@ pub fn build_span_from_resolved(
             attributes.push(kv_string(GEN_AI_PROVIDER_NAME, provider));
         }
     } else {
-        let provider = inferred_provider.unwrap_or(GEN_AI_PROVIDER_GOOGLE);
+        let provider = inferred_provider
+            .or(input.harness_provider)
+            .or_else(|| {
+                input
+                    .agent_name
+                    .as_deref()
+                    .and_then(infer_provider_from_agent)
+            })
+            .unwrap_or(GEN_AI_PROVIDER_GOOGLE);
         attributes.push(kv_string(GEN_AI_PROVIDER_NAME, provider));
         attributes.push(kv_string(GEN_AI_SYSTEM, provider));
     }

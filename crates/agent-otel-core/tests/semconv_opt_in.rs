@@ -6,10 +6,11 @@ use agent_otel_core::otlp::{
 use agent_otel_core::semconv::{
     AGENT_LINEAGE_DEPTH, AGENT_LINEAGE_IS_ROOT, AGENT_LINEAGE_PARENT_NAME, AGENT_LINEAGE_ROOT_ID,
     AGENT_STEP_INDEX, AGENT_TERMINATION_REASON, ERROR_TYPE, GEN_AI_AGENT_DEPTH,
-    GEN_AI_AGENT_IS_ROOT, GEN_AI_AGENT_PARENT_NAME, GEN_AI_AGENT_ROOT_ID, GEN_AI_AGENT_STEP_INDEX,
-    GEN_AI_OPERATION_NAME, GEN_AI_PROVIDER_ANTHROPIC, GEN_AI_PROVIDER_GOOGLE, GEN_AI_PROVIDER_NAME,
-    GEN_AI_PROVIDER_UNKNOWN, GEN_AI_RESPONSE_FINISH_REASONS, GEN_AI_SYSTEM, OTEL_SCHEMA_1_41_0,
-    VCS_BRANCH_NAME, VCS_COMMIT_SHA, VCS_REF_HEAD_NAME, VCS_REF_HEAD_REVISION,
+    GEN_AI_AGENT_IS_ROOT, GEN_AI_AGENT_NAME, GEN_AI_AGENT_PARENT_NAME, GEN_AI_AGENT_ROOT_ID,
+    GEN_AI_AGENT_STEP_INDEX, GEN_AI_OPERATION_NAME, GEN_AI_PROVIDER_ANTHROPIC,
+    GEN_AI_PROVIDER_GOOGLE, GEN_AI_PROVIDER_NAME, GEN_AI_PROVIDER_OPENAI, GEN_AI_PROVIDER_PI,
+    GEN_AI_PROVIDER_UNKNOWN, GEN_AI_PROVIDER_XAI, GEN_AI_RESPONSE_FINISH_REASONS, GEN_AI_SYSTEM,
+    OTEL_SCHEMA_1_41_0, VCS_BRANCH_NAME, VCS_COMMIT_SHA, VCS_REF_HEAD_NAME, VCS_REF_HEAD_REVISION,
 };
 use agent_otel_core::trace_id::ResolvedTraceContext;
 use opentelemetry_proto::tonic::common::v1::any_value;
@@ -356,4 +357,106 @@ fn status_message_truncates_only_when_experimental_opt_in_is_on() {
         Some("provider_quota_exhausted")
     );
     assert_ne!(string_attr(&on, ERROR_TYPE), Some(message.as_str()));
+}
+
+#[test]
+fn g0a_claude_code_2_1_322_hook_without_model_infers_anthropic_provider() {
+    // Exact sanitized PreToolUse hook payload shape from G0a claude-2.1.322/S5/hook-sanitized.jsonl
+    // (real Claude Code 2.1.322 omits "model" on hook stdin; daemon fills agent_name from client_id=2).
+    let raw = br#"{
+        "cwd": "PATH_e79ac6f0cf8bf601",
+        "hook_event_name": "PreToolUse",
+        "permission_mode": "<str:len=17>",
+        "session_id": "CONV_820267f0fb8c34dd",
+        "tool_input": {"command": "<str:len=8>", "description": "<str:len=28>"},
+        "tool_name": "Bash",
+        "tool_use_id": "CALL_aa5a5943c17ccbb4",
+        "transcript_path": "PATH_575cc059f0f9d4a9"
+    }"#;
+    let mut input = AgentHookInput::parse_slice(raw).expect("parse G0a Claude 2.1.322 hook JSON");
+    assert!(input.model.is_none());
+    input.agent_name = Some("claude-code".to_string());
+
+    let off = build(&input, false);
+    assert_eq!(string_attr(&off, GEN_AI_AGENT_NAME), Some("claude-code"));
+    assert_eq!(
+        string_attr(&off, GEN_AI_PROVIDER_NAME),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+    assert_eq!(
+        string_attr(&off, GEN_AI_SYSTEM),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+
+    // Under experimental 1.41.0 opt-in, provider is still omitted when event model is absent.
+    let on = build(&input, true);
+    assert_eq!(string_attr(&on, GEN_AI_AGENT_NAME), Some("claude-code"));
+    assert!(!has_key(&on, GEN_AI_PROVIDER_NAME));
+    assert!(!has_key(&on, GEN_AI_SYSTEM));
+
+    // Built-in harnesses without explicit model infer their canonical default provider on the default path.
+    for (agent, expected_provider) in [
+        ("antigravity", GEN_AI_PROVIDER_GOOGLE),
+        ("claude-code", GEN_AI_PROVIDER_ANTHROPIC),
+        ("codex", GEN_AI_PROVIDER_OPENAI),
+        ("grok", GEN_AI_PROVIDER_XAI),
+        ("pi", GEN_AI_PROVIDER_PI),
+    ] {
+        let harness_only = AgentHookInput {
+            agent_name: Some(agent.to_string()),
+            ..Default::default()
+        };
+        let span = build(&harness_only, false);
+        assert_eq!(
+            string_attr(&span, GEN_AI_PROVIDER_NAME),
+            Some(expected_provider),
+            "unexpected provider for agent_name={agent}"
+        );
+        assert_eq!(
+            string_attr(&span, GEN_AI_SYSTEM),
+            Some(expected_provider),
+            "unexpected system for agent_name={agent}"
+        );
+    }
+
+    // Explicit model continues to take precedence when a harness hosts a foreign model.
+    let hosted_foreign = AgentHookInput {
+        agent_name: Some("antigravity".to_string()),
+        harness_provider: Some(GEN_AI_PROVIDER_GOOGLE),
+        model: Some("claude-3-5-sonnet".to_string()),
+        ..Default::default()
+    };
+    let hosted_span = build(&hosted_foreign, false);
+    assert_eq!(
+        string_attr(&hosted_span, GEN_AI_AGENT_NAME),
+        Some("antigravity")
+    );
+    assert_eq!(
+        string_attr(&hosted_span, GEN_AI_PROVIDER_NAME),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+    assert_eq!(
+        string_attr(&hosted_span, GEN_AI_SYSTEM),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+
+    // Header ClientKind default provider takes precedence over a subagent payload agent_name.
+    let subagent_with_header = AgentHookInput {
+        agent_name: Some("planner".to_string()),
+        harness_provider: Some(GEN_AI_PROVIDER_ANTHROPIC),
+        ..Default::default()
+    };
+    let subagent_span = build(&subagent_with_header, false);
+    assert_eq!(
+        string_attr(&subagent_span, GEN_AI_AGENT_NAME),
+        Some("planner")
+    );
+    assert_eq!(
+        string_attr(&subagent_span, GEN_AI_PROVIDER_NAME),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
+    assert_eq!(
+        string_attr(&subagent_span, GEN_AI_SYSTEM),
+        Some(GEN_AI_PROVIDER_ANTHROPIC)
+    );
 }

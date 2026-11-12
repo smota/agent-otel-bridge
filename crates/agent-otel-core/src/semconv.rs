@@ -183,6 +183,15 @@ pub fn infer_provider(model: &str) -> &'static str {
 /// `infer_provider` result for a model string that matches no known provider.
 pub const GEN_AI_PROVIDER_UNKNOWN: &str = "unknown";
 
+/// Infers the harness default provider name from a canonical or hinted agent/harness
+/// name when an event does not carry an explicit model identifier.
+///
+/// This mapping is a harness default provider (for example, `"pi"` for the Pi harness),
+/// not a verified model vendor.
+pub fn infer_provider_from_agent(agent_name: &str) -> Option<&'static str> {
+    crate::model::ClientKind::from_str_name(agent_name).default_provider()
+}
+
 /// Infers the agent name from model or client hints.
 pub fn infer_agent_name(model: Option<&str>, client_hint: Option<&str>) -> &'static str {
     if let Some(hint) = client_hint {

@@ -121,10 +121,10 @@ pub(crate) fn production_transform_with_workspace(
             event = HookEvent::from_str_name(name);
         }
     }
+    let client_kind = ClientKind::from_wire(header.client_id);
+    input.harness_provider = client_kind.default_provider();
     if input.agent_name.is_none() {
-        input.agent_name = ClientKind::from_wire(header.client_id)
-            .as_str()
-            .map(str::to_owned);
+        input.agent_name = client_kind.as_str().map(str::to_owned);
     }
     input.execution_mode.get_or_insert(mode);
 
@@ -412,5 +412,79 @@ mod tests {
             string_attr(&absolute.span, "workspace.project_root"),
             Some("/work/repo")
         );
+    }
+
+    #[test]
+    fn production_transform_g0a_claude_2_1_322_wire_frame_attributes_anthropic_provider() {
+        let contexts = ContextCache::new();
+        // client_id = 2 (ClientKind::ClaudeCode), event_id = 3 (HookEvent::PreToolUse)
+        let header = WireHeader::new(2, HookEvent::PreToolUse.to_wire());
+        let json = br#"{"cwd":"PATH_e79ac6f0cf8bf601","hook_event_name":"PreToolUse","permission_mode":"<str:len=17>","session_id":"CONV_820267f0fb8c34dd","tool_input":{"command":"<str:len=8>","description":"<str:len=28>"},"tool_name":"Bash","tool_use_id":"CALL_aa5a5943c17ccbb4","transcript_path":"PATH_575cc059f0f9d4a9"}"#;
+        let frame = encode_context_payload(header, None, json);
+        let outcome = production_transform(
+            MsgType::HookPayloadWithContext,
+            &frame,
+            &contexts,
+            1,
+            ExecutionMode::Interactive,
+            false,
+            false,
+            ResolvedSpanMetadata::default(),
+            Instant::now(),
+            1,
+        )
+        .expect("transform G0a Claude 2.1.322 frame");
+
+        assert_eq!(
+            string_attr(&outcome.span, "gen_ai.agent.name"),
+            Some("claude-code")
+        );
+        assert_eq!(
+            string_attr(&outcome.span, "gen_ai.provider.name"),
+            Some("anthropic")
+        );
+        assert_eq!(
+            string_attr(&outcome.span, "gen_ai.system"),
+            Some("anthropic")
+        );
+        assert_eq!(string_attr(&outcome.span, "gen_ai.request.model"), None);
+    }
+
+    #[test]
+    fn production_transform_header_client_kind_attributes_provider_when_payload_sets_subagent_name()
+    {
+        let contexts = ContextCache::new();
+        // client_id = 2 (ClientKind::ClaudeCode), payload supplies subagent agent_name = "planner" and no model
+        let header = WireHeader::new(2, HookEvent::PreToolUse.to_wire());
+        let json = br#"{"agent_name":"planner","hook_event_name":"PreToolUse","session_id":"CONV_subagent","tool_name":"Bash"}"#;
+        let frame = encode_context_payload(header, None, json);
+        let outcome = production_transform(
+            MsgType::HookPayloadWithContext,
+            &frame,
+            &contexts,
+            1,
+            ExecutionMode::Interactive,
+            false,
+            false,
+            ResolvedSpanMetadata::default(),
+            Instant::now(),
+            1,
+        )
+        .expect("transform subagent frame with client_id=2");
+
+        assert_eq!(
+            string_attr(&outcome.span, "gen_ai.agent.name"),
+            Some("planner")
+        );
+        assert_eq!(outcome.meta.agent_name.as_deref(), Some("planner"));
+        assert_eq!(
+            string_attr(&outcome.span, "gen_ai.provider.name"),
+            Some("anthropic")
+        );
+        assert_eq!(
+            string_attr(&outcome.span, "gen_ai.system"),
+            Some("anthropic")
+        );
+        assert_eq!(string_attr(&outcome.span, "gen_ai.request.model"), None);
     }
 }
