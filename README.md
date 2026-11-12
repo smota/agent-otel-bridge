@@ -211,17 +211,18 @@ cargo build --release --workspace
 
 ### 2. Deploy to Isolated Local Runtime (`local install`)
 
-Deploy the compiled binaries into your operating system's isolated canonical runtime path:
+Stage the compiled binaries in your operating system's isolated canonical runtime path, and pass `--activate` to promote them to `current` and `bin/`:
 
 ```bash
-# On Linux / macOS (installs to ~/.local/share/agent-otel-bridge/bin)
-agent-otel-bridge local install
+# Stage only (leaves current, bin/, active.json, previous/, hooks, and daemon untouched):
+agent-otel-bridge local install --from-build target/release
 
-# On Windows (installs to %LOCALAPPDATA%\agent-otel-bridge\bin)
-agent-otel-bridge local install
+# Stage and atomically activate into ~/.local/share/agent-otel-bridge/bin (Linux/macOS)
+# or %LOCALAPPDATA%\agent-otel-bridge\bin (Windows):
+agent-otel-bridge local install --activate --from-build target/release
 ```
 
-`local install` stages versioned builds and computes SHA-256 integrity hashes. It does not edit harness configuration.
+`local install` stages versioned builds in immutable `versions/<version_id>/` directories and computes SHA-256 integrity hashes. Activation requires `--activate` and replaces `current` / `bin/` pointers atomically without writing through symlinks or editing harness configuration.
 
 ### 3. Enable one application (`local enable`)
 

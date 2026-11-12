@@ -110,7 +110,7 @@ enum LocalAction {
     /// Builds and installs candidate build into isolated local runtime
     Install {
         /// If set, activates this build as the current running version in bin/
-        #[arg(long, default_value_t = true)]
+        #[arg(long, default_value_t = false)]
         activate: bool,
 
         /// If set, updates agent lifecycle hooks to point to canonical bin/

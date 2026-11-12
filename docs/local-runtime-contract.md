@@ -29,8 +29,8 @@ Any failure, unhandled crash, or unresolved path directly degrades or breaks the
    startup overhead outside the native client's execution budget. Other CMD
    consumers can use `call "<absolute path>" <event>` when they preserve quoting.
 4. **Preservation of Third-Party Tools**: Installing or updating bridge hooks MUST NEVER erase, duplicate, or alter third-party hooks (such as `herdr`, `rtk`, custom scripts). Bridge hook registrations are updated in-place by matching the executable name (`agent-hook.exe`).
-5. **Atomic Deployment & Instant Rollback**: Active binaries MUST be staged in immutable version directories and copied to the canonical runtime path. Locked Windows binaries must be replaced using atomic rename-on-replace semantics. A full backup of the previous runtime is preserved for single-command rollback.
-6. **Strict Separation of Candidate vs Active Testing**: `cargo test` and local development builds MUST NEVER modify or lock the host's active installation in `%LOCALAPPDATA%`. Verification of candidate builds occurs strictly within `target/`, and promotion to active is a deliberate action via `agent-otel-bridge local install`.
+5. **Atomic Deployment & Instant Rollback**: Active binaries MUST be staged in immutable version directories (`versions/<version_id>/`) and promoted via atomic pointer replacement (`current` and `bin/`) without writing through existing symlinks or modifying staged version artifacts. Locked Windows binaries must be replaced using atomic rename-on-replace semantics. A full backup of the previous runtime is committed to `previous/` only when activation succeeds; failed activations roll back pointer updates and leave no partial `previous/` copies.
+6. **Strict Separation of Candidate vs Active Testing**: `cargo test` and local development builds MUST NEVER modify or lock the host's active installation in `%LOCALAPPDATA%`. Verification of candidate builds occurs strictly within `target/`, staging via `agent-otel-bridge local install` leaves active state untouched (`--activate` defaults to `false`), and promotion to active is an explicit action via `agent-otel-bridge local install --activate`.
 
 ---
 
@@ -40,9 +40,10 @@ All local runtime state resides under the user's Local AppData directory:
 
 ```
 %LOCALAPPDATA%\agent-otel-bridge\
-├── bin/                          # Canonical active executables (hot path)
+├── bin/                          # Canonical active executables / symlinks (hot path)
 │   ├── agent-hook.exe            # Ultra-lean hook client (< 300 KB)
 │   └── agent-otel-bridge.exe     # Unified daemon and CLI binary
+├── current -> versions/<id>      # Atomic symlink pointer to the active staged version
 ├── versions/                     # Immutable staged versions
 │   └── <version_id>/             # e.g., "0.4.0-3019074-dirty"
 │       ├── agent-hook.exe
@@ -86,7 +87,7 @@ All local runtime state resides under the user's Local AppData directory:
 
 ## 3. Supported Client Integration Matrix
 
-`agent-otel-bridge local install` publishes the canonical binaries only. It does not rewrite harness configuration. `update_hooks` defaults to false for both `local install` and `local rollback`. Pass `--update-hooks true` only to opt into the legacy JSON installer.
+`agent-otel-bridge local install` stages candidate binaries into `versions/<version_id>/` by default (`--activate` defaults to `false`) and promotes them to the canonical active runtime only when `--activate` is passed. It does not rewrite harness configuration. `update_hooks` defaults to false for both `local install` and `local rollback`. Pass `--update-hooks` only to opt into the legacy JSON installer.
 
 Enable and disable one application at a time:
 
@@ -137,29 +138,35 @@ Inspect the active installation, manifest, running daemon status, and candidate 
 agent-otel-bridge local status
 ```
 
-### 2. Build & Stage a New Local Release
-Compile optimized release binaries and atomically activate them in `%LOCALAPPDATA%\agent-otel-bridge`:
+### 2. Build, Stage, & Activate a New Local Release
+Stage optimized release binaries in `versions/<version_id>/`, and pass `--activate` to atomically activate them in `%LOCALAPPDATA%\agent-otel-bridge`:
 ```powershell
-# Automatically compiles release candidate and installs
+# Compiles release candidate and stages only (leaves current, bin/, active.json, previous/, hooks, and daemon untouched):
 agent-otel-bridge local install
 
-# Or install from pre-built directory:
+# Stage from a pre-built directory without activating:
 agent-otel-bridge local install --from-build target\release
+
+# Explicitly stage and atomically activate as the current runtime:
+agent-otel-bridge local install --activate --from-build target\release
 ```
-During installation, the command:
+During staging (`local install` without `--activate`), the command:
 1. Verifies executable sizes and computes SHA-256 hashes.
-2. Stages files into `versions/<version_id>/`.
-3. Backs up the current active version into `previous/`.
-4. Atomically replaces executables in `bin/` (handling Windows file locks via temporary rename).
-5. Does not rewrite harness configuration. Enable each application with `agent-otel-bridge local enable --app <client>`.
-6. Writes updated `active.json`.
+2. Atomically stages files and `manifest.json` into immutable `versions/<version_id>/`.
+3. Leaves `current`, `bin/`, `active.json`, `previous/`, hooks, and running daemons untouched.
+
+When `--activate` is specified, activation additionally:
+1. Stages the prior active version into a temporary backup before mutating canonical pointers, committing `previous/` only after activation succeeds (and rolling back pointers while removing partial backups on failure).
+2. Atomically updates `current -> versions/<version_id>` and `bin/` pointers (or executables via temporary sibling file + rename when symlinks are unavailable), never writing through existing symlinks or modifying `versions/`.
+3. Does not rewrite harness configuration. Enable each application with `agent-otel-bridge local enable --app <client>`.
+4. Atomically writes updated `active.json`.
 
 ### 3. Immediate Rollback
 If a regression or issue is detected in the active runtime:
 ```powershell
 agent-otel-bridge local rollback
 ```
-This restores the executables and manifest from `previous/`. It does not rewrite harness configuration unless `--update-hooks true` is passed, which runs the legacy JSON installer.
+This restores the active pointers and `active.json` to the version recorded in `previous/`. It does not rewrite harness configuration unless `--update-hooks` is passed, which runs the legacy JSON installer.
 
 ### 4. Station Diagnostics
 Verify all IPC pipes, binary paths, and hook registrations:
@@ -191,6 +198,7 @@ Follow this strict cycle:
                                       ↓
 [3. Local Stage & Activate] --> cargo build --release
                             --> target\release\agent-otel-bridge.exe local install --from-build target\release
+                            --> target\release\agent-otel-bridge.exe local install --activate --from-build target\release
                                       ↓
 [4. Active Verification]    --> agent-otel-bridge local status
                             --> agent-otel-bridge doctor
