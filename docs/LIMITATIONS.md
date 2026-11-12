@@ -82,8 +82,8 @@ If an AI agent engages in a purely conversational turn without invoking any tool
    The bridge supports 5 canonical lifecycle events: `PreInvocation`, `PostInvocation`, `PreToolUse`, `PostToolUse`, and `Stop`.
 2. **Stop Event Session Harvester**:
    When the agent turn terminates (`Stop`), `agent-otel-daemon` performs a non-blocking context harvest, capturing VCS changes produced during the session (`git_lines_added`, `git_lines_deleted`, `git_files_changed`, `git_self_revert`).
-3. **Synthetic Duration Fallback**:
-   When a harness does not emit explicit microsecond start/end timestamps, the daemon applies a calibrated minimum synthetic duration (~1ms) so spans remain visible and properly proportioned in waterfall flamegraphs.
+3. **Observed Pairing Duration**:
+   Paired spans measure the interval between hook deliveries; unpaired spans have equal start and end. There is no synthetic ~1ms fallback ([assembler](../crates/agent-otel-daemon/src/span_assembler.rs#L211-L227)). Pairing currently uses a bare tool-call ID when present, so different sessions can collide; open spans are not drained at shutdown ([F8](BACKLOG.md#verified-aob-facts)). [Work package A3](BACKLOG.md#aob-work-packages) addresses qualified pairing, expiry, and shutdown drain.
 
 ---
 
@@ -94,7 +94,7 @@ AI model providers do not provide a standardized local mechanism to query remain
 - **Anthropic (Claude Code)**: Writes remaining tokens and rejection states into local session files (`.claude/projects/*/*.jsonl`).
 - **OpenAI, Google, xAI**: Do not write live quota consumption to local project files unless the developer configures dedicated state files (`~/.state/quota.json`).
 
-Furthermore, `agent-otel-bridge` operates **strictly in-memory** by default and intentionally avoids writing state files to disk.
+Telemetry buffering is **in-memory**, with no durable event spool or replay guarantee. This does not mean zero disk access: the quota sources below and context harvesting read local files, while installation writes runtime and hook configuration. The spool remains deferred ([scope decisions](BACKLOG.md#deferred-aob-issues); [F7](BACKLOG.md#verified-aob-facts)). In-memory buffering also does not imply private export; see §2.7.
 
 #### How We Address It
 1. **3-Tier Adaptive Quota Engine**:
@@ -147,6 +147,12 @@ Calculating exact token savings (`tool.tokens_saved_estimate`) and command compr
    Maintains native Overlapped Win32 routines on Windows and non-blocking Unix Domain Sockets on Linux/macOS.
 2. **Environment Path Override (`AGENT_OTEL_PIPE`)**:
    Enables operators in containerized or custom environments to define custom pipe/socket paths explicitly.
+
+---
+
+### 2.7 Exported Content and Identity
+
+Current defaults are **not zero-content or privacy-safe**: workspace paths are absolute, an explicit `USER_EMAIL` is eligible even when enrichment is off (payload email takes precedence), error status messages contain raw text, and branch and repository names remain plaintext. The [F5 evidence table](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour) links the exact source lines. Path modes and experimental error truncation do not redact all these fields. [Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection; it is planned work.
 
 ---
 

@@ -134,15 +134,15 @@ This table synthesizes all telemetry concepts across the 7 dashboards, groups eq
 
 ## 4. Gap Analysis: What We Cover vs What We Do Not Cover
 
-### 4.1 What `agent-otel-bridge` Fully Covers (100% Native or Canonical)
-1. **Interactive Sessions**: Captured deterministically across all harnesses via `gen_ai.conversation.id`.
-2. **Agent Reasoning Loops & Anti-Recursion**: Captured via `agent.hook.event` (`PostInvocation`) and `agent.step.index`.
-3. **Tool Invocations & Latency**: Captured with nanosecond precision via OTel spans (`gen_ai.tool.name`, `durationNano`).
-4. **Model Attribution**: Captured via `gen_ai.request.model` and `gen_ai.provider.name`.
-5. **Token Usage (Input / Output / Cached)**: Fully represented in the bridge schema (`gen_ai.usage.*`). Provided natively by Codex and Claude Code hooks; supported for all agents via hook payload.
-6. **User & Terminal Attribution**: Captured via `user.email` and `terminal.type`, with automatic environment fallback (`$USER_EMAIL`, `$GIT_AUTHOR_EMAIL`, `$WT_SESSION`, `$TERM_PROGRAM`).
-7. **Turn Outcomes & Quiescence**: Captured via `agent.termination_reason`, `agent.decision`, and `agent.success`.
-8. **Provider Quotas & Burn-down Rates**: Emitted as OTel metric gauges (`agent.quota.remaining_fraction`, `agent.quota.seconds_to_reset`). **This is an exclusive capability of `agent-otel-bridge` not present in any other CLI harness.**
+### 4.1 Conditional Dashboard Coverage
+1. **Interactive Sessions**: `gen_ai.conversation.id` is emitted when a conversation ID is supplied in the payload; complete capture across harnesses is not established.
+2. **Agent Reasoning Loops & Anti-Recursion**: `agent.hook.event` records received lifecycle events (including `PostInvocation`); `agent.step.index` is emitted when supplied.
+3. **Tool Invocations & Latency**: `gen_ai.tool.name` is emitted when supplied. Paired span duration is the daemon's observed interval between hook deliveries; nanosecond timestamp units do not establish measurement precision. Unpaired spans have zero duration. See [duration limits](TELEMETRY_DICTIONARY.md#56-bridge-pipeline-diagnostics).
+4. **Model Attribution**: `gen_ai.request.model` is emitted when supplied; `gen_ai.provider.name` is explicit or inferred by the bridge.
+5. **Token Usage (Input / Output / Cached)**: `gen_ai.usage.*` counts are emitted only when supplied in the payload. Schema support does not establish complete native capture by Codex, Claude Code, or other harnesses.
+6. **User & Terminal Attribution**: `user.email` and `terminal.type` use payload or environment values when available. `$USER_EMAIL` is eligible for every harness; `$GIT_AUTHOR_EMAIL` and git config require opt-in enrichment. See [current privacy behaviour](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour).
+7. **Turn Outcomes & Quiescence**: `agent.termination_reason`, `agent.decision`, and `agent.success` are emitted when supplied in the payload.
+8. **Provider Quotas & Burn-down Rates**: Installed-provider discovery and available quota data determine emission of metric gauges (`agent.quota.remaining_fraction`, `agent.quota.seconds_to_reset`).
 
 ---
 
@@ -296,15 +296,15 @@ This table synthesizes all telemetry concepts across the 7 dashboards, groups eq
 
 ## 4. Gap Analysis: What We Cover vs What We Do Not Cover
 
-### 4.1 What `agent-otel-bridge` Fully Covers (100% Native or Canonical)
-1. **Interactive Sessions**: Captured deterministically across all harnesses via `gen_ai.conversation.id`.
-2. **Agent Reasoning Loops & Anti-Recursion**: Captured via `agent.hook.event` (`PostInvocation`) and `agent.step.index`.
-3. **Tool Invocations & Latency**: Captured with nanosecond precision via OTel spans (`gen_ai.tool.name`, `durationNano`).
-4. **Model Attribution**: Captured via `gen_ai.request.model` and `gen_ai.provider.name`.
-5. **Token Usage (Input / Output / Cached)**: Fully represented in the bridge schema (`gen_ai.usage.*`). Provided natively by Codex and Claude Code hooks; supported for all agents via hook payload.
-6. **User & Terminal Attribution**: Captured via `user.email` and `terminal.type`, with automatic environment fallback (`$USER_EMAIL`, `$GIT_AUTHOR_EMAIL`, `$WT_SESSION`, `$TERM_PROGRAM`).
-7. **Turn Outcomes & Quiescence**: Captured via `agent.termination_reason`, `agent.decision`, and `agent.success`.
-8. **Provider Quotas & Burn-down Rates**: Emitted as OTel metric gauges (`agent.quota.remaining_fraction`, `agent.quota.seconds_to_reset`). **This is an exclusive capability of `agent-otel-bridge` not present in any other CLI harness.**
+### 4.1 Conditional Dashboard Coverage
+1. **Interactive Sessions**: `gen_ai.conversation.id` is emitted when a conversation ID is supplied in the payload; complete capture across harnesses is not established.
+2. **Agent Reasoning Loops & Anti-Recursion**: `agent.hook.event` records received lifecycle events (including `PostInvocation`); `agent.step.index` is emitted when supplied.
+3. **Tool Invocations & Latency**: `gen_ai.tool.name` is emitted when supplied. Paired span duration is the daemon's observed interval between hook deliveries; nanosecond timestamp units do not establish measurement precision. Unpaired spans have zero duration. See [duration limits](TELEMETRY_DICTIONARY.md#56-bridge-pipeline-diagnostics).
+4. **Model Attribution**: `gen_ai.request.model` is emitted when supplied; `gen_ai.provider.name` is explicit or inferred by the bridge.
+5. **Token Usage (Input / Output / Cached)**: `gen_ai.usage.*` counts are emitted only when supplied in the payload. Schema support does not establish complete native capture by Codex, Claude Code, or other harnesses.
+6. **User & Terminal Attribution**: `user.email` and `terminal.type` use payload or environment values when available. `$USER_EMAIL` is eligible for every harness; `$GIT_AUTHOR_EMAIL` and git config require opt-in enrichment. See [current privacy behaviour](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour).
+7. **Turn Outcomes & Quiescence**: `agent.termination_reason`, `agent.decision`, and `agent.success` are emitted when supplied in the payload.
+8. **Provider Quotas & Burn-down Rates**: Installed-provider discovery and available quota data determine emission of metric gauges (`agent.quota.remaining_fraction`, `agent.quota.seconds_to_reset`).
 
 ---
 
@@ -325,7 +325,7 @@ To unify all 7 dashboards into a single universal operator experience:
 1. **Standardize on the Universal Dashboard**:
    The newly published dashboard `ai-agent-observability.json` already merges the essential telemetry from all 7 dashboards (Sessions, Loops, Quotas, Tools, Models, Outcomes, and Latencies).
 2. **Phase 2 Expansion (Optional Git & Cost Enrichment)**:
-   Adding an opt-in Git statistics collector (`git diff --shortstat` on `Stop`) and a model cost calculator will achieve **100% parity with Claude Code Metrics**.
+   Adding an opt-in Git statistics collector (`git diff --shortstat` on `Stop`) and a model cost calculator could address those two gaps; parity with Claude Code Metrics would still require validation of the remaining metrics and native harness coverage.
 
 ---
 
