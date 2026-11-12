@@ -408,7 +408,7 @@ pub fn resolve_canonical_hook_binary(
     }
 
     Err(
-        "Could not find an installed 'agent-hook' binary.\nRun 'agent-otel-bridge local install' to build and activate the local runtime, or specify --binary <path>."
+        "Could not find an installed 'agent-hook' binary.\nRun 'agent-otel-bridge local install --activate' to build, stage, and activate the local runtime, or specify --binary <path>."
             .into(),
     )
 }

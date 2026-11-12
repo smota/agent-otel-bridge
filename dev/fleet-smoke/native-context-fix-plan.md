@@ -88,7 +88,7 @@ Referência normativa: [W3C Trace Context, formato e processamento](https://www.
 
 Não enviar duplicado em formato antigo para tentar compatibilidade: produziria eventos extras e associação ambígua. Atualizar receptor primeiro e emissor depois; verificar capacidade do receptor fora do hot path antes da promoção. Trocar arquivos não substitui um daemon já em execução: o procedimento deve parar/reiniciar e confirmar o binário/processo efetivo. Rollback reverte o par e reinicia o receptor correspondente. Registrar a mudança intencional de fallback em notas de compatibilidade.
 
-Primeira validação exclusivamente com binários candidatos em target, pipe privado e coletor de teste. A instalação ativa e hooks de terceiros permanecem intactos. Promoção posterior via `local install`, com hashes, capacidade de protocolo, rollback e autorização de ativação; nunca substituir hooks por caminhos de target.
+Primeira validação exclusivamente com binários candidatos em target, pipe privado e coletor de teste. A instalação ativa e hooks de terceiros permanecem intactos. Stage posterior via `local install` e promoção para ativo via `local install --activate`, com hashes, capacidade de protocolo, rollback e autorização de ativação; nunca substituir hooks por caminhos de target.
 
 ## Pacotes de trabalho e modelos
 

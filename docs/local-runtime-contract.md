@@ -29,23 +29,28 @@ Any failure, unhandled crash, or unresolved path directly degrades or breaks the
    startup overhead outside the native client's execution budget. Other CMD
    consumers can use `call "<absolute path>" <event>` when they preserve quoting.
 4. **Preservation of Third-Party Tools**: Installing or updating bridge hooks MUST NEVER erase, duplicate, or alter third-party hooks (such as `herdr`, `rtk`, custom scripts). Bridge hook registrations are updated in-place by matching the executable name (`agent-hook.exe`).
-5. **Atomic Deployment & Instant Rollback**: Active binaries MUST be staged in immutable version directories (`versions/<version_id>/`) and promoted via atomic pointer replacement (`current` and `bin/`) without writing through existing symlinks or modifying staged version artifacts. Locked Windows binaries must be replaced using atomic rename-on-replace semantics. A full backup of the previous runtime is committed to `previous/` only when activation succeeds; failed activations roll back pointer updates and leave no partial `previous/` copies.
+5. **Deployment Atomicity, Symlink Layout & Instant Rollback**: Active binaries MUST be staged in immutable version directories (`versions/<version_id>/`), re-verified by SHA-256 before final directory promotion, and activated without writing through existing symlinks or mutating staged version artifacts:
+   - **Symlink Mode (POSIX, and Windows with Developer Mode or `SeCreateSymbolicLinkPrivilege`)**: `bin/agent-hook(.exe)` and `bin/agent-otel-bridge(.exe)` are file symlinks pointing directly to `../versions/<version_id>/<binary>` (replacing the earlier copy-based `bin/` layout and avoiding indirection through `current`). Replacing each file symlink stages a temporary sibling file symlink and renames it over the destination (`rename(2)` on Unix; `MoveFileExW(..., MOVEFILE_REPLACE_EXISTING)` on Windows). Because the file symlink reparse point is replaced rather than overwriting the mapped target executable in `versions/<old_id>/`, each `bin/*` switch is atomic with zero missing-entry window even while the daemon or hook executable is running. On Windows, `current -> versions/<version_id>` is a directory symlink (`FILE_ATTRIBUTE_DIRECTORY`), which `MoveFileExW` cannot overwrite in place; updating `current` renames the old directory symlink aside (`.current.old.*`) before moving the new link in. Because `bin/*` points directly to `../versions/<version_id>/*` and is updated before `current`, that brief gap on `current` never affects `bin/*` execution.
+   - **Non-Atomic Fallback Boundaries (Copy Fallback & In-Use Regular Files on Windows)**:
+     1. *Copy fallback without symlink privileges (Windows OS error 1314 `ERROR_PRIVILEGE_NOT_HELD`)*: When symlink creation is denied by the OS, `current` is omitted and `bin/*` uses regular file copies staged into temporary sibling files (re-hashed against the source SHA-256) and renamed into `bin/`. When the destination regular file in `bin/` is not running, `MoveFileExW(..., MOVEFILE_REPLACE_EXISTING)` replaces it atomically.
+     2. *In-use regular-file executable on Windows*: When a destination entry in `bin/` is a regular file (either under the OS error 1314 copy fallback or during a one-time upgrade from a legacy copy-based `bin/` layout to file symlinks) AND that executable is currently running/mapped (such as `bin\agent-otel-bridge.exe` while the daemon is active), Windows rejects in-place overwrite (`ERROR_ACCESS_DENIED`). `replace_entry_with_staged` falls back to renaming the running file aside to `.<name>.old.<pid>.<nanos>.<seq>` and then renaming the staged entry into `bin\`, creating a brief window between the two renames during which that `bin\*.exe` entry is missing. Leftover `*.old.*`, `.rollback.stage.*`, and `.previous.stage.*` entries are swept at the start of subsequent `local install` and `local activate` runs (skipping any `.old.*` file still mapped by a running process).
+   - **Transactional Backup & Rollback**: A full backup of the prior active runtime is staged before pointer updates and committed to `previous/` only when activation succeeds. Failed activations restore prior entries; if any restore step fails, the `.rollback.stage.*` backup directory is preserved and `"restore incomplete"` is reported alongside the activation error.
 6. **Strict Separation of Candidate vs Active Testing**: `cargo test` and local development builds MUST NEVER modify or lock the host's active installation in `%LOCALAPPDATA%`. Verification of candidate builds occurs strictly within `target/`, staging via `agent-otel-bridge local install` leaves active state untouched (`--activate` defaults to `false`), and promotion to active is an explicit action via `agent-otel-bridge local install --activate`.
 
 ---
 
 ## 2. Directory Layout & Manifest Specification
 
-All local runtime state resides under the user's Local AppData directory:
+All local runtime state resides under the user's Local AppData directory (changed from regular file copies in `bin/` to direct file symlinks `bin/<exe> -> ../versions/<version_id>/<exe>` wherever the OS permits symlink creation, falling back to staged regular file copies only on Windows OS error 1314):
 
 ```
 %LOCALAPPDATA%\agent-otel-bridge\
-├── bin/                          # Canonical active executables / symlinks (hot path)
-│   ├── agent-hook.exe            # Ultra-lean hook client (< 300 KB)
-│   └── agent-otel-bridge.exe     # Unified daemon and CLI binary
-├── current -> versions/<id>      # Atomic symlink pointer to the active staged version
+├── bin/                          # Canonical active entrypoints (hot path)
+│   ├── agent-hook.exe            # File symlink -> ..\versions\<version_id>\agent-hook.exe (or copy fallback on 1314)
+│   └── agent-otel-bridge.exe     # File symlink -> ..\versions\<version_id>\agent-otel-bridge.exe (or copy fallback on 1314)
+├── current -> versions/<id>      # Directory symlink to active version (omitted under 1314 copy fallback)
 ├── versions/                     # Immutable staged versions
-│   └── <version_id>/             # e.g., "0.4.0-3019074-dirty"
+│   └── <version_id>/             # Base "<semver>-<short_commit>[-dirty]" or digest-suffixed "<id>-<8hex>"
 │       ├── agent-hook.exe
 │       ├── agent-otel-bridge.exe
 │       └── manifest.json         # Build metadata & SHA-256 hashes
@@ -56,30 +61,41 @@ All local runtime state resides under the user's Local AppData directory:
 ├── logs/                         # Background daemon and client logs
 │   ├── daemon.log
 │   └── bridge.log
-├── active.json                   # Manifest of current active runtime
-└── previous.json                 # Manifest copy for verification
+└── active.json                   # Manifest of current active runtime
 ```
 
-### Manifest Schema (`active.json`)
+### Version ID & `<id>-<8hex>` Digest Suffix Scheme
+
+1. **Base Version ID**: Derived as `<semver>-<short_commit>` (or `<semver>-<short_commit>-dirty` when the working tree has uncommitted changes).
+2. **Idempotent Re-Stage vs. `<id>-<8hex>` Disambiguation**:
+   - If `versions/<base_id>/` does not exist, the build is staged at `versions/<base_id>/`.
+   - If `versions/<base_id>/` already exists and its binaries match the candidate's SHA-256 hashes, staging is a no-op and re-activation loads and prints the existing on-disk `versions/<base_id>/manifest.json`.
+   - If `versions/<base_id>/` already exists with different binary SHA-256 hashes (for example, subsequent dirty builds on the same commit, or when `local rollback` finds that `versions/<manifest.version_id>/` fails SHA-256 verification against `previous/manifest.json`), a deterministic suffixed version ID `<base_id>-<8hex>` is used, where `<8hex>` is the first 8 lowercase hex characters of `SHA256("<hook_sha256>:<bridge_sha256>")`.
+3. **Manifest `version_id` Validation**: Every `version_id` read from `manifest.json` or passed to activation/rollback is strictly validated to be non-empty, contain only ASCII `[A-Za-z0-9._-]`, and never equal `.` or `..` or contain `..`, path separators, or absolute path prefixes.
+
+### Manifest Schema (`active.json` and `versions/<version_id>/manifest.json`)
 
 ```json
 {
-  "version_id": "0.4.0-3019074-dirty",
-  "semver": "0.4.0",
-  "git_commit": "3019074",
+  "version": "0.9.0",
+  "version_id": "0.9.0-3019074-dirty-4f5539d4",
+  "git_commit": "3019074abcdef1234567890abcdef1234567890",
   "git_branch": "feat/local-runtime-contract",
-  "git_dirty": true,
-  "installed_at": "2026-09-13T06:40:00.000000+02:00",
-  "binaries": {
-    "agent-hook.exe": {
+  "is_dirty": true,
+  "built_at": "1726000000",
+  "target_triple": "x86_64",
+  "binaries": [
+    {
+      "filename": "agent-hook.exe",
       "sha256": "4f5539d48bfa9a2727181059ec216259ec05ee9653a988d55ffcaef6bba46c59",
       "size_bytes": 148480
     },
-    "agent-otel-bridge.exe": {
+    {
+      "filename": "agent-otel-bridge.exe",
       "sha256": "a3bb408b6f3a3d5ea715494f107936a72e8fa44821a733735165aaeb8c8cebf7",
       "size_bytes": 4820992
     }
-  }
+  ]
 }
 ```
 
@@ -151,13 +167,14 @@ agent-otel-bridge local install --from-build target\release
 agent-otel-bridge local install --activate --from-build target\release
 ```
 During staging (`local install` without `--activate`), the command:
-1. Verifies executable sizes and computes SHA-256 hashes.
-2. Atomically stages files and `manifest.json` into immutable `versions/<version_id>/`.
-3. Leaves `current`, `bin/`, `active.json`, `previous/`, hooks, and running daemons untouched.
+1. Sweeps leftover `.rollback.stage.*`, `.previous.stage.*`, and `*.old.*` temporary entries (skipping any in-use files).
+2. Verifies executable sizes and computes SHA-256 hashes.
+3. Copies files and `manifest.json` into a temporary staging directory, re-verifies SHA-256 hashes of the staged binaries, and renames the staging directory into immutable `versions/<version_id>/` (or loads the existing on-disk `manifest.json` when an identical build is already staged).
+4. Leaves `current`, `bin/`, `active.json`, `previous/`, hooks, and running daemons untouched.
 
 When `--activate` is specified, activation additionally:
-1. Stages the prior active version into a temporary backup before mutating canonical pointers, committing `previous/` only after activation succeeds (and rolling back pointers while removing partial backups on failure).
-2. Atomically updates `current -> versions/<version_id>` and `bin/` pointers (or executables via temporary sibling file + rename when symlinks are unavailable), never writing through existing symlinks or modifying `versions/`.
+1. Verifies the staged `versions/<version_id>/` binaries against `manifest.binaries[].sha256` and stages the prior active version into a temporary backup before mutating canonical pointers, committing `previous/` only after activation succeeds (and restoring prior entries on failure while preserving `.rollback.stage.*` if any restore step fails).
+2. Updates `bin/` file symlinks directly to `../versions/<version_id>/<binary>` (atomic file-symlink rename on POSIX and Windows) and updates `current -> versions/<version_id>`, or falls back to re-hashed temporary sibling copies + rename when symlink privileges are unavailable (OS error 1314), never writing through existing symlinks or modifying `versions/`.
 3. Does not rewrite harness configuration. Enable each application with `agent-otel-bridge local enable --app <client>`.
 4. Atomically writes updated `active.json`.
 
@@ -166,7 +183,7 @@ If a regression or issue is detected in the active runtime:
 ```powershell
 agent-otel-bridge local rollback
 ```
-This restores the active pointers and `active.json` to the version recorded in `previous/`. It does not rewrite harness configuration unless `--update-hooks` is passed, which runs the legacy JSON installer.
+This validates `previous/manifest.json` (`version_id` restricted to `[A-Za-z0-9._-]` without `..`) and verifies `versions/<manifest.version_id>/` against `manifest.binaries[].sha256` before switching pointers. If `versions/<manifest.version_id>/` is missing, it stages and re-hashes from `previous/` into `versions/<manifest.version_id>/`; if `versions/<manifest.version_id>/` exists with mismatched hashes, it stages and re-hashes from `previous/` under a digest-suffixed `<id>-<8hex>` directory without mutating the existing version directory. Verification failure in `previous/` aborts before mutating `current` or `bin/`. It does not rewrite harness configuration unless `--update-hooks` is passed, which runs the legacy JSON installer.
 
 ### 4. Station Diagnostics
 Verify all IPC pipes, binary paths, and hook registrations:

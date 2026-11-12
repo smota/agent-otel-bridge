@@ -227,12 +227,32 @@ pub fn safe_copy_or_replace(src: &Path, dst: &Path) -> Result<(), io::Error> {
         }
     }
 
-    // Stage into a sibling temporary file and atomically rename over dst so we
-    // never open or truncate an existing symlink target in place.
+    // Stage into a sibling temporary file, re-verify SHA-256, and atomically rename
+    // over dst so we never open or truncate an existing symlink target in place.
+    let expected_sha = compute_sha256(src)?;
     let tmp_dst = unique_temp_path(dst, "copy");
     if let Err(e) = fs::copy(src, &tmp_dst) {
         let _ = remove_path_no_follow(&tmp_dst);
         return Err(e);
+    }
+    match compute_sha256(&tmp_dst) {
+        Ok(staged_sha) if staged_sha == expected_sha => {}
+        Ok(staged_sha) => {
+            let _ = remove_path_no_follow(&tmp_dst);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Staged copy SHA-256 mismatch for {}: expected {}, got {}",
+                    dst.display(),
+                    expected_sha,
+                    staged_sha
+                ),
+            ));
+        }
+        Err(e) => {
+            let _ = remove_path_no_follow(&tmp_dst);
+            return Err(e);
+        }
     }
 
     replace_entry_with_staged(&tmp_dst, dst)
@@ -264,6 +284,12 @@ fn atomic_write_bytes(dst: &Path, content: &[u8]) -> io::Result<()> {
 }
 
 fn create_symlink_entry(target: &Path, link: &Path, is_dir_target: bool) -> io::Result<()> {
+    if std::env::var_os("AGENT_OTEL_TEST_FORCE_COPY_FALLBACK")
+        .is_some_and(|v| !v.is_empty() && v != "0")
+    {
+        return Err(io::Error::from_raw_os_error(1314));
+    }
+
     #[cfg(unix)]
     {
         let _ = is_dir_target;
@@ -301,29 +327,126 @@ fn atomic_replace_symlink(target: &Path, link: &Path, is_dir_target: bool) -> io
 }
 
 fn is_symlink_privilege_error(err: &io::Error) -> bool {
-    #[cfg(windows)]
+    err.raw_os_error() == Some(1314)
+}
+
+pub fn validate_version_id(version_id: &str) -> io::Result<()> {
+    if version_id.is_empty()
+        || version_id == "."
+        || version_id == ".."
+        || version_id.contains("..")
+        || !version_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
     {
-        err.raw_os_error() == Some(1314)
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "Invalid version_id '{version_id}': must contain only [A-Za-z0-9._-] without '..' or path separators"
+            ),
+        ));
     }
-    #[cfg(not(windows))]
-    {
-        let _ = err;
-        false
+    Ok(())
+}
+
+fn verify_dir_against_manifest(dir: &Path, manifest: &LocalVersionManifest) -> io::Result<()> {
+    let hook_name = if cfg!(windows) {
+        "agent-hook.exe"
+    } else {
+        "agent-hook"
+    };
+    let bridge_name = if cfg!(windows) {
+        "agent-otel-bridge.exe"
+    } else {
+        "agent-otel-bridge"
+    };
+
+    for required in [hook_name, bridge_name] {
+        if !manifest.binaries.iter().any(|b| b.filename == required) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Manifest in {} is missing required binary entry '{}'",
+                    dir.display(),
+                    required
+                ),
+            ));
+        }
+    }
+
+    for bin in &manifest.binaries {
+        if bin.filename.is_empty()
+            || bin.filename.contains('/')
+            || bin.filename.contains('\\')
+            || bin.filename.contains("..")
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid binary filename in manifest: '{}'", bin.filename),
+            ));
+        }
+        let path = dir.join(&bin.filename);
+        let meta = fs::symlink_metadata(&path)?;
+        if meta.file_type().is_symlink() || !meta.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Binary in {} is not a regular file: {}",
+                    dir.display(),
+                    path.display()
+                ),
+            ));
+        }
+        let actual_sha = compute_sha256(&path)?;
+        if actual_sha != bin.sha256 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "SHA-256 mismatch for {}: expected {}, got {}",
+                    path.display(),
+                    bin.sha256,
+                    actual_sha
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn is_leftover_temp_entry_name(name: &str) -> bool {
+    name.starts_with(".rollback.stage.")
+        || name.starts_with(".previous.stage.")
+        || name.contains(".old.")
+}
+
+fn sweep_dir_leftover_temp_entries(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            continue;
+        };
+        if !is_leftover_temp_entry_name(name) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if meta.file_type().is_symlink() || meta.is_file() {
+            let _ = remove_path_no_follow(&path);
+        } else if meta.is_dir() {
+            let _ = fs::remove_dir_all(&path);
+        }
     }
 }
 
-fn symlink_points_through_current(link_target: &Path, current_link: &Path, exe_name: &str) -> bool {
-    if link_target == Path::new("..").join("current").join(exe_name) {
-        return true;
-    }
-    let parts: Vec<String> = link_target
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
-        .collect();
-    if parts == ["..", "current", exe_name] {
-        return true;
-    }
-    link_target == current_link.join(exe_name)
+fn sweep_leftover_temp_entries(local_dir: &Path) {
+    sweep_dir_leftover_temp_entries(local_dir);
+    sweep_dir_leftover_temp_entries(&local_dir.join("bin"));
+    sweep_dir_leftover_temp_entries(&local_dir.join("versions"));
 }
 
 #[derive(Debug, Clone)]
@@ -348,7 +471,12 @@ fn record_prior_entry(
     match fs::symlink_metadata(path) {
         Ok(meta) => {
             if meta.file_type().is_symlink() {
+                fs::create_dir_all(rollback_stage)?;
                 let target = fs::read_link(path)?;
+                fs::write(
+                    rollback_stage.join(format!("{label}.symlink")),
+                    target.to_string_lossy().as_bytes(),
+                )?;
                 Ok(PriorEntryState::Symlink {
                     target,
                     is_dir_target: is_dir_symlink_hint || path.is_dir(),
@@ -367,21 +495,15 @@ fn record_prior_entry(
     }
 }
 
-fn restore_prior_entry(path: &Path, state: &PriorEntryState) {
+fn restore_prior_entry(path: &Path, state: &PriorEntryState) -> io::Result<()> {
     match state {
-        PriorEntryState::Missing => {
-            let _ = remove_path_no_follow(path);
-        }
+        PriorEntryState::Missing => remove_path_no_follow(path),
         PriorEntryState::Symlink {
             target,
             is_dir_target,
-        } => {
-            let _ = atomic_replace_symlink(target, path, *is_dir_target);
-        }
-        PriorEntryState::RegularFile { backup_path } => {
-            let _ = safe_copy_or_replace(backup_path, path);
-        }
-        PriorEntryState::Directory => {}
+        } => atomic_replace_symlink(target, path, *is_dir_target),
+        PriorEntryState::RegularFile { backup_path } => safe_copy_or_replace(backup_path, path),
+        PriorEntryState::Directory => Ok(()),
     }
 }
 
@@ -406,6 +528,17 @@ fn version_dir_matches_hashes(
         || !hook_meta.is_file()
         || !bridge_meta.is_file()
         || !manifest_path.is_file()
+    {
+        return false;
+    }
+    let Ok(manifest_str) = fs::read_to_string(&manifest_path) else {
+        return false;
+    };
+    let Ok(parsed_manifest) = serde_json::from_str::<LocalVersionManifest>(&manifest_str) else {
+        return false;
+    };
+    if validate_version_id(&parsed_manifest.version_id).is_err()
+        || verify_dir_against_manifest(version_dir, &parsed_manifest).is_err()
     {
         return false;
     }
@@ -475,6 +608,7 @@ pub fn install_candidate(
     from_build: Option<&Path>,
 ) -> Result<LocalVersionManifest, Box<dyn std::error::Error>> {
     println!("\n=== Installing agent-otel-bridge to isolated local runtime ===");
+    sweep_leftover_temp_entries(&get_canonical_local_dir());
 
     let hook_name = if cfg!(windows) {
         "agent-hook.exe"
@@ -574,6 +708,7 @@ pub fn install_candidate(
     let dirty_suffix = if is_dirty { "-dirty" } else { "" };
     let version = env!("CARGO_PKG_VERSION");
     let base_version_id = format!("{}-{}{}", version, short_commit, dirty_suffix);
+    validate_version_id(&base_version_id)?;
 
     let versions_root = get_versions_dir();
     let (version_id, already_staged) = resolve_version_id(
@@ -584,39 +719,49 @@ pub fn install_candidate(
         bridge_name,
         &bridge_sha,
     );
-
-    let built_at = {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        format!("{now}")
-    };
-
-    let manifest = LocalVersionManifest {
-        version: version.to_string(),
-        version_id: version_id.clone(),
-        git_commit: commit,
-        git_branch: branch,
-        is_dirty,
-        built_at,
-        target_triple: std::env::consts::ARCH.to_string(),
-        binaries: vec![
-            BinaryArtifactInfo {
-                filename: hook_name.to_string(),
-                sha256: hook_sha,
-                size_bytes: hook_size,
-            },
-            BinaryArtifactInfo {
-                filename: bridge_name.to_string(),
-                sha256: bridge_sha,
-                size_bytes: bridge_size,
-            },
-        ],
-    };
+    validate_version_id(&version_id)?;
 
     let versions_dir = versions_root.join(&version_id);
-    if !already_staged {
+    let manifest = if already_staged {
+        let on_disk_content = fs::read_to_string(versions_dir.join("manifest.json"))?;
+        let mut on_disk_manifest: LocalVersionManifest = serde_json::from_str(&on_disk_content)?;
+        validate_version_id(&on_disk_manifest.version_id)?;
+        if on_disk_manifest.version_id != version_id {
+            on_disk_manifest.version_id = version_id.clone();
+        }
+        verify_dir_against_manifest(&versions_dir, &on_disk_manifest)?;
+        on_disk_manifest
+    } else {
+        let built_at = {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            format!("{now}")
+        };
+
+        let new_manifest = LocalVersionManifest {
+            version: version.to_string(),
+            version_id: version_id.clone(),
+            git_commit: commit,
+            git_branch: branch,
+            is_dirty,
+            built_at,
+            target_triple: std::env::consts::ARCH.to_string(),
+            binaries: vec![
+                BinaryArtifactInfo {
+                    filename: hook_name.to_string(),
+                    sha256: hook_sha,
+                    size_bytes: hook_size,
+                },
+                BinaryArtifactInfo {
+                    filename: bridge_name.to_string(),
+                    sha256: bridge_sha,
+                    size_bytes: bridge_size,
+                },
+            ],
+        };
+
         if !versions_root.exists() {
             fs::create_dir_all(&versions_root)?;
         }
@@ -625,8 +770,10 @@ pub fn install_candidate(
             fs::create_dir_all(&stage_dir)?;
             fs::copy(&src_hook, stage_dir.join(hook_name))?;
             fs::copy(&src_bridge, stage_dir.join(bridge_name))?;
-            let manifest_json = serde_json::to_string_pretty(&manifest)?;
+            let manifest_json = serde_json::to_string_pretty(&new_manifest)?;
             fs::write(stage_dir.join("manifest.json"), manifest_json)?;
+            // Re-hash staged files before the final rename
+            verify_dir_against_manifest(&stage_dir, &new_manifest)?;
             fs::rename(&stage_dir, &versions_dir)?;
             Ok(())
         })();
@@ -634,12 +781,27 @@ pub fn install_candidate(
             let _ = fs::remove_dir_all(&stage_dir);
             return Err(err);
         }
-    }
+        new_manifest
+    };
+
+    let hook_manifest_sha = manifest
+        .binaries
+        .iter()
+        .find(|b| b.filename == hook_name)
+        .map(|b| b.sha256.as_str())
+        .unwrap_or("");
+    let bridge_manifest_sha = manifest
+        .binaries
+        .iter()
+        .find(|b| b.filename == bridge_name)
+        .map(|b| b.sha256.as_str())
+        .unwrap_or("");
 
     println!("  [staged] Build staged at: {}", versions_dir.display());
-    println!("           Version ID: {}", version_id);
-    println!("           Hook SHA256:   {}", manifest.binaries[0].sha256);
-    println!("           Bridge SHA256: {}", manifest.binaries[1].sha256);
+    println!("           Version ID: {}", manifest.version_id);
+    println!("           Built At:   {}", manifest.built_at);
+    println!("           Hook SHA256:   {}", hook_manifest_sha);
+    println!("           Bridge SHA256: {}", bridge_manifest_sha);
 
     if activate {
         activate_version(&version_id)?;
@@ -660,6 +822,9 @@ fn switch_active_pointers(
     version_id: &str,
     preserve_previous: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    validate_version_id(version_id)?;
+    sweep_leftover_temp_entries(local_dir);
+
     let hook_name = if cfg!(windows) {
         "agent-hook.exe"
     } else {
@@ -692,7 +857,16 @@ fn switch_active_pointers(
         .into());
     }
     let manifest_content = fs::read_to_string(&version_manifest_path)?;
-    let _parsed_manifest: LocalVersionManifest = serde_json::from_str(&manifest_content)?;
+    let parsed_manifest: LocalVersionManifest = serde_json::from_str(&manifest_content)?;
+    validate_version_id(&parsed_manifest.version_id)?;
+    if parsed_manifest.version_id != version_id {
+        return Err(format!(
+            "Manifest version_id '{}' does not match version directory '{}'",
+            parsed_manifest.version_id, version_id
+        )
+        .into());
+    }
+    verify_dir_against_manifest(&version_dir, &parsed_manifest)?;
 
     let current_link = local_dir.join("current");
     let bin_dir = local_dir.join("bin");
@@ -763,47 +937,47 @@ fn switch_active_pointers(
     }
 
     let apply_res = (|| -> Result<(), Box<dyn std::error::Error>> {
-        let rel_version = Path::new("versions").join(version_id);
-        let current_is_symlink = match atomic_replace_symlink(&rel_version, &current_link, true) {
-            Ok(()) => true,
-            Err(err)
-                if is_symlink_privilege_error(&err)
-                    && matches!(prior_current, PriorEntryState::Missing) =>
-            {
-                false
-            }
-            Err(err) => return Err(err.into()),
-        };
+        if !bin_dir.exists() {
+            fs::create_dir_all(&bin_dir)?;
+        }
 
+        // Update bin/* file symlinks FIRST pointing directly at ../versions/<version_id>/<exe>
+        // so that on Windows each file-symlink replacement is atomic via MoveFileExW and never
+        // depends on the `current` directory symlink.
+        let mut used_symlinks = true;
         for (exe_name, bin_exe, version_exe) in [
             (hook_name, &bin_hook, &version_hook),
             (bridge_name, &bin_bridge, &version_bridge),
         ] {
-            let already_points_through_current = current_is_symlink
-                && fs::symlink_metadata(bin_exe)
-                    .map(|m| m.file_type().is_symlink())
-                    .unwrap_or(false)
-                && fs::read_link(bin_exe)
-                    .map(|target| symlink_points_through_current(&target, &current_link, exe_name))
-                    .unwrap_or(false);
-
-            if !already_points_through_current {
-                if !bin_dir.exists() {
-                    fs::create_dir_all(&bin_dir)?;
-                }
-                if current_is_symlink {
-                    let rel_current_exe = Path::new("..").join("current").join(exe_name);
-                    match atomic_replace_symlink(&rel_current_exe, bin_exe, false) {
-                        Ok(()) => {}
-                        Err(err) if is_symlink_privilege_error(&err) => {
-                            safe_copy_or_replace(version_exe, bin_exe)?;
-                        }
-                        Err(err) => return Err(err.into()),
+            if used_symlinks {
+                let rel_version_exe = Path::new("..")
+                    .join("versions")
+                    .join(version_id)
+                    .join(exe_name);
+                match atomic_replace_symlink(&rel_version_exe, bin_exe, false) {
+                    Ok(()) => {}
+                    Err(err) if is_symlink_privilege_error(&err) => {
+                        used_symlinks = false;
+                        safe_copy_or_replace(version_exe, bin_exe)?;
                     }
-                } else {
-                    safe_copy_or_replace(version_exe, bin_exe)?;
+                    Err(err) => return Err(err.into()),
                 }
+            } else {
+                safe_copy_or_replace(version_exe, bin_exe)?;
             }
+        }
+
+        if used_symlinks {
+            let rel_version = Path::new("versions").join(version_id);
+            match atomic_replace_symlink(&rel_version, &current_link, true) {
+                Ok(()) => {}
+                Err(err)
+                    if is_symlink_privilege_error(&err)
+                        && matches!(prior_current, PriorEntryState::Missing) => {}
+                Err(err) => return Err(err.into()),
+            }
+        } else if !matches!(prior_current, PriorEntryState::Missing) {
+            remove_path_no_follow(&current_link)?;
         }
 
         if !bin_hook.is_file() || !bin_bridge.is_file() {
@@ -835,15 +1009,31 @@ fn switch_active_pointers(
     })();
 
     if let Err(err) = apply_res {
-        restore_prior_entry(&active_manifest, &prior_active);
-        restore_prior_entry(&bin_bridge, &prior_bridge);
-        restore_prior_entry(&bin_hook, &prior_hook);
-        restore_prior_entry(&current_link, &prior_current);
+        let mut restore_errors = Vec::new();
+        for (path, state) in [
+            (&active_manifest, &prior_active),
+            (&current_link, &prior_current),
+            (&bin_bridge, &prior_bridge),
+            (&bin_hook, &prior_hook),
+        ] {
+            if let Err(re) = restore_prior_entry(path, state) {
+                restore_errors.push(format!("{}: {}", path.display(), re));
+            }
+        }
         if let Some(stage) = previous_stage {
             let _ = fs::remove_dir_all(&stage);
         }
-        let _ = fs::remove_dir_all(&rollback_stage);
-        return Err(err);
+        if restore_errors.is_empty() {
+            let _ = fs::remove_dir_all(&rollback_stage);
+            return Err(err);
+        }
+        let _ = fs::create_dir_all(&rollback_stage);
+        return Err(format!(
+            "{err}; restore incomplete (rollback backup preserved at {}): {}",
+            rollback_stage.display(),
+            restore_errors.join("; ")
+        )
+        .into());
     }
 
     let _ = fs::remove_dir_all(&rollback_stage);
@@ -851,9 +1041,26 @@ fn switch_active_pointers(
 }
 
 pub fn activate_version(version_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    validate_version_id(version_id)?;
     let local_dir = get_canonical_local_dir();
     let bin_dir = get_canonical_bin_dir();
     switch_active_pointers(&local_dir, version_id, true)?;
+
+    let manifest_path = local_dir
+        .join("versions")
+        .join(version_id)
+        .join("manifest.json");
+    if let Ok(content) = fs::read_to_string(&manifest_path) {
+        if let Ok(manifest) = serde_json::from_str::<LocalVersionManifest>(&content) {
+            println!(
+                "  [active] Version '{}' (built_at={}) is now active at: {}",
+                manifest.version_id,
+                manifest.built_at,
+                bin_dir.display()
+            );
+            return Ok(());
+        }
+    }
 
     println!(
         "  [active] Version '{}' is now active at: {}",
@@ -875,6 +1082,7 @@ pub fn rollback_candidate(update_hooks: bool) -> Result<(), Box<dyn std::error::
 
     let manifest_content = fs::read_to_string(&previous_manifest)?;
     let manifest: LocalVersionManifest = serde_json::from_str(&manifest_content)?;
+    validate_version_id(&manifest.version_id)?;
 
     let hook_name = if cfg!(windows) {
         "agent-hook.exe"
@@ -887,33 +1095,89 @@ pub fn rollback_candidate(update_hooks: bool) -> Result<(), Box<dyn std::error::
         "agent-otel-bridge"
     };
 
-    let version_dir = get_versions_dir().join(&manifest.version_id);
-    if !version_dir.is_dir() {
-        let versions_root = get_versions_dir();
-        if !versions_root.exists() {
-            fs::create_dir_all(&versions_root)?;
-        }
-        let stage_dir = unique_temp_path(&version_dir, "rollback-stage");
-        let stage_res = (|| -> io::Result<()> {
-            fs::create_dir_all(&stage_dir)?;
-            fs::copy(previous_dir.join(hook_name), stage_dir.join(hook_name))?;
-            fs::copy(previous_dir.join(bridge_name), stage_dir.join(bridge_name))?;
-            fs::write(stage_dir.join("manifest.json"), &manifest_content)?;
-            fs::rename(&stage_dir, &version_dir)?;
-            Ok(())
-        })();
-        if let Err(err) = stage_res {
-            let _ = fs::remove_dir_all(&stage_dir);
-            return Err(err.into());
-        }
-    }
+    let versions_root = get_versions_dir();
+    let version_dir = versions_root.join(&manifest.version_id);
 
-    switch_active_pointers(&local_dir, &manifest.version_id, false)?;
+    let version_dir_manifest_ok = fs::read_to_string(version_dir.join("manifest.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<LocalVersionManifest>(&s).ok())
+        .is_some_and(|m| {
+            m.version_id == manifest.version_id
+                && verify_dir_against_manifest(&version_dir, &m).is_ok()
+        });
 
-    println!(
-        "  [ok] Successfully rolled back to: {}",
-        manifest.version_id
-    );
+    let target_version_id = if version_dir.is_dir()
+        && version_dir_manifest_ok
+        && verify_dir_against_manifest(&version_dir, &manifest).is_ok()
+    {
+        manifest.version_id.clone()
+    } else {
+        // Verify previous/ binaries against previous/manifest.json before staging or switching
+        verify_dir_against_manifest(&previous_dir, &manifest)?;
+
+        let (resolved_id, already_staged) =
+            if !version_dir.exists() && fs::symlink_metadata(&version_dir).is_err() {
+                (manifest.version_id.clone(), false)
+            } else {
+                let hook_sha = manifest
+                    .binaries
+                    .iter()
+                    .find(|b| b.filename == hook_name)
+                    .map(|b| b.sha256.as_str())
+                    .ok_or("Missing hook binary entry in previous manifest")?;
+                let bridge_sha = manifest
+                    .binaries
+                    .iter()
+                    .find(|b| b.filename == bridge_name)
+                    .map(|b| b.sha256.as_str())
+                    .ok_or("Missing bridge binary entry in previous manifest")?;
+                resolve_version_id(
+                    &versions_root,
+                    &manifest.version_id,
+                    hook_name,
+                    hook_sha,
+                    bridge_name,
+                    bridge_sha,
+                )
+            };
+        validate_version_id(&resolved_id)?;
+
+        let target_dir = versions_root.join(&resolved_id);
+        let mut target_manifest = manifest.clone();
+        target_manifest.version_id = resolved_id.clone();
+
+        if !already_staged || verify_dir_against_manifest(&target_dir, &target_manifest).is_err() {
+            if !versions_root.exists() {
+                fs::create_dir_all(&versions_root)?;
+            }
+            let stage_dir = unique_temp_path(&target_dir, "rollback-stage");
+            let stage_res = (|| -> io::Result<()> {
+                fs::create_dir_all(&stage_dir)?;
+                fs::copy(previous_dir.join(hook_name), stage_dir.join(hook_name))?;
+                fs::copy(previous_dir.join(bridge_name), stage_dir.join(bridge_name))?;
+                let updated_json =
+                    serde_json::to_string_pretty(&target_manifest).map_err(io::Error::other)?;
+                fs::write(stage_dir.join("manifest.json"), updated_json)?;
+                // Re-hash staged files before final rename
+                verify_dir_against_manifest(&stage_dir, &target_manifest)?;
+                if target_dir.exists() || fs::symlink_metadata(&target_dir).is_ok() {
+                    let _ = fs::remove_dir_all(&target_dir);
+                }
+                fs::rename(&stage_dir, &target_dir)?;
+                Ok(())
+            })();
+            if let Err(err) = stage_res {
+                let _ = fs::remove_dir_all(&stage_dir);
+                return Err(err.into());
+            }
+        }
+
+        resolved_id
+    };
+
+    switch_active_pointers(&local_dir, &target_version_id, false)?;
+
+    println!("  [ok] Successfully rolled back to: {}", target_version_id);
 
     if update_hooks {
         let canonical_hook = get_canonical_hook_path();

@@ -276,18 +276,38 @@ fn create_test_dir(prefix: &str) -> std::path::PathBuf {
     dir
 }
 
-fn make_symlink_dir(target: &std::path::Path, link: &std::path::Path) {
-    #[cfg(unix)]
-    std::os::unix::fs::symlink(target, link).unwrap();
-    #[cfg(windows)]
-    std::os::windows::fs::symlink_dir(target, link).unwrap();
+fn is_os_error_1314(err: &std::io::Error) -> bool {
+    err.raw_os_error() == Some(1314)
 }
 
-fn make_symlink_file(target: &std::path::Path, link: &std::path::Path) {
+fn handle_symlink_result(res: std::io::Result<()>, link: &std::path::Path) -> bool {
+    match res {
+        Ok(()) => true,
+        Err(err) if is_os_error_1314(&err) => {
+            eprintln!(
+                "skipping symlink test step at {}: symlink privilege not held (OS error 1314)",
+                link.display()
+            );
+            false
+        }
+        Err(err) => panic!("failed to create symlink at {}: {err}", link.display()),
+    }
+}
+
+fn try_make_symlink_dir(target: &std::path::Path, link: &std::path::Path) -> bool {
     #[cfg(unix)]
-    std::os::unix::fs::symlink(target, link).unwrap();
+    let res = std::os::unix::fs::symlink(target, link);
     #[cfg(windows)]
-    std::os::windows::fs::symlink_file(target, link).unwrap();
+    let res = std::os::windows::fs::symlink_dir(target, link);
+    handle_symlink_result(res, link)
+}
+
+fn try_make_symlink_file(target: &std::path::Path, link: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    let res = std::os::unix::fs::symlink(target, link);
+    #[cfg(windows)]
+    let res = std::os::windows::fs::symlink_file(target, link);
+    handle_symlink_result(res, link)
 }
 
 fn write_verified_build(
@@ -312,7 +332,7 @@ fn seed_active_symlink_runtime(
     version_id: &str,
     hook_bytes: &[u8],
     bridge_bytes: &[u8],
-) -> (String, String) {
+) -> Option<(String, String)> {
     let (hook_name, bridge_name) = exe_names();
     let version_dir = runtime_home.join("versions").join(version_id);
     let (hook_sha, bridge_sha) = write_verified_build(&version_dir, hook_bytes, bridge_bytes);
@@ -343,23 +363,29 @@ fn seed_active_symlink_runtime(
     fs::write(runtime_home.join("active.json"), &manifest_json).unwrap();
 
     let current_link = runtime_home.join("current");
-    make_symlink_dir(
+    if !try_make_symlink_dir(
         &std::path::Path::new("versions").join(version_id),
         &current_link,
-    );
+    ) {
+        return None;
+    }
 
     let bin_dir = runtime_home.join("bin");
     fs::create_dir_all(&bin_dir).unwrap();
-    make_symlink_file(
+    if !try_make_symlink_file(
         &std::path::Path::new("..").join("current").join(hook_name),
         &bin_dir.join(hook_name),
-    );
-    make_symlink_file(
+    ) {
+        return None;
+    }
+    if !try_make_symlink_file(
         &std::path::Path::new("..").join("current").join(bridge_name),
         &bin_dir.join(bridge_name),
-    );
+    ) {
+        return None;
+    }
 
-    (hook_sha, bridge_sha)
+    Some((hook_sha, bridge_sha))
 }
 
 fn run_bridge_cli(
@@ -367,15 +393,26 @@ fn run_bridge_cli(
     user_home: &std::path::Path,
     args: &[&str],
 ) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_agent-otel-bridge"))
-        .args(args)
+    run_bridge_cli_with_env(runtime_home, user_home, args, &[])
+}
+
+fn run_bridge_cli_with_env(
+    runtime_home: &std::path::Path,
+    user_home: &std::path::Path,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+) -> std::process::Output {
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_agent-otel-bridge"));
+    cmd.args(args)
         .env("AGENT_OTEL_HOME", runtime_home)
         .env("LOCALAPPDATA", user_home.join("AppData/Local"))
         .env("USERPROFILE", user_home)
         .env("HOME", user_home)
-        .env("XDG_DATA_HOME", user_home.join(".local/share"))
-        .output()
-        .unwrap()
+        .env("XDG_DATA_HOME", user_home.join(".local/share"));
+    for (k, v) in extra_env {
+        cmd.env(k, v);
+    }
+    cmd.output().unwrap()
 }
 
 #[test]
@@ -387,12 +424,15 @@ fn test_local_install_without_activate_stages_only_and_leaves_active_state_untou
     fs::create_dir_all(&user_home).unwrap();
 
     let (hook_name, bridge_name) = exe_names();
-    let (old_hook_sha, old_bridge_sha) = seed_active_symlink_runtime(
+    let Some((old_hook_sha, old_bridge_sha)) = seed_active_symlink_runtime(
         &runtime_home,
         "old",
         b"old-immutable-hook-binary",
         b"old-immutable-bridge-binary",
-    );
+    ) else {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    };
     let (new_hook_sha, new_bridge_sha) = write_verified_build(
         &candidate_build,
         b"new-staged-hook-binary-v2",
@@ -499,12 +539,15 @@ fn test_local_install_with_activate_replaces_pointers_without_writing_through_sy
     fs::create_dir_all(&user_home).unwrap();
 
     let (hook_name, bridge_name) = exe_names();
-    let (old_hook_sha, old_bridge_sha) = seed_active_symlink_runtime(
+    let Some((old_hook_sha, old_bridge_sha)) = seed_active_symlink_runtime(
         &runtime_home,
         "old",
         b"old-writable-version-hook-bytes",
         b"old-writable-version-bridge-bytes",
-    );
+    ) else {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    };
     let (new_hook_sha, new_bridge_sha) = write_verified_build(
         &candidate_build,
         b"new-activated-hook-bytes-v2",
@@ -554,7 +597,8 @@ fn test_local_install_with_activate_replaces_pointers_without_writing_through_sy
         std::path::Path::new("versions").join(&active_manifest.version_id)
     );
 
-    // 4. bin/ entries remain symlinks and resolve to the new version
+    // 4. bin/ entries remain symlinks, point directly at ../versions/<id>/<exe> (not ../current),
+    // and resolve to the new version
     assert!(
         fs::symlink_metadata(runtime_home.join("bin").join(hook_name))
             .unwrap()
@@ -566,6 +610,20 @@ fn test_local_install_with_activate_replaces_pointers_without_writing_through_sy
             .unwrap()
             .file_type()
             .is_symlink()
+    );
+    assert_eq!(
+        fs::read_link(runtime_home.join("bin").join(hook_name)).unwrap(),
+        std::path::Path::new("..")
+            .join("versions")
+            .join(&active_manifest.version_id)
+            .join(hook_name)
+    );
+    assert_eq!(
+        fs::read_link(runtime_home.join("bin").join(bridge_name)).unwrap(),
+        std::path::Path::new("..")
+            .join("versions")
+            .join(&active_manifest.version_id)
+            .join(bridge_name)
     );
     assert_eq!(
         compute_sha256(&runtime_home.join("bin").join(hook_name)).unwrap(),
@@ -603,7 +661,10 @@ fn test_safe_copy_or_replace_does_not_write_through_symlink_target() {
 
     fs::write(&immutable_target, b"immutable-v1-payload").unwrap();
     let original_sha = compute_sha256(&immutable_target).unwrap();
-    make_symlink_file(&immutable_target, &symlink_dst);
+    if !try_make_symlink_file(&immutable_target, &symlink_dst) {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    }
 
     fs::write(&new_src, b"replacement-v2-payload").unwrap();
     let new_sha = compute_sha256(&new_src).unwrap();
@@ -630,12 +691,15 @@ fn test_failed_activation_leaves_no_partial_previous_and_rolls_back_prior_previo
     fs::create_dir_all(&user_home).unwrap();
 
     let (hook_name, bridge_name) = exe_names();
-    let (old_hook_sha, old_bridge_sha) = seed_active_symlink_runtime(
+    let Some((old_hook_sha, old_bridge_sha)) = seed_active_symlink_runtime(
         &runtime_home,
         "old",
         b"old-active-hook-v1",
         b"old-active-bridge-v1",
-    );
+    ) else {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    };
     write_verified_build(
         &candidate_build,
         b"new-candidate-hook-v2",
@@ -778,20 +842,22 @@ fn test_direct_version_symlinks_and_multiple_staged_builds_preserve_immutability
     let bin_dir = runtime_home.join("bin");
     let _ = fs::remove_file(bin_dir.join(hook_name));
     let _ = fs::remove_file(bin_dir.join(bridge_name));
-    make_symlink_file(
+    if !try_make_symlink_file(
         &std::path::Path::new("..")
             .join("versions")
             .join(&v1_id)
             .join(hook_name),
         &bin_dir.join(hook_name),
-    );
-    make_symlink_file(
+    ) || !try_make_symlink_file(
         &std::path::Path::new("..")
             .join("versions")
             .join(&v1_id)
             .join(bridge_name),
         &bin_dir.join(bridge_name),
-    );
+    ) {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    }
 
     let v1_dir = runtime_home.join("versions").join(&v1_id);
     for file in [v1_dir.join(hook_name), v1_dir.join(bridge_name)] {
@@ -870,5 +936,512 @@ fn test_direct_version_symlinks_and_multiple_staged_builds_preserve_immutability
             let _ = fs::set_permissions(&file, perms);
         }
     }
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_symlink_helper_skips_on_os_error_1314() {
+    let err_1314 = std::io::Error::from_raw_os_error(1314);
+    assert!(
+        !handle_symlink_result(Err(err_1314), std::path::Path::new("dummy_link")),
+        "handle_symlink_result must return false (skip) on OS error 1314 instead of panicking"
+    );
+}
+
+#[test]
+fn test_copy_fallback_when_symlink_privilege_unavailable() {
+    let root = create_test_dir("copy_fallback_test");
+    let runtime_home = root.join("runtime");
+    let user_home = root.join("home");
+    let build_v1 = root.join("build_v1");
+    let build_v2 = root.join("build_v2");
+    fs::create_dir_all(&user_home).unwrap();
+
+    let (hook_name, bridge_name) = exe_names();
+    let (v1_hook_sha, v1_bridge_sha) = write_verified_build(
+        &build_v1,
+        b"copy-fallback-v1-hook",
+        b"copy-fallback-v1-bridge",
+    );
+    let (v2_hook_sha, v2_bridge_sha) = write_verified_build(
+        &build_v2,
+        b"copy-fallback-v2-hook",
+        b"copy-fallback-v2-bridge",
+    );
+
+    // 1. Install & activate v1 with forced copy fallback
+    let out1 = run_bridge_cli_with_env(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+        &[("AGENT_OTEL_TEST_FORCE_COPY_FALLBACK", "1")],
+    );
+    assert!(
+        out1.status.success(),
+        "copy fallback activate v1 failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&out1.stdout),
+        String::from_utf8_lossy(&out1.stderr)
+    );
+
+    // Under copy fallback, current symlink must not exist and bin/* must be regular files (not symlinks)
+    assert!(
+        fs::symlink_metadata(runtime_home.join("current")).is_err(),
+        "current symlink should not exist when symlink creation fails with 1314"
+    );
+    let bin_hook = runtime_home.join("bin").join(hook_name);
+    let bin_bridge = runtime_home.join("bin").join(bridge_name);
+    let hook_meta = fs::symlink_metadata(&bin_hook).unwrap();
+    let bridge_meta = fs::symlink_metadata(&bin_bridge).unwrap();
+    assert!(!hook_meta.file_type().is_symlink() && hook_meta.is_file());
+    assert!(!bridge_meta.file_type().is_symlink() && bridge_meta.is_file());
+    assert_eq!(compute_sha256(&bin_hook).unwrap(), v1_hook_sha);
+    assert_eq!(compute_sha256(&bin_bridge).unwrap(), v1_bridge_sha);
+
+    // 2. Install & activate v2 with forced copy fallback
+    let out2 = run_bridge_cli_with_env(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v2.to_str().unwrap(),
+        ],
+        &[("AGENT_OTEL_TEST_FORCE_COPY_FALLBACK", "1")],
+    );
+    assert!(
+        out2.status.success(),
+        "copy fallback activate v2 failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&out2.stdout),
+        String::from_utf8_lossy(&out2.stderr)
+    );
+    assert!(!fs::symlink_metadata(&bin_hook)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(compute_sha256(&bin_hook).unwrap(), v2_hook_sha);
+    assert_eq!(compute_sha256(&bin_bridge).unwrap(), v2_bridge_sha);
+    assert_eq!(
+        compute_sha256(&runtime_home.join("previous").join(hook_name)).unwrap(),
+        v1_hook_sha
+    );
+    assert_eq!(
+        compute_sha256(&runtime_home.join("previous").join(bridge_name)).unwrap(),
+        v1_bridge_sha
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_sweep_leftover_temp_entries_and_reactivate_prints_ondisk_manifest() {
+    let root = create_test_dir("sweep_and_manifest_test");
+    let runtime_home = root.join("runtime");
+    let user_home = root.join("home");
+    let build_v1 = root.join("build_v1");
+    fs::create_dir_all(&user_home).unwrap();
+
+    write_verified_build(&build_v1, b"sweep-v1-hook", b"sweep-v1-bridge");
+
+    // Seed leftover temp entries to verify sweep at start of install and activate
+    fs::create_dir_all(runtime_home.join(".rollback.stage.9999.1.0")).unwrap();
+    fs::write(
+        runtime_home.join(".rollback.stage.9999.1.0/stale"),
+        b"stale",
+    )
+    .unwrap();
+    fs::create_dir_all(runtime_home.join(".previous.stage.9999.1.0")).unwrap();
+    fs::create_dir_all(runtime_home.join("bin")).unwrap();
+    fs::write(
+        runtime_home
+            .join("bin")
+            .join(".agent-hook.exe.old.9999.1.0"),
+        b"old-exe",
+    )
+    .unwrap();
+
+    // 1. Stage v1 first without activating
+    let out_stage = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+    );
+    assert!(out_stage.status.success());
+    assert!(!runtime_home.join(".rollback.stage.9999.1.0").exists());
+    assert!(!runtime_home.join(".previous.stage.9999.1.0").exists());
+    assert!(!runtime_home
+        .join("bin")
+        .join(".agent-hook.exe.old.9999.1.0")
+        .exists());
+
+    // Customize built_at in on-disk manifest of staged v1 to verify re-activation loads & prints it
+    let staged_v1_dir = fs::read_dir(runtime_home.join("versions"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mut staged_manifest: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(staged_v1_dir.join("manifest.json")).unwrap())
+            .unwrap();
+    staged_manifest.built_at = "1234567890".to_string();
+    fs::write(
+        staged_v1_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&staged_manifest).unwrap(),
+    )
+    .unwrap();
+
+    // Seed leftover temp entries again before activate
+    fs::create_dir_all(runtime_home.join(".rollback.stage.8888.1.0")).unwrap();
+    fs::create_dir_all(runtime_home.join(".previous.stage.8888.1.0")).unwrap();
+    fs::write(
+        runtime_home
+            .join("bin")
+            .join(".agent-hook.exe.old.8888.1.0"),
+        b"old-exe-2",
+    )
+    .unwrap();
+
+    let out_act = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+    );
+    assert!(out_act.status.success());
+    assert!(!runtime_home.join(".rollback.stage.8888.1.0").exists());
+    assert!(!runtime_home.join(".previous.stage.8888.1.0").exists());
+    assert!(!runtime_home
+        .join("bin")
+        .join(".agent-hook.exe.old.8888.1.0")
+        .exists());
+    let stdout_act = String::from_utf8_lossy(&out_act.stdout);
+    assert!(
+        stdout_act.contains("1234567890"),
+        "re-activating already-staged version must load and print on-disk manifest (expected built_at 1234567890 in stdout): {stdout_act}"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_rollback_verifies_version_hashes_and_stages_suffixed_id_on_mismatch() {
+    let root = create_test_dir("rollback_hash_mismatch_test");
+    let runtime_home = root.join("runtime");
+    let user_home = root.join("home");
+    let build_v1 = root.join("build_v1");
+    let build_v2 = root.join("build_v2");
+    fs::create_dir_all(&user_home).unwrap();
+
+    let (hook_name, bridge_name) = exe_names();
+    let (v1_hook_sha, v1_bridge_sha) = write_verified_build(
+        &build_v1,
+        b"verified-v1-hook-bytes",
+        b"verified-v1-bridge-bytes",
+    );
+    let (v2_hook_sha, v2_bridge_sha) = write_verified_build(
+        &build_v2,
+        b"verified-v2-hook-bytes",
+        b"verified-v2-bridge-bytes",
+    );
+
+    let out1 = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+    );
+    assert!(out1.status.success());
+    let active1: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
+            .unwrap();
+    let v1_id = active1.version_id;
+
+    let out2 = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v2.to_str().unwrap(),
+        ],
+    );
+    assert!(out2.status.success());
+
+    // Tamper with versions/<v1_id>/agent-hook so its SHA-256 no longer matches previous/manifest.json
+    let v1_dir = runtime_home.join("versions").join(&v1_id);
+    fs::write(v1_dir.join(hook_name), b"tampered-corrupted-v1-hook-bytes").unwrap();
+
+    // Rollback must detect the hash mismatch in versions/<v1_id>/, stage from previous/ under a
+    // suffixed version_id (<v1_id>-<8hex>), and activate that verified version.
+    let out_rb = run_bridge_cli(&runtime_home, &user_home, &["local", "rollback"]);
+    assert!(
+        out_rb.status.success(),
+        "rollback with mismatched versions/<id> should succeed by staging from previous/: stdout={} stderr={}",
+        String::from_utf8_lossy(&out_rb.stdout),
+        String::from_utf8_lossy(&out_rb.stderr)
+    );
+
+    let bin_dir = runtime_home.join("bin");
+    assert_eq!(
+        compute_sha256(&bin_dir.join(hook_name)).unwrap(),
+        v1_hook_sha,
+        "rollback activated tampered binary instead of verified previous/ binary!"
+    );
+    assert_eq!(
+        compute_sha256(&bin_dir.join(bridge_name)).unwrap(),
+        v1_bridge_sha
+    );
+
+    let active_after_rb: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
+            .unwrap();
+    assert!(
+        active_after_rb.version_id.starts_with(&format!("{v1_id}-"))
+            && active_after_rb.version_id.len() == v1_id.len() + 1 + 8,
+        "expected suffixed version_id '<v1_id>-<8hex>', got '{}'",
+        active_after_rb.version_id
+    );
+
+    // Next: if both versions/<id> and previous/ fail hash verification, rollback must fail
+    // WITHOUT leaving the installation without a usable current / bin.
+    let out3 = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v2.to_str().unwrap(),
+        ],
+    );
+    assert!(out3.status.success());
+    let active_v2: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
+            .unwrap();
+
+    // Corrupt both versions/<prev_id> and previous/<hook_name>
+    let prev_manifest: LocalVersionManifest = serde_json::from_str(
+        &fs::read_to_string(runtime_home.join("previous/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        runtime_home
+            .join("versions")
+            .join(&prev_manifest.version_id)
+            .join(hook_name),
+        b"corrupted-in-versions",
+    )
+    .unwrap();
+    fs::write(
+        runtime_home.join("previous").join(hook_name),
+        b"corrupted-in-previous",
+    )
+    .unwrap();
+
+    let out_bad_rb = run_bridge_cli(&runtime_home, &user_home, &["local", "rollback"]);
+    assert!(
+        !out_bad_rb.status.success(),
+        "rollback must fail when both versions/<id> and previous/ fail SHA-256 verification"
+    );
+
+    // Active v2 must remain completely usable
+    assert_eq!(
+        compute_sha256(&bin_dir.join(hook_name)).unwrap(),
+        v2_hook_sha
+    );
+    assert_eq!(
+        compute_sha256(&bin_dir.join(bridge_name)).unwrap(),
+        v2_bridge_sha
+    );
+    let still_active: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
+            .unwrap();
+    assert_eq!(still_active.version_id, active_v2.version_id);
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_version_id_traversal_and_invalid_characters_rejected() {
+    let root = create_test_dir("version_id_traversal_test");
+    let runtime_home = root.join("runtime");
+    let user_home = root.join("home");
+    let build_v1 = root.join("build_v1");
+    fs::create_dir_all(&user_home).unwrap();
+
+    let (hook_name, bridge_name) = exe_names();
+    let (v1_hook_sha, v1_bridge_sha) =
+        write_verified_build(&build_v1, b"safe-v1-hook", b"safe-v1-bridge");
+
+    let out1 = run_bridge_cli(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            build_v1.to_str().unwrap(),
+        ],
+    );
+    assert!(out1.status.success());
+    let active1: LocalVersionManifest =
+        serde_json::from_str(&fs::read_to_string(runtime_home.join("active.json")).unwrap())
+            .unwrap();
+
+    let prev_dir = runtime_home.join("previous");
+    write_verified_build(&prev_dir, b"evil-hook", b"evil-bridge");
+    let evil_hook_sha = compute_sha256(&prev_dir.join(hook_name)).unwrap();
+    let evil_bridge_sha = compute_sha256(&prev_dir.join(bridge_name)).unwrap();
+
+    for bad_id in [
+        "../escape",
+        "..\\escape",
+        "..",
+        ".",
+        "a..b",
+        "sub/dir",
+        "sub\\dir",
+        "/abs/path",
+        "C:\\abs\\path",
+        "bad space",
+        "bad$char",
+        "",
+    ] {
+        let mut bad_manifest = active1.clone();
+        bad_manifest.version_id = bad_id.to_string();
+        bad_manifest.binaries[0].sha256 = evil_hook_sha.clone();
+        bad_manifest.binaries[1].sha256 = evil_bridge_sha.clone();
+        fs::write(
+            prev_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&bad_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let out_rb = run_bridge_cli(&runtime_home, &user_home, &["local", "rollback"]);
+        assert!(
+            !out_rb.status.success(),
+            "rollback must reject invalid version_id '{bad_id}'"
+        );
+        assert!(
+            !runtime_home.join("escape").exists(),
+            "path traversal created directory outside versions/ for '{bad_id}'!"
+        );
+        assert_eq!(
+            compute_sha256(&runtime_home.join("bin").join(hook_name)).unwrap(),
+            v1_hook_sha
+        );
+        assert_eq!(
+            compute_sha256(&runtime_home.join("bin").join(bridge_name)).unwrap(),
+            v1_bridge_sha
+        );
+    }
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn test_failed_activation_reports_restore_incomplete_and_keeps_rollback_backup() {
+    let root = create_test_dir("restore_error_reporting_test");
+    let runtime_home = root.join("runtime");
+    let user_home = root.join("home");
+    let candidate_build = root.join("candidate_build");
+    fs::create_dir_all(&user_home).unwrap();
+
+    let (hook_name, _bridge_name) = exe_names();
+    let Some((_old_hook_sha, _old_bridge_sha)) = seed_active_symlink_runtime(
+        &runtime_home,
+        "old",
+        b"old-hook-for-restore-err",
+        b"old-bridge-for-restore-err",
+    ) else {
+        let _ = fs::remove_dir_all(&root);
+        return;
+    };
+    write_verified_build(
+        &candidate_build,
+        b"new-hook-for-restore-err",
+        b"new-bridge-for-restore-err",
+    );
+
+    // Block activation at active.json by making active.json a non-empty directory.
+    // With AGENT_OTEL_TEST_FORCE_COPY_FALLBACK=1, bin/<hook> (a symlink) is replaced with a
+    // regular file copy during activation, then active.json fails with IsADirectory, and then
+    // restoring bin/<hook> back to PriorEntryState::Symlink fails with OS error 1314.
+    let active_json_path = runtime_home.join("active.json");
+    fs::remove_file(&active_json_path).unwrap();
+    fs::create_dir_all(active_json_path.join("blocker")).unwrap();
+    fs::write(active_json_path.join("blocker/lock"), b"blocked").unwrap();
+
+    let output = run_bridge_cli_with_env(
+        &runtime_home,
+        &user_home,
+        &[
+            "local",
+            "install",
+            "--activate",
+            "--from-build",
+            candidate_build.to_str().unwrap(),
+        ],
+        &[("AGENT_OTEL_TEST_FORCE_COPY_FALLBACK", "1")],
+    );
+    assert!(
+        !output.status.success(),
+        "activation must fail when active.json is a directory"
+    );
+
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        combined.contains("restore incomplete"),
+        "expected 'restore incomplete' in error output, got: {combined}"
+    );
+
+    // The .rollback.stage.* backup directory must be preserved in runtime_home
+    let rollback_backups: Vec<_> = fs::read_dir(&runtime_home)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(".rollback.stage.")
+        })
+        .collect();
+    assert_eq!(
+        rollback_backups.len(),
+        1,
+        "expected .rollback.stage.* directory to be preserved on restore error"
+    );
+    let _ = hook_name;
+
     let _ = fs::remove_dir_all(&root);
 }

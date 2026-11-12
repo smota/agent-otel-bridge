@@ -90,7 +90,7 @@ Ao alterar cliente, daemon, IPC, hooks, adaptadores CLI/desktop, instalação, a
 * **Canonical Path**: Always project absolute `%LOCALAPPDATA%\agent-otel-bridge\bin\agent-hook.exe`.
 * **Safe Quoting**: Always double-quote executable paths in hook configuration strings.
 * **Non-Destructive Hooks**: Preserve third-party hooks (`herdr`, `rtk`) and update bridge hooks in-place.
-* **Atomic Deployment**: Stage, verify SHA-256 hashes, and activate using `agent-otel-bridge local install`.
+* **Atomic Deployment**: Stage and verify SHA-256 hashes with `agent-otel-bridge local install`, and activate using `agent-otel-bridge local install --activate`.
 
 ### 3.6 Platform Provider Architecture & Conformance Validation
 * **Decoupled Platform Contracts**: AI harnesses must implement `PlatformDescriptor` (`agent-otel-core`), `PlatformQuotaProvider` (`agent-otel-daemon`), and `ClientAdapter` (`agent-otel-cli`).

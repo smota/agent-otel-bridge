@@ -517,7 +517,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 crate::local::get_canonical_bin_dir().display()
             )
         } else {
-            "[info] not installed (run 'agent-otel-bridge local install')".to_string()
+            "[info] not installed (run 'agent-otel-bridge local install --activate')".to_string()
         }
     );
 

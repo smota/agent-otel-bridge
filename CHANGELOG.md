@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Model-less hook events now attribute `gen_ai.provider.name` and `gen_ai.system` to the harness default provider (resolved from the wire header `ClientKind` or payload `agent_name` in legacy mode; omitted in `gen_ai_latest_experimental` mode when the model is absent) instead of unconditionally falling back to `"google"`. AI provider breakdown dashboards will shift accordingly for harnesses whose hook payloads omit `"model"` (such as Claude Code).
 
+### Changed
+
+- **Upgrade note (`local install` staging vs activation):** `agent-otel-bridge local install` now stages candidate binaries and `manifest.json` under `versions/<version_id>/` by default without activating; pass `--activate` (`agent-otel-bridge local install --activate`) to promote the staged version into `bin/`, `current`, `active.json`, and `previous/`.
+- **Digest-suffixed version IDs (`<id>-<8hex>`):** When staging a build whose base `<semver>-<short_commit>[-dirty]` directory already exists with different binary SHA-256 hashes (or when rollback detects a hash mismatch in `versions/<id>/` and stages from `previous/`), the runtime derives `<id>-<8hex>` from the first 8 hex characters of `SHA256(<hook_sha256>:<bridge_sha256>)` instead of overwriting existing version directories.
+- **Canonical `bin/` symlink layout:** Where the OS and process privileges allow symlinks, `bin/agent-hook(.exe)` and `bin/agent-otel-bridge(.exe)` are now file symlinks pointing directly to `../versions/<version_id>/<binary>` rather than regular file copies or links through `current`, falling back to staged file copies only when symlink privilege is unavailable (such as Windows OS error 1314 without Developer Mode).
+
 ## [0.9.0] - 2026-11-06
 
 See the [release notes](docs/releases/v0.9.0.md).
