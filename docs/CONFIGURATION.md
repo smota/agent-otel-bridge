@@ -36,12 +36,17 @@ All environment variables follow standard OpenTelemetry conventions with project
 | `AGENT_OTEL_QUOTA_FILE` | *(Auto-discovered)* | Custom file path to read quota state JSON. Defaults to auto-discovering in `~/.state/quota.json`, `~/.gemini/quota.json`, or `~/.agent-otel/quota.json`. |
 | `AGENT_OTEL_LEGACY_ATTRIBUTES` | `false` | When set to `true`, emits legacy `agy.*` aliases alongside canonical OpenTelemetry `gen_ai.*` and `agent.*` conventions for backward compatibility. |
 | `OTEL_SEMCONV_STABILITY_OPT_IN` | *(unset)* | Comma-separated tokens. Span export changes only when a token equals `gen_ai_latest_experimental` after trimming. The match is case-sensitive. Any other token is ignored. Unset leaves the default export unchanged. |
-| `AGENT_OTEL_ENRICH_EMAIL` | `false` | `true` or `1` also reads `$GIT_AUTHOR_EMAIL` and git config for `user.email`. Otherwise only the hook payload and `$USER_EMAIL` are used. |
-| `AGENT_OTEL_WORKSPACE_PATH` | `absolute` | `absolute` emits full paths. `relative` emits a path under the project root, or omits it. `hash` emits a stable SHA-256 hex of the absolute path. |
+| `AGENT_OTEL_ENRICH_EMAIL` | `false` | `true` or `1` also reads `$GIT_AUTHOR_EMAIL` and git config for `user.email`. In opt-in capture modes, otherwise only the payload and `$USER_EMAIL` are used. Minimal omits email and skips ambient email harvesting. |
+| `AGENT_OTEL_WORKSPACE_PATH` | `hash` | Applies only in opt-in capture modes: `absolute` emits full paths, `relative` emits a path under the root (or omits it), `hash` emits a per-install keyed HMAC pseudonym (or omits it if the key is unavailable). Minimal always omits paths. |
+| `AGENT_OTEL_CAPTURE_MODE` | `minimal` | Unset, invalid and explicit `minimal` use the content-free projection. `metadata_only` / `metadata-only` exposes operational identifiers; `full` also retains bounded error text. Both opt-ins use best-effort credential scrubbing. |
 
 ### Exported content under current defaults
 
-Defaults are **not zero-content or privacy-safe**: absolute workspace paths, an explicit `USER_EMAIL` even with enrichment off (unless a payload email takes precedence), raw error status messages, and plaintext branch and repository names can be exported. See the [F5 code evidence](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour). Path mode changes only path fields; experimental message truncation is not redaction. [Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection and remains planned work.
+The default `minimal` mode omits workspace paths, hostnames, email, content and raw errors. It projects custom names into per-install keyed pseudonyms, maps categories to closed vocabularies, and applies exact-key span/resource allowlists, including a final span check at the export batch boundary. Both `vcs.commit.sha` and experimental `vcs.ref.head.revision` contain `commit_<32hex>` pseudonyms (domain `commit`, canonical input: lowercase full hexadecimal SHA); without a key they are omitted. Raw commit SHAs can identify a public or forge-hosted repository through global search, so Minimal never exports them. Pseudonymization is not anonymity; permitted opaque session IDs still allow linkage. See [privacy projection](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour).
+
+A2 follow-up: a non-opaque conversation ID is currently hashed **without a key** into `trace_id` before privacy projection. This can allow dictionary matching of predictable IDs; A2 must revisit that derivation. A1 leaves trace ID behavior unchanged.
+
+The daemon loads `pseudonym.key` once at startup in its runtime home (`AGENT_OTEL_HOME` overrides; Windows `%LOCALAPPDATA%/agent-otel-bridge`; Unix `$XDG_DATA_HOME/agent-otel-bridge` or `$HOME/.local/share/agent-otel-bridge`). A missing key is generated with the OS CSPRNG and created exclusively (Unix 0600; Windows protected owner-only DACL, applied before writing key bytes and also on existing keys before reading). On Windows, a home outside the current user's profile triggers one static startup warning without paths or key material. The runtime directory still inherits its parent's ACL; protect that directory against access/replacement by other users even though the key file itself has a restricted DACL. Failure omits fields needing pseudonyms and still exports spans, recording `agent.bridge.privacy.key_unavailable.total{reason="key_unavailable"}`. Keys never appear in Debug, logs or exports. Pseudonyms use field-domain-separated HMAC-SHA256 truncated to 16 bytes and are stable only per install; A2 will replace this key with a customer K_link-derived key.
 
 ### OTLP/HTTP export
 
@@ -51,11 +56,12 @@ Signal-specific variables override the general `OTEL_EXPORTER_OTLP_*` variable f
 
 ### Resource identity
 
-Detected attributes are `service.name`, `service.version`, `host.name`, `os.type`, `telemetry.sdk.name=agent-otel-bridge`, `telemetry.sdk.language=rust`, `telemetry.sdk.version`, `telemetry.distro.name=agent-otel-bridge`, `telemetry.distro.version`, and a process-stable `service.instance.id`. `os.type` is `darwin` when the Rust OS name is `macos`.
+Before privacy projection, resource detection supplies service, host, OS, telemetry SDK/distro and process instance identity. Export applies the capture mode:
 
-`deployment.environment` is emitted only when that key is present in `OTEL_RESOURCE_ATTRIBUTES`. `deployment.environment.name` is emitted only when that key is present. Neither is copied from the other, and neither defaults to `homelab`.
+- Minimal allows only `service.name` (fixed to `agent-otel-bridge`, replacing `OTEL_SERVICE_NAME`), bridge `service.version`, closed `service.namespace=agent-otel-bridge`, the bridge's telemetry SDK/distro identity, `os.type`, `agent.capture.mode`, and the two deployment environment keys. Version overrides are replaced with the bridge version. Deployment values are closed (`development`, `dev`, `test`, `staging`, `production`, `prod`, `local`, otherwise `other`). Other `OTEL_RESOURCE_ATTRIBUTES` keys are dropped, including `host.name`, `service.instance.id`, `enduser.id`, `team`, `host.id`, `k8s.pod.name`, and `os.description`.
+- Opt-in modes preserve operational resource overrides and apply best-effort credential scrubbing. Neither deployment environment key is invented or copied from the other. `os.type` is `darwin` for macOS.
 
-`OTEL_RESOURCE_ATTRIBUTES` overrides detected attributes except `service.name` and the `telemetry.sdk.*` / `telemetry.distro.*` identity. An explicit `service.instance.id` in the list replaces the generated id.
+The collector examples do not run the system resource detector, preventing it from reintroducing `host.name` after daemon projection.
 
 ### Experimental semantic conventions
 

@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+use crate::privacy::project_resource;
+pub use crate::privacy::CaptureMode;
 use agent_otel_core::otlp::build_resource_with;
 use agent_otel_core::semconv::DEPLOYMENT_ENVIRONMENT;
 use opentelemetry_proto::tonic::resource::v1::Resource;
@@ -31,18 +33,19 @@ impl SignalExportConfig {
     }
 }
 
-/// How workspace path attributes are emitted on spans.
+/// How workspace path attributes are emitted on spans in opt-in capture modes.
 ///
-/// Parsed from `AGENT_OTEL_WORKSPACE_PATH`. Unset and unrecognized values are
-/// [`WorkspacePathMode::Absolute`].
+/// Parsed from `AGENT_OTEL_WORKSPACE_PATH`. Unset and unrecognized values default
+/// to [`WorkspacePathMode::Hash`]. In [`CaptureMode::Minimal`], workspace paths
+/// are always omitted regardless of this setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WorkspacePathMode {
-    /// Emit `workspace.path` and `workspace.project_root` unchanged.
-    #[default]
+    /// Emit `workspace.path` and `workspace.project_root` unchanged (only in opt-in capture modes).
     Absolute,
-    /// Emit a path relative to the project root, and only the root's directory name.
+    /// Emit a path relative to the project root, and only the root's directory name (only in opt-in capture modes).
     Relative,
-    /// Emit lowercase hex SHA-256 digests of the absolute path strings.
+    /// Emit per-install keyed HMAC-SHA256 pseudonyms, or omit when no key is available.
+    #[default]
     Hash,
 }
 
@@ -62,11 +65,13 @@ pub struct DaemonConfig {
     /// `gen_ai_latest_experimental`.
     pub gen_ai_latest_experimental: bool,
     /// `AGENT_OTEL_ENRICH_EMAIL=true|1` restores git-config and `$GIT_AUTHOR_EMAIL`
-    /// fallback for `user.email`. Default false. Payload email and `$USER_EMAIL`
-    /// are kept either way.
+    /// fallback for `user.email` in opt-in capture modes (`metadata_only` / `full`).
+    /// Default false. In `minimal` capture mode, `user.email` is always omitted.
     pub enrich_email: bool,
-    /// `AGENT_OTEL_WORKSPACE_PATH`: `absolute` (default), `relative`, or `hash`.
+    /// `AGENT_OTEL_WORKSPACE_PATH`: `hash` (default), `relative`, or `absolute`.
     pub workspace_path_mode: WorkspacePathMode,
+    /// `AGENT_OTEL_CAPTURE_MODE`: `minimal` (default), `metadata_only` / `metadata-only`, or `full`.
+    pub capture_mode: CaptureMode,
     pub traces: SignalExportConfig,
     pub metrics: SignalExportConfig,
     pub sdk_disabled: bool,
@@ -122,6 +127,7 @@ impl DaemonConfig {
         let gen_ai_latest_experimental = semconv_opt_in_gen_ai_latest(get);
         let enrich_email = flag_enabled(get("AGENT_OTEL_ENRICH_EMAIL").as_deref());
         let workspace_path_mode = parse_workspace_path_mode(get("AGENT_OTEL_WORKSPACE_PATH"));
+        let capture_mode = CaptureMode::parse(get("AGENT_OTEL_CAPTURE_MODE").as_deref());
 
         Self {
             otlp_endpoint: export.base_endpoint,
@@ -137,6 +143,7 @@ impl DaemonConfig {
             gen_ai_latest_experimental,
             enrich_email,
             workspace_path_mode,
+            capture_mode,
             traces: export.traces,
             metrics: export.metrics,
             sdk_disabled: export.sdk_disabled,
@@ -151,13 +158,15 @@ impl DaemonConfig {
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect();
-        build_resource_with(
+        let mut resource = build_resource_with(
             &self.service_name,
             &self.environment,
             &self.service_version,
             &self.service_instance_id,
             &extra,
-        )
+        );
+        project_resource(&mut resource, self.capture_mode);
+        resource
     }
 
     pub fn traces_url(&self) -> String {
@@ -218,9 +227,10 @@ fn flag_enabled(value: Option<&str>) -> bool {
 
 fn parse_workspace_path_mode(value: Option<String>) -> WorkspacePathMode {
     match value.as_deref().map(str::trim) {
-        Some("relative") => WorkspacePathMode::Relative,
-        Some("hash") => WorkspacePathMode::Hash,
-        _ => WorkspacePathMode::Absolute,
+        Some(v) if v.eq_ignore_ascii_case("absolute") => WorkspacePathMode::Absolute,
+        Some(v) if v.eq_ignore_ascii_case("relative") => WorkspacePathMode::Relative,
+        Some(v) if v.eq_ignore_ascii_case("hash") => WorkspacePathMode::Hash,
+        _ => WorkspacePathMode::Hash,
     }
 }
 
@@ -586,6 +596,7 @@ mod tests {
     #[test]
     fn resource_uses_service_name_and_attribute_merge() {
         let config = DaemonConfig::from_vars(&var_map(&[
+            ("AGENT_OTEL_CAPTURE_MODE", "metadata_only"),
             ("OTEL_SERVICE_NAME", "explicit"),
             ("OTEL_SERVICE_VERSION", "1.2.3"),
             (
@@ -659,27 +670,55 @@ mod tests {
     fn privacy_flags_default_off_and_reject_unknown_path_modes() {
         let unset = DaemonConfig::from_vars(&var_map(&[]));
         assert!(!unset.enrich_email);
-        assert_eq!(unset.workspace_path_mode, WorkspacePathMode::Absolute);
+        assert_eq!(unset.workspace_path_mode, WorkspacePathMode::Hash);
+        assert_eq!(unset.capture_mode, CaptureMode::Minimal);
+        assert_eq!(
+            attr(
+                &unset.resource(),
+                agent_otel_core::semconv::AGENT_CAPTURE_MODE
+            ),
+            Some("minimal")
+        );
 
         let enabled = DaemonConfig::from_vars(&var_map(&[
             ("AGENT_OTEL_ENRICH_EMAIL", "true"),
-            ("AGENT_OTEL_WORKSPACE_PATH", " hash "),
+            ("AGENT_OTEL_WORKSPACE_PATH", " absolute "),
+            ("AGENT_OTEL_CAPTURE_MODE", " metadata-only "),
         ]));
         assert!(enabled.enrich_email);
-        assert_eq!(enabled.workspace_path_mode, WorkspacePathMode::Hash);
+        assert_eq!(enabled.workspace_path_mode, WorkspacePathMode::Absolute);
+        assert_eq!(enabled.capture_mode, CaptureMode::MetadataOnly);
+        assert_eq!(
+            attr(
+                &enabled.resource(),
+                agent_otel_core::semconv::AGENT_CAPTURE_MODE
+            ),
+            Some("metadata_only")
+        );
 
         let numeric = DaemonConfig::from_vars(&var_map(&[
             ("AGENT_OTEL_ENRICH_EMAIL", "1"),
             ("AGENT_OTEL_WORKSPACE_PATH", "relative"),
+            ("AGENT_OTEL_CAPTURE_MODE", "full"),
         ]));
         assert!(numeric.enrich_email);
         assert_eq!(numeric.workspace_path_mode, WorkspacePathMode::Relative);
+        assert_eq!(numeric.capture_mode, CaptureMode::Full);
+        assert_eq!(
+            attr(
+                &numeric.resource(),
+                agent_otel_core::semconv::AGENT_CAPTURE_MODE
+            ),
+            Some("full")
+        );
 
         let invalid = DaemonConfig::from_vars(&var_map(&[
             ("AGENT_OTEL_ENRICH_EMAIL", "yes"),
             ("AGENT_OTEL_WORKSPACE_PATH", "basename"),
+            ("AGENT_OTEL_CAPTURE_MODE", "unrecognized"),
         ]));
         assert!(!invalid.enrich_email);
-        assert_eq!(invalid.workspace_path_mode, WorkspacePathMode::Absolute);
+        assert_eq!(invalid.workspace_path_mode, WorkspacePathMode::Hash);
+        assert_eq!(invalid.capture_mode, CaptureMode::Minimal);
     }
 }

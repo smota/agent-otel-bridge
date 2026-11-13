@@ -405,10 +405,20 @@ pub struct AgentHookInput {
     #[serde(alias = "vcs_system", alias = "vcsSystem", default)]
     pub vcs_system: Option<String>,
 
-    #[serde(alias = "vcs_repository", alias = "vcsRepository", default)]
+    #[serde(
+        alias = "vcs_repository",
+        alias = "vcsRepository",
+        alias = "vcs.repository.name",
+        default
+    )]
     pub vcs_repository: Option<String>,
 
-    #[serde(alias = "vcs_branch", alias = "vcsBranch", default)]
+    #[serde(
+        alias = "vcs_branch",
+        alias = "vcsBranch",
+        alias = "vcs.branch.name",
+        default
+    )]
     pub vcs_branch: Option<String>,
 
     #[serde(alias = "vcs_commit", alias = "vcsCommit", default)]
@@ -418,7 +428,12 @@ pub struct AgentHookInput {
     pub vcs_worktree: Option<bool>,
 
     // --- Tool Archetypes & I/O Economics (v0.3) ---
-    #[serde(alias = "tool_archetype", alias = "toolArchetype", default)]
+    #[serde(
+        alias = "tool_archetype",
+        alias = "toolArchetype",
+        default,
+        deserialize_with = "deserialize_closed_tool_archetype"
+    )]
     pub tool_archetype: Option<String>,
 
     #[serde(alias = "tool_binary", alias = "toolBinary", default)]
@@ -441,7 +456,12 @@ pub struct AgentHookInput {
     pub tool_tokens_saved: Option<i64>,
 
     // --- Universal Capabilities (MCP & Skills) & Waste (v0.3) ---
-    #[serde(alias = "capability_kind", alias = "capabilityKind", default)]
+    #[serde(
+        alias = "capability_kind",
+        alias = "capabilityKind",
+        default,
+        deserialize_with = "deserialize_closed_capability_kind"
+    )]
     pub capability_kind: Option<String>,
 
     #[serde(alias = "capability_namespace", alias = "capabilityNamespace", default)]
@@ -740,6 +760,15 @@ impl AgentHookInput {
             }
         }
 
+        if let Some(raw) = self.capability_kind.as_deref() {
+            self.capability_kind =
+                Some(crate::capability::CapabilityKind::normalize_str_name(raw).to_string());
+        }
+        if let Some(raw) = self.tool_archetype.as_deref() {
+            self.tool_archetype =
+                Some(crate::archetype::ToolArchetype::normalize_str_name(raw).to_string());
+        }
+
         // Multi-layer Error Categorization
         if self.error.as_ref().is_some_and(|e| !e.trim().is_empty())
             && self.error_category.is_none()
@@ -765,6 +794,36 @@ impl AgentHookInput {
             }
         }
     }
+}
+
+fn deserialize_closed_tool_archetype<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Option<String> = Option::deserialize(deserializer)?;
+    Ok(raw.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(crate::archetype::ToolArchetype::normalize_str_name(trimmed).to_string())
+        }
+    }))
+}
+
+fn deserialize_closed_capability_kind<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Option<String> = Option::deserialize(deserializer)?;
+    Ok(raw.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(crate::capability::CapabilityKind::normalize_str_name(trimmed).to_string())
+        }
+    }))
 }
 
 fn invalid_json_input(message: &'static str) -> serde_json::Error {

@@ -7,15 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- Model-less hook events now attribute `gen_ai.provider.name` and `gen_ai.system` to the harness default provider (resolved from the wire header `ClientKind` or payload `agent_name` in legacy mode; omitted in `gen_ai_latest_experimental` mode when the model is absent) instead of unconditionally falling back to `"google"`. AI provider breakdown dashboards will shift accordingly for harnesses whose hook payloads omit `"model"` (such as Claude Code).
+- Explicit daemon-side ingress privacy projection (`AGENT_OTEL_CAPTURE_MODE`: `minimal` default, `metadata_only` / `metadata-only`, `full`) stamped as `agent.capture.mode` on every exported trace and metric `Resource` (`AOB#17` / `F5`).
 
 ### Changed
 
+- **Minimal capture uses per-install keyed pseudonyms, not reversible path hashes:** `workspace.path` and `workspace.project_root` are omitted. Project/repository and custom tool, capability and agent names use domain-separated HMAC-SHA256, truncated to 16 bytes (32 hex characters). Pseudonyms are stable only within an install; this is not an anonymity guarantee. A key failure omits pseudonymized fields while spans still export, and increments a static-label counter. A2 will replace the install key with a customer K_link-derived key.
+- Minimal spans and resources now use explicit key allowlists. Minimal `service.name` is fixed to `agent-otel-bridge`, versions and telemetry identity are bridge-owned, and deployment values use a closed vocabulary. Collector examples no longer run the system resource detector, which could reintroduce `host.name`.
+- Tool archetype and capability kind use closed enums in every mode; unknown values become `other`. Opt-in credential scrubbing covers common JSON/YAML assignments, CLI token flags, API-key headers and named AWS keys, but remains best-effort. Opt-in `hash` workspace projection also uses the install HMAC key and omits paths if unavailable.
 - **Upgrade note (`local install` staging vs activation):** `agent-otel-bridge local install` now stages candidate binaries and `manifest.json` under `versions/<version_id>/` by default without activating; pass `--activate` (`agent-otel-bridge local install --activate`) to promote the staged version into `bin/`, `current`, `active.json`, and `previous/`.
 - **Digest-suffixed version IDs (`<id>-<8hex>`):** When staging a build whose base `<semver>-<short_commit>[-dirty]` directory already exists with different binary SHA-256 hashes (or when rollback detects a hash mismatch in `versions/<id>/` and stages from `previous/`), the runtime derives `<id>-<8hex>` from the first 8 hex characters of `SHA256(<hook_sha256>:<bridge_sha256>)` instead of overwriting existing version directories.
 - **Canonical `bin/` symlink layout:** Where the OS and process privileges allow symlinks, `bin/agent-hook(.exe)` and `bin/agent-otel-bridge(.exe)` are now file symlinks pointing directly to `../versions/<version_id>/<binary>` rather than regular file copies or links through `current`, falling back to staged file copies only when symlink privilege is unavailable (such as Windows OS error 1314 without Developer Mode).
+
+### Fixed
+
+- Model-less hook events now attribute `gen_ai.provider.name` and `gen_ai.system` to the harness default provider (resolved from the wire header `ClientKind` or payload `agent_name` in legacy mode; omitted in `gen_ai_latest_experimental` mode when the model is absent) instead of unconditionally falling back to `"google"`. AI provider breakdown dashboards will shift accordingly for harnesses whose hook payloads omit `"model"` (such as Claude Code).
 
 ## [0.9.0] - 2026-11-06
 

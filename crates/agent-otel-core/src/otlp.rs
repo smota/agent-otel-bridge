@@ -489,7 +489,8 @@ pub fn build_span_from_resolved(
 
     // Tool Archetypes & I/O Economics (v0.3)
     if let Some(arch) = input.tool_archetype.as_deref() {
-        attributes.push(kv_string(AGENT_TOOL_ARCHETYPE, arch));
+        let normalized = crate::archetype::ToolArchetype::normalize_str_name(arch);
+        attributes.push(kv_string(AGENT_TOOL_ARCHETYPE, normalized));
     }
     if let Some(bin) = input.tool_binary.as_deref() {
         attributes.push(kv_string(AGENT_TOOL_BINARY, bin));
@@ -515,7 +516,8 @@ pub fn build_span_from_resolved(
 
     // Universal Capabilities & Waste (v0.3)
     if let Some(ckind) = input.capability_kind.as_deref() {
-        attributes.push(kv_string(CAPABILITY_KIND, ckind));
+        let normalized = crate::capability::CapabilityKind::normalize_str_name(ckind);
+        attributes.push(kv_string(CAPABILITY_KIND, normalized));
     }
     if let Some(cns) = input.capability_namespace.as_deref() {
         attributes.push(kv_string(CAPABILITY_NAMESPACE, cns));

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0 */
 use crate::{
     batch::SpanBatcher,
-    config::{DaemonConfig, WorkspacePathMode},
+    config::{CaptureMode, DaemonConfig, WorkspacePathMode},
     context_cache::ContextCache,
     diagnostics::Diagnostics,
     exporter::{ExporterBuildError, OtlpExporter},
@@ -23,6 +23,7 @@ pub struct Daemon {
     config: DaemonConfig,
     exporter: OtlpExporter,
     shutdown: CancellationToken,
+    pseudonym_key: Option<crate::pseudonym_key::PseudonymKey>,
 }
 impl Daemon {
     pub fn new(
@@ -30,10 +31,14 @@ impl Daemon {
         shutdown: CancellationToken,
     ) -> Result<Self, ExporterBuildError> {
         let exporter = OtlpExporter::from_config(&config)?;
+        // Startup only. Errors contain no key, path or raw identifiers and fail closed.
+        let pseudonym_key = crate::pseudonym_key::runtime_home()
+            .and_then(|home| crate::pseudonym_key::PseudonymKey::load_or_create(&home).ok());
         Ok(Self {
             config,
             exporter,
             shutdown,
+            pseudonym_key,
         })
     }
     pub async fn run(self) -> std::io::Result<()> {
@@ -58,6 +63,11 @@ impl Daemon {
                 std::io::ErrorKind::InvalidInput,
                 "invalid daemon pipeline configuration",
             ));
+        }
+        if self.pseudonym_key.is_none() {
+            stats
+                .pseudonym_key_unavailable
+                .fetch_add(1, Ordering::Relaxed);
         }
         use prost::Message;
         let schema_url = if self.config.gen_ai_latest_experimental {
@@ -158,7 +168,7 @@ impl Daemon {
         let mut span_assembler = SpanAssembler::default();
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
-        let user_email = ambient_user_email(self.config.enrich_email);
+        let user_email = ambient_user_email(&self.config);
         let terminal_type = std::env::var("TERM_PROGRAM")
             .ok()
             .or_else(|| std::env::var_os("WT_SESSION").map(|_| "windows-terminal".to_string()))
@@ -216,7 +226,7 @@ impl Daemon {
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break; };
                     last_activity = Instant::now();
-                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, &mut span_assembler);
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, self.config.capture_mode, self.pseudonym_key.as_ref(), &mut span_assembler);
                     processed += 1;
                 }
                 _ = tick.tick() => {
@@ -257,6 +267,8 @@ impl Daemon {
                     self.config.gen_ai_latest_experimental,
                     metadata,
                     self.config.workspace_path_mode,
+                    self.config.capture_mode,
+                    self.pseudonym_key.as_ref(),
                     &mut span_assembler,
                 );
             }
@@ -294,16 +306,31 @@ impl Daemon {
     }
 }
 
-/// `$USER_EMAIL` is always eligible. Git config and `$GIT_AUTHOR_EMAIL` run
-/// only when email enrichment is enabled, and only at startup.
-fn ambient_user_email(enrich_email: bool) -> Option<String> {
-    let explicit = std::env::var("USER_EMAIL").ok();
-    if !enrich_email {
+/// Ambient email is eligible only in opt-in modes. Git config and
+/// `$GIT_AUTHOR_EMAIL` run only with enrichment enabled, and only at startup.
+pub fn ambient_user_email(config: &DaemonConfig) -> Option<String> {
+    ambient_user_email_with(
+        config,
+        &|key| std::env::var(key).ok(),
+        agent_otel_core::context::harvest_user_email,
+    )
+}
+
+fn ambient_user_email_with(
+    config: &DaemonConfig,
+    get: &dyn Fn(&str) -> Option<String>,
+    harvest: impl FnOnce() -> Option<String>,
+) -> Option<String> {
+    if config.capture_mode == CaptureMode::Minimal {
+        return None;
+    }
+    let explicit = get("USER_EMAIL");
+    if !config.enrich_email {
         return explicit;
     }
     explicit
-        .or_else(|| std::env::var("GIT_AUTHOR_EMAIL").ok())
-        .or_else(agent_otel_core::context::harvest_user_email)
+        .or_else(|| get("GIT_AUTHOR_EMAIL"))
+        .or_else(harvest)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -320,6 +347,8 @@ fn process_frame(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
+    pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
     assembler: &mut SpanAssembler,
 ) {
     transform(
@@ -335,6 +364,8 @@ fn process_frame(
         gen_ai_latest_experimental,
         metadata,
         workspace_path_mode,
+        capture_mode,
+        pseudonym_key,
         assembler,
     );
 }
@@ -351,6 +382,8 @@ fn process_frame_without_quota(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
+    pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
     assembler: &mut SpanAssembler,
 ) {
     transform(
@@ -366,6 +399,8 @@ fn process_frame_without_quota(
         gen_ai_latest_experimental,
         metadata,
         workspace_path_mode,
+        capture_mode,
+        pseudonym_key,
         assembler,
     );
 }
@@ -383,6 +418,8 @@ fn transform(
     gen_ai_latest_experimental: bool,
     metadata: ResolvedSpanMetadata<'_>,
     workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
+    pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
     assembler: &mut SpanAssembler,
 ) {
     let now_instant = Instant::now();
@@ -392,7 +429,7 @@ fn transform(
         .as_nanos() as u64;
     let next_salt = salt.wrapping_add(1);
 
-    let outcome = match crate::transform::production_transform_with_workspace(
+    let outcome = match crate::transform::production_transform_with_capture_mode(
         frame.msg_type,
         &frame.payload,
         contexts,
@@ -404,6 +441,8 @@ fn transform(
         now_instant,
         now_nanos,
         workspace_path_mode,
+        capture_mode,
+        pseudonym_key,
     ) {
         Ok(res) => {
             *salt = next_salt;
@@ -437,6 +476,30 @@ fn transform(
             Err(_) => {
                 stats.span_size.fetch_add(1, Ordering::Relaxed);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod ambient_email_tests {
+    use super::*;
+
+    #[test]
+    fn default_invalid_and_minimal_skip_all_ambient_reads_even_with_enrichment() {
+        for configured in [None, Some("invalid"), Some("minimal")] {
+            let config = DaemonConfig::from_vars(&|key| match key {
+                "AGENT_OTEL_CAPTURE_MODE" => configured.map(str::to_string),
+                "AGENT_OTEL_ENRICH_EMAIL" => Some("true".to_string()),
+                _ => None,
+            });
+            assert_eq!(
+                ambient_user_email_with(
+                    &config,
+                    &|_| panic!("Minimal must not read ambient email"),
+                    || panic!("Minimal must not harvest git email")
+                ),
+                None
+            );
         }
     }
 }

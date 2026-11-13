@@ -64,10 +64,11 @@ The table below describes bridge schema mappings for the five [built-in harness 
 | Taxonomy Dimension | Canonical OTel Attribute / Metric | OTel Signal | Type | Antigravity | Claude Code | OpenAI Codex | xAI Grok | Pi (pi.dev) | Source & Description |
 |---|---|---|---|:---:|:---:|:---:|:---:|:---:|---|
 | **Identity & Session** | `gen_ai.conversation.id` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Conversation / session identifier when supplied. The fallback trace ID is an unkeyed SHA-256 derivation; valid inbound trace context wins, so a session-to-trace hash join is unreliable ([F6](BACKLOG.md#verified-aob-facts)). |
-| **Identity & Session** | `user.email` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Operator email from the payload or `$USER_EMAIL`, which is eligible for every harness even when enrichment is off. Git config and `$GIT_AUTHOR_EMAIL` require `AGENT_OTEL_ENRICH_EMAIL`. See [§5.1.1 privacy behaviour](#511-current-path-email-and-error-export-behaviour). |
-| **Identity & Session** | `terminal.type` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Terminal emulator (e.g. `windows-terminal`, `xterm-256color`, `vscode`). Enriched from env. |
+| **Identity & Session** | `user.email` | Span Attr | `string` | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | Omitted in default `minimal` capture mode. In `metadata_only` / `full` modes, resolved from the payload or `$USER_EMAIL` (and git config / `$GIT_AUTHOR_EMAIL` when `AGENT_OTEL_ENRICH_EMAIL=true\|1`). See [§5.1.1 privacy projection](#511-current-path-email-and-error-export-behaviour). |
+| **Identity & Session** | `terminal.type` | Span Attr | `string` | *Enriched* | *Enriched* | **Yes** | *Enriched* | *Enriched* | Terminal emulator (closed vocabulary in `minimal` mode, e.g. `windows-terminal`, `xterm-256color`, `vscode`, `other`). |
 | **Identity & Session** | `service.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Standard OTel service name (`agent-otel-bridge` or custom via `OTEL_SERVICE_NAME`). |
-| **Identity & Session** | `host.name` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Hostname of the developer workstation. Enriched automatically from OS. |
+| **Identity & Session** | `agent.capture.mode` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Active daemon ingress privacy capture mode (`minimal` default, `metadata_only`, `full`) configured via `AGENT_OTEL_CAPTURE_MODE`. |
+| **Identity & Session** | `host.name` | Resource | `string` | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | *Opt-in* | Omitted in default `minimal` capture mode; emitted in `metadata_only` and `full` modes. |
 | **Identity & Session** | `os.type` | Resource | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Operating system type (`windows`, `linux`, `macos`). Enriched automatically. |
 | **Agent Lifecycle** | `gen_ai.agent.name` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Canonical agent identifier (`antigravity`, `claude-code`, `codex`, `grok`, `pi`). |
 | **Agent Lifecycle** | `agent.hook.event` | Span Attr | `string` | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | Universal lifecycle event (`PreToolUse`, `PostToolUse`, `PostInvocation`, `Stop`). |
@@ -173,12 +174,12 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 | `vcs.system` | `string` | Detected Version Control System | `git`, `none` |
 | `vcs.repository.name` | `string` | Extracted repository identifier | `agent-otel-bridge` |
 | `vcs.branch.name` | `string` | Active branch name extracted directly from `.git/HEAD` | `main`, `feat/tokenomics` |
-| `vcs.commit.sha` | `string` | Active commit SHA hash | `6b755a6...` |
+| `vcs.commit.sha` | `string` | Active commit: keyed `commit_<32hex>` pseudonym in Minimal (omitted without a key); raw SHA in opt-in modes | `commit_<32hex>` |
 | `vcs.worktree.active` | `bool` | True if operating inside a secondary Git worktree | `true`, `false` |
 
 ### 5.1.1 Current path, email, and error export behaviour
 
-**The current defaults are not zero-content or privacy-safe.** [Backlog fact F5](BACKLOG.md#verified-aob-facts) records the following code evidence, pinned to the planning baseline `96f9fdb`:
+**Historical F5 baseline before A1:** [Backlog fact F5](BACKLOG.md#verified-aob-facts) records the following code evidence, pinned to the planning baseline `96f9fdb`:
 
 | Exported data | Current behaviour | Code evidence |
 |---|---|---|
@@ -187,14 +188,33 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 | Branch and repository names | Emitted in plaintext when present; changing the workspace path mode does not redact them. | [otlp.rs:459–469](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L459-L469) |
 | Error status messages | Full raw error text is exported by default. Experimental truncation limits length, not sensitive content. | [otlp.rs:579–587](https://github.com/smota/agent-otel-bridge/blob/96f9fdb/crates/agent-otel-core/src/otlp.rs#L579-L587) |
 
-[Work package A1](BACKLOG.md#aob-work-packages) addresses privacy projection with a forbidden-field sentinel audit. That protection is planned, not implemented by this documentation change. Existing controls have narrower scope:
+[Work package A1](BACKLOG.md#aob-work-packages) (`AOB#17`) enforces an explicit daemon-side ingress privacy projection before OTLP export, controlled by `AGENT_OTEL_CAPTURE_MODE` and stamped on every exported `Resource` as `agent.capture.mode`:
 
-- `user.email` comes from the hook payload or `$USER_EMAIL`. `$GIT_AUTHOR_EMAIL` and git config are read only when `AGENT_OTEL_ENRICH_EMAIL` is `true` or `1`.
-- `AGENT_OTEL_WORKSPACE_PATH` controls `workspace.path` and `workspace.project_root`:
-  - `absolute` (default): both values are emitted as harvested.
-  - `relative`: when the path is under the project root, `workspace.path` is that relative path; otherwise it is omitted. `workspace.project_root` is only the final directory name. `workspace.project_name` is unchanged.
-  - `hash`: both values are the lowercase hex SHA-256 of the absolute path string.
-- When `OTEL_SEMCONV_STABILITY_OPT_IN` includes `gen_ai_latest_experimental` and the span is an error, the status message is truncated to 160 bytes on a character boundary and `…` is appended if it was cut. `error.type` stays the error category (or `_OTHER`), not the raw message. The default export keeps the full status message.
+- **`minimal` (default — content-free with per-install keyed pseudonyms):**
+  - `agent.capture.mode` = `"minimal"` on every trace and metric `Resource`.
+  - `host.name` and `user.email` are omitted on resources and spans (`ambient_user_email` is not harvested).
+  - `workspace.path` and `workspace.project_root` are omitted entirely.
+  - `workspace.project_name` and `vcs.repository.name` are replaced with per-install HMAC-SHA256 pseudonyms (`proj_<32hex>` and `repo_<32hex>`).
+  - `vcs.branch.name` (and `vcs.ref.head.name` under `gen_ai_latest_experimental`) is mapped to a closed category set: `main`, `develop`, `feature`, `fix`, `release`, `docs`, `chore`, `detached`, or `other`.
+  - `vcs.commit.sha` (or `vcs.ref.head.revision` under `gen_ai_latest_experimental`) is replaced with `commit_<32hex>` using the same HMAC scheme, domain `commit`, and lowercase full hexadecimal SHA as canonical input (40 or 64 hex digits). Invalid/abbreviated SHAs and values without an available key are omitted. Raw SHAs can identify a public or forge-hosted repository through global search and are never exported in Minimal.
+  - `span.status.message` on error spans is set to the closed `agent.error.category` (`provider_quota_exhausted`, `user_interrupted`, `schema_validation_error`, or `tool_verification_failed`); raw error text and span events are never exported.
+  - `agent.tool.binary` and `agent.tool.wrapped_binary` are restricted to a closed allowlist of standard developer binaries; unrecognized or custom script names are omitted.
+  - Unrecognized custom `gen_ai.tool.name`, `capability.namespace`, `capability.name`, `gen_ai.agent.name`, and `gen_ai.agent.parent_name` values are pseudonymized (`tool_<32hex>`, `ns_<32hex>`, `cap_<32hex>`, `agent_<32hex>`, `parent_agent_<32hex>`), and `agent.termination_reason` / `agent.decision` / `terminal.type` are mapped to closed vocabularies.
+  - All pseudonyms use the existing core HMAC-SHA256 implementation with a field-specific `aob.pseudonym.v1/<field>` domain, a NUL separator, and 16-byte truncation. They are stable only per install and do not guarantee anonymity. A2 will replace the install key with a customer K_link-derived key.
+  - The daemon loads `pseudonym.key` once at startup under its runtime home (`AGENT_OTEL_HOME` overrides for tests; Windows `%LOCALAPPDATA%/agent-otel-bridge`; Unix `$XDG_DATA_HOME/agent-otel-bridge` or `$HOME/.local/share/agent-otel-bridge`). Missing keys are generated using the OS CSPRNG and created exclusively, with Unix mode 0600; Windows uses a protected owner-only file DACL before writing or reading key material. Windows warns once at startup, without paths or key material, if the home is outside the current user's profile; the runtime directory's inherited ACL still controls replacement/access. No key reads or creation occur on the event path. Malformed/unreadable/uncreatable keys fail closed: omit pseudonymized fields, continue span export, and count failed startups in `agent.bridge.privacy.key_unavailable.total` with the sole static label `reason=key_unavailable`. Key bytes never appear in Debug, logs or exports.
+  - A final exact-key span allowlist drops future attributes until reviewed. The resource allowlist permits only bridge-owned `service.name=agent-otel-bridge`, `service.version`, telemetry SDK/distro identity, closed `service.namespace=agent-otel-bridge`, `os.type`, `agent.capture.mode`, and `deployment.environment` / `deployment.environment.name` (closed values `development`, `dev`, `test`, `staging`, `production`, `prod`, `local`, otherwise `other`). `OTEL_SERVICE_NAME` and version overrides are replaced with bridge identity/version. Other resource keys, including host/instance/enduser/team/Kubernetes identifiers and `os.description`, are dropped. Collector examples omit system resource detection so it cannot add `host.name` back.
+- **`metadata_only` (`AGENT_OTEL_CAPTURE_MODE=metadata_only` or `metadata-only`):**
+  - `agent.capture.mode` = `"metadata_only"`.
+  - Exports operational metadata (`workspace.project_name`, credential-sanitized `vcs.repository.name`, `vcs.branch.name`, `host.name`, and `user.email` from payload/`$USER_EMAIL` or git config when `AGENT_OTEL_ENRICH_EMAIL=true|1`).
+  - `AGENT_OTEL_WORKSPACE_PATH` controls `workspace.path` and `workspace.project_root` (`hash` default, `relative`, or `absolute`).
+  - Content remains dropped (`span.status.message` uses the closed `agent.error.category` set; prompts, tool inputs/outputs, and span events are omitted), and credentials/tokens are scrubbed across all attributes.
+- **`full` (`AGENT_OTEL_CAPTURE_MODE=full`):**
+  - `agent.capture.mode` = `"full"`.
+  - Exports operational metadata plus bounded `span.status.message` (truncated to 160 UTF-8 bytes), while still scrubbing credentials (URL userinfo, secret query parameters, bearer tokens, and `ghp_`/`github_pat_`/`glpat-`/`sk-`/`xox`/`AKIA`/`AIza`/JWT tokens) across all exported signals.
+
+Tool archetype and capability kind are normalized to their closed enums in **all modes**; unrecognized values become `other`. Opt-in credential scrubbing is **best-effort**, including common colon/equal assignments, JSON token fields, `--token` arguments, `x-api-key` headers, and named AWS secret/session keys. Arbitrary unlabeled secrets and operational metadata can still be exposed in opt-in modes. The `hash` workspace mode uses the install key (and omits fields without it), rather than an unkeyed path digest.
+
+A2 follow-up: a non-opaque conversation ID is currently hashed without a key into `trace_id` before projection, which can expose predictable IDs to dictionary matching. A2 must revisit that derivation; A1 leaves trace ID behavior unchanged.
 
 ### 5.2 Behavioral Tool Execution Archetypes
 Decouples observability from specific CLI tools (`rtk`, `jq`, `bat`, `delta`) by modeling functional intent:

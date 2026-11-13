@@ -193,6 +193,11 @@ groups:
         stability: development
         brief: "Distro version."
         examples: ['0.7.0']
+      - id: agent.capture.mode
+        type: string
+        stability: development
+        brief: "Active daemon privacy capture mode enforced at ingress."
+        examples: ['minimal', 'metadata_only', 'full']
 
   - id: registry.agent.identity
     type: attribute_group

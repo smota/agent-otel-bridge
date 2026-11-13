@@ -25,3 +25,6 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 flate2 = "1"
 getrandom = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Security_Authorization"] }

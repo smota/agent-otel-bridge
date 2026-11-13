@@ -112,6 +112,7 @@ pub const ERROR_TYPE: &str = "error.type";
 pub const OTEL_SCHEMA_1_41_0: &str = "https://opentelemetry.io/schemas/1.41.0";
 
 // --- Generic Agent Semantic Conventions ---
+pub const AGENT_CAPTURE_MODE: &str = "agent.capture.mode";
 pub const AGENT_HOOK_EVENT: &str = "agent.hook.event";
 /// True when the daemon joined a Pre hook with a later Post or Stop.
 /// False for immediate, unmatched, expired, and evicted spans.

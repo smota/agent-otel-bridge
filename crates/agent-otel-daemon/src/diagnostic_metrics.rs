@@ -57,13 +57,24 @@ pub fn append_bridge_metrics(
     context: &ContextCacheStats,
     gen_ai_latest_experimental: bool,
 ) -> usize {
-    let metrics = bridge_metrics(
+    let mut metrics = bridge_metrics(
         observed_at_unix_nano,
         ingress,
         pipeline,
         context,
         gen_ai_latest_experimental,
     );
+    metrics.push(counter(
+        "agent.bridge.privacy.key_unavailable.total",
+        "Daemon startups unable to load or create the per-install pseudonym key.",
+        "{failure}",
+        observed_at_unix_nano,
+        vec![point1(
+            "reason",
+            "key_unavailable",
+            pipeline.pseudonym_key_unavailable,
+        )],
+    ));
     let appended = metrics.len();
     scope_metrics(request).metrics.extend(metrics);
     appended
