@@ -212,7 +212,7 @@ fn ttl_expiry_has_an_explicit_minimal_outcome() {
 }
 
 #[test]
-fn capacity_overflow_expires_oldest_with_explicit_outcome() {
+fn capacity_overflow_evicts_oldest_with_explicit_outcome() {
     let mut assembler = SpanAssembler::new(1, Duration::from_secs(60));
     let now = Instant::now();
     assert!(observe(
@@ -235,10 +235,16 @@ fn capacity_overflow_expires_oldest_with_explicit_outcome() {
         200,
     );
     assert_eq!(out.len(), 1);
+    let mut projected = out[0].clone();
+    agent_otel_daemon::privacy::project_span(&mut projected, CaptureMode::Minimal);
+    assert_eq!(
+        attr(&projected, "agent.span.outcome"),
+        Some("evicted_unpaired")
+    );
     assert_eq!(out[0].start_time_unix_nano, 100);
     assert_eq!(
         attr(&out[0], "agent.span.outcome"),
-        Some("expired_unpaired")
+        Some("evicted_unpaired")
     );
 }
 
@@ -601,4 +607,92 @@ fn stop_without_identity_or_open_invocation_remains_silent() {
             );
         }
     }
+}
+
+#[test]
+fn equal_native_call_aliases_pair_including_all_three() {
+    for aliases in [
+        json!({"tool_use_id":"call", "call_id":"call"}),
+        json!({"tool_use_id":"call", "tool_call_id":"call"}),
+        json!({"tool_call_id":"call", "call_id":"call"}),
+        json!({"tool_use_id":"call", "tool_call_id":"call", "call_id":"call"}),
+    ] {
+        let mut body = aliases;
+        body["session_id"] = json!("session");
+        // Exercise both compatibility alias groups in the same retry.
+        body["conversation_id"] = json!("session");
+        let mut assembler = SpanAssembler::default();
+        let now = Instant::now();
+        assert!(observe_body(&mut assembler, HookEvent::PreToolUse, 3, &body, now, 100).is_empty());
+        let out = observe_body(&mut assembler, HookEvent::PostToolUse, 3, &body, now, 200);
+        assert_eq!(out.len(), 1);
+        assert_pair(&out[0], 100, 200);
+    }
+}
+
+#[test]
+fn conflicting_native_call_aliases_export_unpaired_even_with_fallback_fields() {
+    for aliases in [
+        json!({"tool_use_id":"one", "call_id":"two"}),
+        json!({"tool_use_id":"one", "tool_call_id":"two"}),
+        json!({"tool_call_id":"one", "call_id":"two"}),
+        json!({"tool_use_id":"one", "tool_call_id":"one", "call_id":"two"}),
+    ] {
+        for fallback in [false, true] {
+            let mut body = aliases.clone();
+            body["session_id"] = json!("session");
+            if fallback {
+                body["step_idx"] = json!(7);
+                body["tool_name"] = json!("Read");
+                body["tool_call"] = json!({"id":"one"});
+            }
+            let input = agent_otel_core::model::AgentHookInput::parse_slice(
+                &serde_json::to_vec(&body).unwrap(),
+            )
+            .unwrap();
+            assert!(input.native_tool_call_id.is_none());
+            let mut assembler = SpanAssembler::default();
+            let now = Instant::now();
+            for event in [HookEvent::PreToolUse, HookEvent::PostToolUse] {
+                let out = observe_body(&mut assembler, event, 3, &body, now, 100);
+                assert_eq!(out.len(), 1, "ambiguous IDs must retain every event");
+                assert!(out[0]
+                    .attributes
+                    .iter()
+                    .any(|kv| kv == &agent_otel_core::otlp::kv_bool("agent.span.paired", false)));
+            }
+            assert!(assembler
+                .drain_shutdown(now + Duration::from_secs(1))
+                .is_empty());
+        }
+    }
+}
+
+#[test]
+fn shutdown_drains_by_arrival_then_insertion_order() {
+    let mut assembler = SpanAssembler::default();
+    let now = Instant::now();
+    for (call, opened, nanos) in [
+        ("late", now + Duration::from_millis(1), 300),
+        ("first", now, 100),
+        ("second", now, 200),
+    ] {
+        assert!(observe(
+            &mut assembler,
+            HookEvent::PreToolUse,
+            2,
+            "session",
+            call,
+            opened,
+            nanos
+        )
+        .is_empty());
+    }
+    let out = assembler.drain_shutdown(now + Duration::from_secs(5));
+    assert_eq!(
+        out.iter()
+            .map(|span| span.start_time_unix_nano)
+            .collect::<Vec<_>>(),
+        vec![100, 200, 300]
+    );
 }

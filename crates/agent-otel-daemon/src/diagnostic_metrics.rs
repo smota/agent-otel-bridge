@@ -93,7 +93,7 @@ pub fn append_bridge_metrics(
         observed_at_unix_nano,
         vec![
             point1("reason", "ttl", pipeline.span_expired_ttl),
-            point1("reason", "capacity", pipeline.span_expired_capacity),
+            point1("reason", "evicted_unpaired", pipeline.span_expired_capacity),
             point1("reason", "duplicate_pre", pipeline.span_replaced),
             point1("reason", "shutdown", pipeline.span_shutdown_drained),
         ],

@@ -96,6 +96,15 @@ impl Drop for ConnectionLease {
             .fetch_sub(1, Ordering::Relaxed);
     }
 }
+// Reconcile readers cancelled or aborted while a frame is still in flight.
+struct ReadAttempt(Option<Arc<IngressStats>>);
+impl Drop for ReadAttempt {
+    fn drop(&mut self) {
+        if let Some(stats) = &self.0 {
+            stats.read_failed.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
 pub struct IngressFrame {
     pub msg_type: MsgType,
     pub payload: Vec<u8>,
@@ -170,12 +179,15 @@ impl ServerState {
             stats: self.stats.clone(),
         };
         let state = self.clone();
+        let attempt = ReadAttempt(Some(self.stats.clone()));
         readers.spawn(async move {
+            let mut attempt = attempt;
             let _lease = lease;
             tokio::select! {
                 biased;
                 _ = state.shutdown.cancelled() => {},
                 outcome = tokio::time::timeout(state.limits.read_timeout, state.read(stream)) => {
+                    attempt.0 = None;
                     match outcome {
                         Err(_) => { state.stats.read_deadline.fetch_add(1, Ordering::Relaxed); },
                         Ok(Err(_)) => { state.stats.read_failed.fetch_add(1, Ordering::Relaxed); },
@@ -712,6 +724,56 @@ async fn serve(_name: Option<&str>, _state: ServerState) -> io::Result<()> {
 mod tests {
     use super::*;
     use tokio::io::AsyncWriteExt;
+    #[tokio::test]
+    async fn mid_write_shutdown_admits_or_counts_the_frame_once() {
+        // Exercise completion, cancellation, and the server's abort_all cleanup.
+        for cleanup in 0..3 {
+            let (tx, mut rx) = mpsc::channel(1);
+            let stats = Arc::new(IngressStats::default());
+            let shutdown = CancellationToken::new();
+            let state = ServerState::new(
+                Sink::Legacy(tx),
+                shutdown.clone(),
+                IngressLimits {
+                    read_timeout: Duration::from_secs(1),
+                    ..IngressLimits::default()
+                },
+                stats.clone(),
+            )
+            .unwrap();
+            let (mut writer, reader) = tokio::io::duplex(64);
+            let frame = crate::frame::encode_frame(MsgType::HookPayload, b"12345678");
+            let mut readers = JoinSet::new();
+            state.spawn_reader(reader, &mut readers);
+            writer.write_all(&frame[..HEADER_LEN + 1]).await.unwrap();
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while stats.reserved_bytes.load(Ordering::Relaxed) == 0 {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            if cleanup == 0 {
+                writer.write_all(&frame[HEADER_LEN + 1..]).await.unwrap();
+                assert_eq!(rx.recv().await.unwrap().1, b"12345678");
+            }
+            shutdown.cancel();
+            if cleanup == 2 {
+                readers.abort_all();
+            }
+            tokio::time::timeout(Duration::from_millis(200), async {
+                while readers.join_next().await.is_some() {}
+            })
+            .await
+            .unwrap();
+            let admitted = stats.admitted.load(Ordering::Relaxed);
+            let dropped = stats.read_failed.load(Ordering::Relaxed);
+            assert_eq!(admitted + dropped, 1);
+            assert_eq!(admitted, u64::from(cleanup == 0));
+            assert_eq!(stats.reserved_bytes.load(Ordering::Relaxed), 0);
+            assert_eq!(stats.active_connections.load(Ordering::Relaxed), 0);
+        }
+    }
     #[tokio::test]
     async fn byte_permits_follow_queued_frame_and_release_on_drop() {
         let (tx, mut rx) = mpsc::channel(1);

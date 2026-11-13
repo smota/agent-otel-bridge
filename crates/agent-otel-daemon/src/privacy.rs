@@ -1338,7 +1338,8 @@ const MINIMAL_SPAN_KEYS: &[&str] = &[
     "agent.context.source",
     "agent.context.age_ms",
     "agent.span.paired",
-    // Generated only by the daemon assembler; fixed outcomes, never input content.
+    // Generated only by the daemon assembler; includes expired_unpaired and
+    // evicted_unpaired as well as replaced_unpaired and drained_unpaired. Never input content.
     "agent.span.outcome",
     "agent.span.duration_source",
     "agent.span.incomplete_reason",

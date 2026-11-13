@@ -328,7 +328,7 @@ fn unpaired_counters_have_exact_static_reasons_and_values() {
         values,
         HashMap::from([
             ("ttl", 3),
-            ("capacity", 4),
+            ("evicted_unpaired", 4),
             ("duplicate_pre", 5),
             ("shutdown", 6)
         ])

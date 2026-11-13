@@ -133,6 +133,9 @@ impl PairingIdentity {
         };
         match event {
             HookEvent::PreToolUse | HookEvent::PostToolUse => {
+                if input.native_tool_call_id_conflict {
+                    return None;
+                }
                 let nested = input.resolved_tool_call_id().filter(|id| !id.is_empty());
                 let native = input
                     .native_tool_call_id
@@ -271,7 +274,9 @@ impl SpanAssembler {
     /// Work that cannot be prepared before the deadline is explicitly accounted as dropped.
     pub fn drain_shutdown(&mut self, deadline: Instant) -> Vec<Span> {
         let mut out = Vec::with_capacity(self.open.len());
-        for (_, open) in self.open.drain() {
+        let mut pending: Vec<_> = self.open.drain().map(|(_, open)| open).collect();
+        pending.sort_by_key(|open| (open.opened, open.sequence));
+        for open in pending {
             if Instant::now() >= deadline {
                 self.stats.shutdown_dropped.fetch_add(1, Ordering::Relaxed);
             } else {
@@ -346,7 +351,7 @@ impl SpanAssembler {
                 self.stats
                     .span_expired_capacity
                     .fetch_add(1, Ordering::Relaxed);
-                out.push(emit_incomplete(open.span, "expired_unpaired", "capacity"));
+                out.push(emit_incomplete(open.span, "evicted_unpaired", "capacity"));
             }
         }
     }

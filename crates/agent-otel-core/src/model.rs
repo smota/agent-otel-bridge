@@ -280,6 +280,10 @@ pub struct AgentHookInput {
     )]
     pub native_tool_call_id: Option<String>,
 
+    /// Private ambiguity marker: conflicting aliases must never pair via fallback fields.
+    #[serde(skip)]
+    pub native_tool_call_id_conflict: bool,
+
     #[serde(alias = "tool_name", alias = "toolName", default)]
     pub tool_name: Option<String>,
 
@@ -571,7 +575,8 @@ impl AgentHookInput {
             Err(error) if error.to_string().starts_with("duplicate field") => {
                 // Some harnesses emit both snake_case and camelCase aliases.
                 // Keep the normal zero-intermediate-Value path unchanged; only
-                // retry this compatibility shape, rejecting conflicting values.
+                // retry this compatibility shape. Conflicting call IDs must not
+                // discard the event: omit the ambiguous native ID instead.
                 struct UniqueObject;
                 impl<'de> serde::de::Visitor<'de> for UniqueObject {
                     type Value = serde_json::Map<String, serde_json::Value>;
@@ -630,6 +635,32 @@ impl AgentHookInput {
                         removed = true;
                     }
                 }
+                let mut call_id_conflict = false;
+                let call_aliases = ["tool_use_id", "tool_call_id", "call_id"];
+                if call_aliases
+                    .iter()
+                    .filter(|name| object.contains_key(**name))
+                    .count()
+                    > 1
+                {
+                    let value = call_aliases
+                        .iter()
+                        .find_map(|name| object.get(*name))
+                        .unwrap()
+                        .clone();
+                    let equal = call_aliases
+                        .iter()
+                        .filter_map(|name| object.get(*name))
+                        .all(|other| other == &value);
+                    call_id_conflict = !equal;
+                    for name in call_aliases {
+                        object.remove(name);
+                    }
+                    if equal {
+                        object.insert("tool_use_id".to_string(), value);
+                    }
+                    removed = true;
+                }
                 let keys: Vec<String> = object
                     .keys()
                     .filter(|key| key.contains('_'))
@@ -667,7 +698,10 @@ impl AgentHookInput {
                 if !removed {
                     return Err(error);
                 }
-                serde_json::from_value(serde_json::Value::Object(object))
+                serde_json::from_value(serde_json::Value::Object(object)).map(|mut input: Self| {
+                    input.native_tool_call_id_conflict = call_id_conflict;
+                    input
+                })
             }
             Err(error) => Err(error),
         }
