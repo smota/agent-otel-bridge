@@ -251,6 +251,10 @@ pub struct ToolCallInfo {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentHookInput {
+    /// Session provenance. Absent means harness; other origins cannot form links.
+    #[serde(default)]
+    pub origin: Option<String>,
+
     #[serde(
         alias = "conversation_id",
         alias = "session_id",

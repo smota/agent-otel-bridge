@@ -55,7 +55,8 @@ fn test_production_transform_0x04_envelope() {
     );
     assert_eq!(
         outcome.span.span_id,
-        [0x40, 0x56, 0xc8, 0xe7, 0xde, 0x79, 0xce, 0x7c]
+        // Minimal omits the native session when no pseudonym key is available.
+        [0xfe, 0xaa, 0x1c, 0x14, 0x5e, 0xc1, 0x42, 0x77]
     );
     assert!(outcome
         .span

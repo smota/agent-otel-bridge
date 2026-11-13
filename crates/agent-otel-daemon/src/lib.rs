@@ -18,6 +18,7 @@ pub mod privacy;
 pub mod pseudonym_key;
 pub mod quota;
 mod quota_worker;
+pub mod session_link;
 pub mod span_assembler;
 pub mod transform;
 

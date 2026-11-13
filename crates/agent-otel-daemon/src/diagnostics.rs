@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 #[derive(Default)]
 pub struct Diagnostics {
     pub pseudonym_key_unavailable: AtomicU64,
+    pub trace_fallback_unkeyed: AtomicU64,
     pub transformed: AtomicU64,
     pub invalid: AtomicU64,
     pub span_size: AtomicU64,
@@ -26,6 +27,7 @@ pub struct Diagnostics {
 #[derive(Debug, Serialize)]
 pub struct DiagnosticSnapshot {
     pub pseudonym_key_unavailable: u64,
+    pub trace_fallback_unkeyed: u64,
     pub transformed: u64,
     pub invalid: u64,
     pub span_size: u64,
@@ -43,6 +45,11 @@ pub struct DiagnosticSnapshot {
     pub queued_items: usize,
 }
 impl Diagnostics {
+    pub fn record_trace_fallback(&self, unkeyed: bool) {
+        if unkeyed {
+            self.trace_fallback_unkeyed.fetch_add(1, Ordering::Relaxed);
+        }
+    }
     pub fn record_export(&self, count: usize, report: &ExportReport) {
         self.attempts
             .fetch_add(report.attempts as u64, Ordering::Relaxed);
@@ -75,6 +82,7 @@ impl Diagnostics {
         }
         DiagnosticSnapshot {
             pseudonym_key_unavailable: load!(pseudonym_key_unavailable),
+            trace_fallback_unkeyed: load!(trace_fallback_unkeyed),
             transformed: load!(transformed),
             invalid: load!(invalid),
             span_size: load!(span_size),

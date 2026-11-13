@@ -31,6 +31,9 @@ use sha2::{Digest, Sha256};
 /// Span and fact attribute key carrying the keyed session link identifier.
 pub const AGENT_SESSION_LINK_ID: &str = "agent.session.link_id";
 
+/// Normative reason code when the session link is `unlinked`.
+pub const AGENT_SESSION_UNLINKED_REASON: &str = "agent.session.unlinked_reason";
+
 /// Sentinel attribute value emitted when a span or session cannot be deterministically linked.
 pub const AGENT_SESSION_LINK_UNLINKED: &str = "unlinked";
 
@@ -259,7 +262,7 @@ impl std::fmt::Debug for DerivedLinkKey {
 }
 
 /// Input parameters for deriving `agent.session.link_id` on an event or session record.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct LinkIdInput<'a> {
     /// Canonical organization identifier.
     pub org: Option<&'a str>,
@@ -273,6 +276,12 @@ pub struct LinkIdInput<'a> {
     pub native_session: Option<&'a str>,
     /// Event origin classification (`None` or `Some("harness")` for real harness events).
     pub origin: Option<&'a str>,
+}
+
+impl std::fmt::Debug for LinkIdInput<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LinkIdInput(<redacted>)")
+    }
 }
 
 /// Detailed result of `agent.session.link_id` derivation.
@@ -955,6 +964,24 @@ mod tests {
 
     #[test]
     fn debug_redacts_key_material_and_lp_payload() {
+        let input = LinkIdInput {
+            org: Some("SECRET_ORG"),
+            endpoint_scope: Some("SECRET_ENDPOINT"),
+            native_session: Some("SECRET_SESSION"),
+            raw_harness: Some("SECRET_ROLE"),
+            origin: Some("SECRET_ORIGIN"),
+            ..Default::default()
+        };
+        let debug = format!("{input:?}");
+        for secret in [
+            "SECRET_ORG",
+            "SECRET_ENDPOINT",
+            "SECRET_SESSION",
+            "SECRET_ROLE",
+            "SECRET_ORIGIN",
+        ] {
+            assert!(!debug.contains(secret));
+        }
         let k_org = b"OrgMasterSecret_2026_MTN8_C1a_K1";
         let derived = derive_link_key_detailed(k_org, "platform-eng", "2026-Q4").unwrap();
         let derived_dbg = format!("{derived:?}");
