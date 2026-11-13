@@ -1,173 +1,274 @@
-# `fact-export-v1` Snapshot Manifest, Atomic Publication & Replay Contract (`C1b`)
+# fact-export-v1: snapshot and import specification (C1b)
 
-**Contract Identifier**: `fact-export-v1`  
-**Contract Home**: `smota/agent-otel-bridge` (`docs/contracts/fact-export-v1/SNAPSHOT.md`)  
-**Authoritative Inputs**: `2026-11-11-mvp-plan.md` (§2 Decisions 3–5; `D1`, `D4b`, `D5`, `EN1`, `EN2`, `EN3a–c`, `EN5c`), `DE-002`, `DE-004`, `DE-005`
+This is the single normative specification. The table JSON schemas and
+tables/README.md are normative only as incorporated below. Checkers, generators,
+and other documents are informative and cannot introduce rules. This candidate
+is **not frozen**. The independent link-id-v1 contract remains unchanged.
 
----
+## 1. Encoding and schema bundle
 
-## 1. Core Principles
+Canonical table order: sessions, invocations, tool_calls, usage, outcomes,
+git_evidence, coverage. Primary keys: session_key, invocation_key, tool_call_key,
+usage_key, outcome_key, git_evidence_key, coverage_key respectively.
 
-1. **Flat Per-Table Snapshots**: Each snapshot publishes the six normative `fact-export-v1` tables (`sessions`, `invocations`, `tool_calls`, `usage`, `outcomes`, `coverage`) alongside a single root `MANIFEST.json`.
-2. **Facts Are NOT Append-Only (`MVP plan §2 Decision 3`)**: Agent sessions evolve while in flight and across re-extractions:
-   - Tool calls initially captured at `PreToolUse` (`outcome_status = "pending"`, `outcome_unknown_reason = "awaiting_result"`, `duration_status = "single_point_only"`) are later paired with `PostToolUse` (`outcome_status = "succeeded" | "failed"`, `duration_status = "observed"`).
-   - Model attribution (`model_status = "unknown"` $\rightarrow$ `"observed"`), cumulative token normalization (`accounting_v1`), observed USD receipts, and historical git evidence (`outcomes`) update as later events in a session arrive.
-   - Retention or redaction purges (`EN5c`) must deterministically retire superseded keys and block resurrection from stale snapshots.
-3. **Atomic Publication via Root Manifest**: Table files are written to an immutable staging prefix first; the snapshot becomes visible to readers and importers **if and only if** `MANIFEST.json` is atomically committed and all six table files match the manifest's `sha256`, `byte_length`, and `row_count`.
-4. **Idempotent, Monotonic Import (`EN3b`)**: Import state is keyed by `(producer.producer_id, stream, snapshot_sequence)`. Re-importing an already-committed snapshot with an identical `manifest_digest` is a deterministic no-op (`DUPLICATE_NOOP`). Conflicting manifests on an existing sequence, stale sequences (`< high_water_sequence`), out-of-order sequence gaps (`> high_water_sequence + 1` when `require_contiguous_sequence` is active, or `< high_water_sequence`), and resurrected purged generations are rejected without mutating target state.
+Canonical JSON is UTF-8 without BOM, sorted object keys, compact separators,
+unescaped Unicode, standard JSON escaping, no floats, no whitespace. Integers
+fit signed INT64; booleans are not integers. Table bytes are each canonical JSON
+row in supplied order followed by LF; an empty table is zero bytes.
+For each table in canonical order hash its entire canonical JSON schema, including
+metadata. Concatenate `<sha256>  tables/<table>.schema.json\n` in that order;
+schema_digest is SHA256 of that UTF-8 text. manifest_digest is SHA256 of canonical
+JSON after removing only manifest_digest. All digests are lowercase hexadecimal.
 
----
+Schemas MUST declare x_contract=fact-export-v1, x_version=1, x_table,
+x_primary_key, additionalProperties=false. required contains every property
+exactly once, including nullable fields. Each column has x_justification with
+nonempty why_present, consumers, zero_content, pseudonymization,
+missingness_semantics. x_parquet has unique positive field_id (gaps allowed),
+repetition agreeing with nullability; strings map to BYTE_ARRAY/STRING, integers
+to INT64, timestamps to TIMESTAMP(MICROS,true), booleans to BOOLEAN/NONE, string
+arrays to GROUP/LIST<STRING>. Exact mappings are in the incorporated schemas.
 
-## 2. Normative Manifest Schema (`MANIFEST.json`)
+## 2. Manifest and publication
 
-Every committed snapshot MUST include a UTF-8 JSON manifest with the following top-level fields:
+A manifest has exactly these properties:
 
-```json
-{
-  "contract_id": "fact-export-v1",
-  "contract_version": 1,
-  "files": [
-    {
-      "byte_length": 1024,
-      "format": "parquet",
-      "path": "tables/sessions.parquet",
-      "row_count": 2,
-      "sha256": "<64-hex-sha256>",
-      "table": "sessions"
-    }
-  ],
-  "manifest_digest": "<64-hex-sha256-of-manifest-without-manifest_digest>",
-  "producer": {
-    "producer_id": "<64-hex-hmac-sha256>",
-    "producer_kind": "dendro_cli",
-    "producer_version": "0.5.0",
-    "pseudonym_key_id": "kh_customer_v1"
-  },
-  "published_at_us": 1762900005000000,
-  "replacement_scope": {
-    "operation": "upsert_replace",
-    "reason": "initial_export",
-    "scope_mode": "source_generation",
-    "session_keys": [],
-    "source_generation": 1,
-    "source_id": "<64-hex-hmac-sha256>",
-    "supersedes_generations": []
-  },
-  "schema_digest": "<64-hex-sha256-of-canonical-table-schemas>",
-  "snapshot_sequence": 1,
-  "stream": "station-facts-default",
-  "tenant_placeholder": "tn_acme_prod"
-}
-```
+| Property | Constraint |
+| --- | --- |
+| contract_id, contract_version | fact-export-v1, integer 1 |
+| schema_digest, manifest_digest | 64 lowercase hex |
+| tenant_placeholder | `^tn_[a-z0-9][a-z0-9_-]{1,60}$` |
+| stream | `^[a-z0-9][a-z0-9._-]{1,63}$` |
+| snapshot_sequence, published_at_us | positive INT64 |
+| producer | exactly producer_id (64 hex), producer_kind (dendro_cli, agent_otel_daemon, dendro_station_exporter), producer_version (`^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$`), pseudonym_key_id |
+| replacement_scope | exactly scope_mode, operation, reason, source_id, source_generation, session_keys |
+| skip_reason | null normally; otherwise abandoned_publication, source_unavailable, producer_recovery |
+| files | seven descriptors in canonical order normally; zero for explicit skip |
 
-### 2.1 Field Requirements & Invariants
+Scope source_id is 64 hex, source_generation positive INT64, session_keys a unique
+array of 64-hex pseudonyms. Exactly two scope modes exist: source_generation
+(empty session_keys) and session_keys (nonempty session_keys, purge_delete only).
+Operations: upsert_replace, purge_delete. Reasons: initial_export,
+in_generation_outcome_or_attribution_update, source_generation_advance,
+retention_or_redaction_purge, key_rotation. Neither full_stream nor
+supersedes_generations exists in v1. D4b emits source_generation only.
 
-| Field | Type / Constraint | Normative Rule |
-| :--- | :--- | :--- |
-| `contract_id` | `"fact-export-v1"` | Must equal `"fact-export-v1"`. |
-| `contract_version` | `1` | Must equal integer `1`. |
-| `schema_digest` | `^[0-9a-f]{64}$` | SHA-256 of the canonical schema bundle (`sessions`, `invocations`, `tool_calls`, `usage`, `outcomes`, `coverage` in fixed order). Any mismatch with the importer's pinned `schema_digest` MUST reject the snapshot with `REJECTED_SCHEMA_MISMATCH`. |
-| `producer.producer_id` | `^[0-9a-f]{64}$` | Pseudonymized 64-hex HMAC-SHA256 identifier of the producer instance. |
-| `producer.producer_kind` | Enum | One of `"dendro_cli"`, `"agent_otel_daemon"`, `"dendro_station_exporter"`. |
-| `producer.producer_version` | String | Semantic version token (`^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$`). |
-| `producer.pseudonym_key_id` | `^[a-z0-9][a-z0-9._-]{1,63}$` | Active customer-held HMAC key generation ID (`DE-004`). Every row in the snapshot MUST carry a matching `pseudonym_key_id`. |
-| `tenant_placeholder` | `^tn_[a-z0-9][a-z0-9_-]{1,60}$` | Tenant routing placeholder bound at upload/import time (`EN3a`). Importers MUST verify that `(tenant_placeholder, producer.producer_id)` matches the authenticated upload channel; mismatches reject with `REJECTED_TENANT_OR_PRODUCER_MISMATCH`. |
-| `stream` | `^[a-z0-9][a-z0-9._-]{1,63}$` | Logical stream identifier within the producer (e.g. `"station-facts-default"`). |
-| `snapshot_sequence` | Integer `>= 1` | Monotonic sequence number scoped to `(producer.producer_id, stream)`. |
-| `published_at_us` | Integer `>= 1` | UTC epoch timestamp in microseconds when the manifest was finalized. |
-| `replacement_scope` | Object | Defines the exact key set superseded or purged by this snapshot (see §3). |
-| `files` | Array of 6 objects | Must contain exactly the 6 tables in canonical order: `["sessions", "invocations", "tool_calls", "usage", "outcomes", "coverage"]`. Each entry specifies `table`, `path`, `format` (`"parquet"` in production; `"canonical_json_rows"` in portable replay vectors), `row_count` (`>= 0`), `byte_length` (`>= 0`), and `sha256` (`^[0-9a-f]{64}$`). |
-| `manifest_digest` | `^[0-9a-f]{64}$` | SHA-256 hex digest of the canonical JSON serialization (`sort_keys=True`, compact separators `,` and `:`) of the manifest object with the `manifest_digest` key removed. |
+Each file descriptor has exactly table, path, format, row_count, byte_length,
+sha256. Table matches its canonical position. Path is exactly
+tables/<table>.parquet for parquet, tables/<table>.jsonl for canonical_json_rows.
+Counts are nonnegative INT64, sha256 is 64 hex. Production importers MUST reject
+canonical_json_rows with REJECTED_INVALID_MANIFEST; only explicitly selected
+vector replay mode accepts it. Parquet integrity uses actual file bytes and
+decoded row_count, then decoded rows undergo the same row checks.
 
----
+Write payloads first; atomically publish MANIFEST.json last (rename or conditional
+create). Manifests and sequence slots are write-once. Absent manifests are invisible
+and never imported. An unused slot may be completed or filled by an explicit skip
+before the next sequence. A visible rejected manifest MUST NOT be repaired or
+republished: publish the next sequence. Producers SHOULD run the same checker
+before publishing.
 
-## 3. Replacement Scope & Non-Append-Only Correction Semantics
+An explicit skip has zero files, non-null skip_reason, and source_generation /
+upsert_replace scope with empty session_keys. The scope is descriptive only.
+A valid skip consumes its sequence without changing tables, keys, generations
+or tombstones; it emits importer coverage status skipped, reason=skip_reason.
 
-Facts are replaced deterministically according to `manifest.replacement_scope`:
+## 3. Import state and ordered algorithm
 
-### 3.1 `scope_mode` Variants
+State key K=(tenant_placeholder, producer_id, stream); idempotency key=(K,sequence).
+Each K has cursor (initial 0), all consumed digests/outcomes, active generation and
+last key ID by source, purged-generation watermarks, permanent session tombstones,
+active tables, and import coverage rows. A checker instance is bound to one K;
+separate instances MUST NOT share state.
 
-1. **`"source_generation"` (`source_id != null`, `source_generation != null`, `session_keys == []`)**:
-   - Used when exporting or re-exporting an entire logical source root at `source_generation`.
-   - When `operation == "upsert_replace"`:
-     - All existing rows in all 6 tables belonging to `source_id` whose `source_generation` is `<= manifest.replacement_scope.source_generation` (or listed in `supersedes_generations`) are **deleted** from the active state and **replaced** by the rows in the incoming snapshot.
-     - All rows in the incoming snapshot MUST have `row.source_id == replacement_scope.source_id` and `row.source_generation == replacement_scope.source_generation`.
-   - When `operation == "purge_delete"` (`EN5c` retention/redaction purge):
-     - All six incoming table files MUST have `row_count == 0`.
-     - All existing rows in all 6 tables for `source_id` with `source_generation <= replacement_scope.source_generation` (and any generation in `supersedes_generations`) are permanently deleted, and `(source_id, replacement_scope.source_generation)` is recorded in the stream's `tombstoned_source_generations` watermark so no later snapshot can resurrect a generation `<=` the purged watermark.
+Evaluate in this exact order. Steps 1-5 never consume or mutate state.
 
-2. **`"session_keys"` (`source_id != null`, `source_generation != null`, `len(session_keys) >= 1`)**:
-   - Used for targeted in-generation replacement when one or more sessions receive late tool outcomes (`PostToolUse`), late model attribution, updated cumulative token deltas, or updated historical git evidence (`outcomes`), or when specific sessions are purged (`EN5c`).
-   - When `operation == "upsert_replace"`:
-     - In `sessions`, `invocations`, `tool_calls`, `usage`, and `outcomes`, all existing rows with `row.source_id == replacement_scope.source_id` and `row.session_key in replacement_scope.session_keys` (at `row.source_generation <= replacement_scope.source_generation`) are **deleted** and **replaced** by the incoming rows for those `session_keys`.
-     - Incoming rows in `sessions`, `invocations`, `tool_calls`, `usage`, and `outcomes` MUST belong exclusively to `(replacement_scope.source_id, replacement_scope.source_generation)` and have `row.session_key in replacement_scope.session_keys`.
-     - In `coverage`, because coverage denominators are scoped to `(source_id, source_generation, canonical_harness, target_table, coverage_dimension)`, any incoming `coverage` row replaces the existing `coverage` row with the same `coverage_key` (or `(source_id, source_generation, canonical_harness, target_table, coverage_dimension)`).
-   - When `operation == "purge_delete"` (`EN5c` targeted session purge):
-     - Incoming `sessions`, `invocations`, `tool_calls`, `usage`, and `outcomes` files MUST have `row_count == 0`.
-     - All existing rows in those 5 tables for `replacement_scope.source_id` and `row.session_key in replacement_scope.session_keys` are deleted, and those `(source_id, session_key)` pairs are recorded in `tombstoned_session_keys` up to `replacement_scope.source_generation`.
-     - Incoming `coverage` rows update the remaining active denominators for `(source_id, source_generation)`.
+1. Absent/null committed manifest: IGNORED_UNCOMMITTED_NO_MANIFEST.
+2. Require tenant_placeholder, producer.producer_id AND stream to equal the
+   authenticated expected K; otherwise REJECTED_TENANT_OR_PRODUCER_MISMATCH.
+3. Validate section 2 shape, types, enums, bounds, paths and format mode, including
+   digest syntax but NOT digest equality. Failure: REJECTED_INVALID_MANIFEST.
+4. For any consumed sequence, same declared digest -> DUPLICATE_IDEMPOTENT;
+   different declared digest -> CONFLICTING_DUPLICATE. This includes ALL old,
+   rejected and skipped sequences. Do not revalidate payloads or schema pins.
+5. Sequence >cursor+1 -> GAP_PENDING. Retry after the missing slot arrives or
+   the producer publishes an explicit skip there. No implicit skips.
+6. Verify manifest digest equality (REJECTED_INVALID_MANIFEST), then schema digest
+   (REJECTED_SCHEMA_MISMATCH), then payload existence/byte_length/SHA256/row_count
+   (REJECTED_FILE_INTEGRITY), in this priority order.
+7. Validate section 4 rows and unique primary keys within each table. Failure:
+   REJECTED_ROW_SCHEMA_VIOLATION.
+8. Check section 5 freshness, tombstones, key rotation (failure:
+   REJECTED_STALE_GENERATION_OR_TOMBSTONE). Build candidate state; incorrect row
+   scope, nonempty purge payloads, primary-key collisions with other sources,
+   section 6 references/coverage/usage grains fail with
+   REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH.
+9. Atomically commit, store digest/outcome, cursor=sequence: APPLIED (SKIPPED for
+   explicit skip). Step-6-valid skips bypass steps 7-8.
 
-3. **`"full_stream"` (`source_id == null`, `source_generation == null`, `session_keys == []`)**:
-   - Replaces the entire active state of `(producer.producer_id, stream)` across all sources with the incoming snapshot's rows.
+ANY rejection in steps 6-8 is consumed: preserve tables, keys, generations and
+tombstones, atomically record REJECTED(sequence,reason), digest and cursor=sequence,
+append import coverage. The next sequence proceeds. Earlier rejections do not
+consume. Import coverage is importer-owned and separate from producer coverage.
+Exactly one row per consumed sequence contains tenant_placeholder, producer_id,
+stream, snapshot_sequence, manifest_digest, status (accepted, rejected, skipped),
+reason (null for accepted, rejection code or skip_reason otherwise). Gaps and
+duplicate retries append no rows.
 
-### 3.2 Generation Monotonicity & Anti-Resurrection Rules
-For every `source_id` tracked within `(producer.producer_id, stream)`:
-- Let `active_source_generation[source_id]` be the highest `source_generation` accepted so far for `source_id`.
-- Let `purged_source_generation[source_id]` be the highest `source_generation` purged via `scope_mode == "source_generation", operation == "purge_delete"`.
-- If an incoming snapshot specifies a `source_generation < active_source_generation[source_id]`, or `source_generation <= purged_source_generation[source_id]`, or attempts to insert a `(source_id, session_key)` at a generation `<= tombstoned_session_keys[(source_id, session_key)]`, the snapshot MUST be rejected with `REJECTED_STALE_GENERATION_OR_TOMBSTONE`.
+## 4. Row rules
 
----
+The seven tables/*.schema.json files' type, enum, pattern, bounds, lengths, anyOf,
+array items/minItems/uniqueItems constraints are incorporated. Unknown/missing
+columns fail. Null must satisfy both type and enum. Pattern matching is full-match.
+All integers fit INT64. Every row key ID equals the manifest pseudonym_key_id.
+Shared key-ID pattern: `^[a-z0-9][a-z0-9._-]{1,63}$`. Shared effort enum:
+minimal, low, medium, high, xhigh, max, not_applicable, unknown. Shared model
+pattern: `^[A-Za-z0-9._:/-]{1,128}$`. Every non-null epoch timestamp is >=1.
+Harness enum everywhere: antigravity, claude, codex, grok, pi, unknown.
 
-## 4. Atomic Publication Protocol
+Every string value, recursively including array items, is scanned with ASCII
+case-insensitive substring matching against exactly this zero-content denylist:
+`g0a_`, `_sentinel`, `sk-`, `ghp_`, `gho_`, `github_pat_`, `akia`, `aiza`,
+`xoxb-`, `xoxp-`, `://`, `http:`, `https:`, `ssh:`, `git@`, `\`, `@`,
+`/users/`, `/home/`, `c:/`. No undocumented substring rules. These restrictions
+supplement field grammars; they never authorize free-form content.
 
-1. **Stage Table Payloads First**: Producer writes all 6 table files under an uncommitted staging location `snapshots/staging/<uuid>/tables/<table_name>.parquet`, flushing file descriptors and computing `(row_count, byte_length, sha256)` for each file.
-2. **Construct & Digest `MANIFEST.json`**: Producer populates `MANIFEST.json` with the 6 file descriptors, `schema_digest`, `replacement_scope`, and `manifest_digest`.
-3. **Atomic Commit**: Producer atomically renames/publishes the staged directory and writes `snapshots/seq-<snapshot_sequence>/MANIFEST.json` last (or uses an object-store conditional put `If-None-Match: *` on `MANIFEST.json`).
-4. **Reader / Importer Visibility Rule**:
-   - A staging directory or sequence prefix **without** a committed `MANIFEST.json` is an uncommitted partial publication (`IGNORED_UNCOMMITTED_NO_MANIFEST`). Readers and importers MUST ignore it without advancing watermarks or mutating state.
-   - If `MANIFEST.json` is present, the importer MUST verify all 6 table files exist and match their declared `byte_length`, `sha256`, and `row_count` **before** applying any state transition. Any missing file, checksum mismatch, or row count mismatch aborts the import atomically with `REJECTED_FILE_INTEGRITY`.
+Additional invariants (schema x_invariants are descriptive mirrors):
 
----
+* sessions: linked ID iff reason null and link_epoch non-null; unlinked means
+  reason present and epoch null. Non-harness origin or unknown harness cannot link.
+  org/team are operator-provided C1a printable ASCII slugs (0x21-0x7e, 1..1024), or
+  null. endpoint_scope is HMAC of a raw slug satisfying the same grammar. For each,
+  status observed iff value present; null status is missing_org (org/team: missing
+  org-provided attribution), missing_endpoint_scope (endpoint), or
+  invalid_field_characters (grammar/denylist failure). Missing org/endpoint requires
+  unlinked with its reason; invalid org/endpoint requires unlinked with
+  invalid_field_characters (invalid has priority, then missing_org, then missing_endpoint_scope). harness_version_status observed
+  iff version present. timestamp_status complete means both timestamps and end>=start;
+  start_only means start only; not_observable means both null. is_root implies
+  relation=status=root and parent null. evidenced means nonroot, nonself parent,
+  nonroot relation. Other lineage statuses require parent null.
+* invocations: call grain has message_key and null call_id_missing_reason;
+  usage_only has null message and non-null reason. model_status observed requires
+  model present/reason null; unknown requires model null/reason present.
+  occurred_at_status observed iff timestamp present.
+* tool_calls: linked iff invocation_key present; call_id_status observed iff
+  call_id_hmac present; fingerprint_status observed iff input_fingerprint_hmac
+  present. pending/unknown outcome requires reason; other outcomes forbid reason.
+  occurred_at_status and duration_status observed iff their values present.
+  tool_name is ONLY its schema's closed built-in list or mcp_hmac_<64hex>.
+* usage: linked iff invocation_key present. usage_grain=session_aggregate iff
+  counter_semantics=session_aggregate and invocation_link_status=session_level_summary;
+  per_turn forbids both aggregate indicators. At most one aggregate per session;
+  aggregate and per-turn rows are mutually exclusive per session. Observed or
+  inferred model requires model present/reason null; unknown is the reverse.
+  occurred_at_status observed iff timestamp present. predecessor_usage_key present
+  iff cumulative_delta or cumulative_monotonic_skip. total_tokens equals checked
+  sum of input_uncached_tokens, output_tokens, cache_read_tokens, cache_write_tokens.
+  reasoning_status observed iff reasoning_tokens present. Cost provenance is
+  harness_reported, provider_receipt_exact or unknown. Known costs require micros
+  present/reason null; unknown requires micros null/reason present. Export ONLY
+  observed_usd_micros INT64, always per-row delta, never running total. For finite
+  nonnegative DOUBLE USD, multiply the exact binary64 value mathematically by
+  1,000,000, then round-half-even to INT64 (reject overflow); no intermediate
+  binary64 rounding. Difference cumulative receipts before exporting.
+* outcomes: remote/branch/head/base value present iff status is observed/
+  named_branch/observed/observed respectively. Missing evidence means all four
+  statuses not_observed and reason present; observed_full means all four values
+  present/reason null; observed_partial means neither extreme/reason null.
+  observed_at_status observed iff timestamp present. Historical as recorded,
+  never sampled from current HEAD at export time.
+* git_evidence: dendro D4c produces LOCAL historical git records only, never
+  network lookups/current HEAD sampling. commit_hmac and ordered parent_hmacs
+  are keyed pseudonyms; empty parents means root commit. merge_status observed iff
+  is_merge present; if observed is_merge=(parent count>1). default_branch_status
+  observed iff on_default_branch present. observed_at_status observed iff timestamp
+  present. session_match_status matched iff session_key present; unknown, unmatched,
+  ambiguous require null. Never choose an arbitrary ambiguous session. Enterprise
+  joins commit pseudonyms under the same key ID, never raw SHAs.
+* coverage: encountered=accepted+rejected+recognized_unprojected;
+  expected_population=observable+unknown_or_missing (checked INT64 sums).
+  complete: expected>0, observable=expected, unknown/rejected/unprojected=0;
+  partial: expected>0, observable>0, at least one of those three>0;
+  empty: expected=0, discovery discovered/empty_root, projection not
+  connector_unimplemented; unavailable: observable=0 and (expected>0 or projection
+  connector_unimplemented or discovery missing_root/permission_denied/not_configured).
+  complete/empty gap_reasons=[none]; others nonempty without none.
+  coverage_key is recomputed by the derivation in tables/README.md.
 
-## 5. Deterministic Replay & Import State Machine (`EN3b`)
+Pseudonym derivations and Parquet mapping in tables/README.md and the schemas
+are incorporated. Raw commits, endpoints and custom tool names are forbidden.
+Importers validate representation, not possession of the secret pseudonym key.
 
-For each stream key `K = (producer_id, stream)`, the importer maintains:
-- `high_water_sequence`: `u64` (initially `0`)
-- `committed_manifests`: `Map<u64, String>` mapping accepted `snapshot_sequence` $\rightarrow$ `manifest_digest`
-- `active_source_generation`: `Map<String, u64>`
-- `purged_source_generation`: `Map<String, u64>`
-- `tombstoned_session_keys`: `Map<(String, String), u64>`
-- `tables`: active row maps keyed by primary key for `sessions`, `invocations`, `tool_calls`, `usage`, `outcomes`, and `coverage`.
+## 5. Replacement, purge and key rotation
 
-When evaluating a publication event `E`:
+All incoming normal rows belong to scope source_id and source_generation.
+A source scope spans ALL harnesses. Upsert replaces every source row in all seven
+tables and updates generation/key ID. Reject generation<active or <=purged.
+Reject any incoming non-null session_key in the permanent tombstone set, regardless
+of generation or source within K. Never overwrite another source's primary keys.
 
-1. **Step 1 — Manifest Presence Check (Atomic Visibility)**:
-   - If `E.committed_manifest` is `null`: return `IGNORED_UNCOMMITTED_NO_MANIFEST`. State is unchanged.
-2. **Step 2 — Producer & Tenant Authorization (`EN3a`)**:
-   - Verify `manifest.tenant_placeholder == expected_tenant_placeholder` and `manifest.producer.producer_id == expected_producer_id`. If mismatched, return `REJECTED_TENANT_OR_PRODUCER_MISMATCH`.
-3. **Step 3 — Manifest Structural & Digest Check**:
-   - Verify `contract_id == "fact-export-v1"`, `contract_version == 1`, valid regexes on identifiers, canonical table list order, and recomputed `manifest_digest`. If invalid, return `REJECTED_INVALID_MANIFEST`.
-4. **Step 4 — Schema Digest Check (`EN3c`)**:
-   - Verify `manifest.schema_digest == expected_schema_digest`. If mismatched, return `REJECTED_SCHEMA_MISMATCH`.
-5. **Step 5 — Sequence Idempotency, Conflict, Stale & Out-of-Order Check**:
-   - If `manifest.snapshot_sequence` exists in `committed_manifests`:
-     - If `committed_manifests[seq] == manifest.manifest_digest`: return `DUPLICATE_NOOP` (idempotent re-import).
-     - Else: return `REJECTED_CONFLICTING_DUPLICATE_SEQUENCE` (two different manifests claiming the same sequence).
-   - If `manifest.snapshot_sequence < high_water_sequence`:
-     - Return `REJECTED_STALE_SEQUENCE`.
-   - If `manifest.snapshot_sequence > high_water_sequence + 1`:
-     - Return `REJECTED_OUT_OF_ORDER_SEQUENCE_GAP` (snapshots within a `(producer_id, stream)` must be applied in contiguous monotonic sequence order `1, 2, 3, ...`).
-6. **Step 6 — File Presence & SHA-256 / Byte-Length / Row-Count Integrity Check**:
-   - For each of the 6 table descriptors in `manifest.files`, verify the staged table payload exists and its canonical byte length, SHA-256 digest, and row count equal `file.byte_length`, `file.sha256`, and `file.row_count`. If any check fails, return `REJECTED_FILE_INTEGRITY`.
-7. **Step 7 — Row Schema, Zero-Content (`DE-004`), Pseudonymization (`F13`) & Missingness (`F14`) Validation**:
-   - Validate every row in all 6 tables against its table JSON Schema, bi-directional `x_invariants`, `pseudonym_key_id == manifest.producer.pseudonym_key_id`, and zero-content sentinel checks. If any row fails, return `REJECTED_ROW_SCHEMA_VIOLATION`.
-8. **Step 8 — Replacement Scope, Anti-Resurrection & Cross-Table Referential / Denominator Validation**:
-   - Validate `replacement_scope` invariants and check against `active_source_generation`, `purged_source_generation`, and `tombstoned_session_keys`. If violated, return `REJECTED_STALE_GENERATION_OR_TOMBSTONE`.
-   - Simulate applying the replacement scope to a clone of `tables`, then verify cross-table invariants on the resulting active state for `(source_id, source_generation)`:
-     - Every `invocations.session_key`, `tool_calls.session_key`, `usage.session_key`, and `outcomes.session_key` references an active `sessions.session_key` in the same `(source_id, source_generation)` and `canonical_harness`.
-     - Every non-null `tool_calls.invocation_key` and `usage.invocation_key` references an active `invocations.invocation_key` in the same `session_key`.
-     - Every active `invocations` row is uniquely qualified by `(session_key, sequence_no, invocation_grain, message_key)` (`F9`).
-     - Every active `coverage` row for `(source_id, source_generation, canonical_harness, target_table, coverage_dimension)` has `accepted_count` matching the active row count in `target_table` for `(source_id, source_generation, canonical_harness)`, and for field-level dimensions (`session_link_id`, `model_attribution`, `observed_cost_usd`, `tool_outcome_pairing`, `git_outcome_evidence`, `timestamp_fidelity`), `expected_population_count`, `observable_count`, and `unknown_or_missing_count` match the actual active rows in `target_table`!
-     - If any cross-table or coverage denominator check fails, return `REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH`.
-9. **Step 9 — Atomic State Commit**:
-   - Commit the updated `tables`, update `high_water_sequence = manifest.snapshot_sequence`, record `committed_manifests[seq] = manifest.manifest_digest`, update generation/tombstone watermarks, and return `APPLIED`.
+Source-generation purge requires all payloads empty, generation>=active and
+>purged, deletes source rows through that generation, sets active and purged
+watermarks to at least that generation, preserves permanent session tombstones
+and last key ID. Later exports must exceed the purged watermark.
+
+Session purge is reserved for EN5c: generation MUST equal active, key ID MUST equal
+active key, ALL payloads empty. Delete only rows with that source and selected
+non-null session_key. Preserve all surviving rows byte-identically, including
+source_generation and ALL coverage rows. No generation bump or coverage swap.
+Tombstone selected keys permanently within K even if absent. Skip coverage
+reconciliation for this deletion: preserved coverage describes the pre-purge export.
+Subsequent full source upserts require accurate complete coverage again.
+Deletion authority in v1 is producer-issued purge manifests only; an
+Enterprise-to-producer retention channel is deferred to EN5c. A session purge
+may also record permanent tombstones after a source-generation purge, when
+active equals the purged watermark; it still uses that active generation and key.
+
+Changing pseudonym_key_id requires source-generation purge of ALL old-key rows,
+then COMPLETE re-export at a strictly greater generation under the new key.
+Without that purge, reject at step 8. source_id and producer_id are stable
+provisioned routing pseudonyms, computed once and retained through fact-key
+rotation; other keyed pseudonyms are recalculated. Producers must retain their
+purge ledger and exclude purged logical sessions when rotating pseudonyms.
+No raw SHA, translation table or key material is sent to Enterprise.
+
+## 6. Snapshot references and coverage
+
+Validate complete candidate state for the affected source after upsert; other sources historical post-purge coverage is not revalidated. Every non-null session_key in
+invocations, tools, usage, outcomes and git_evidence references a session with equal
+source_id, source_generation, canonical_harness and pseudonym_key_id. Non-null
+invocation keys reference the same session. Invocation identity tuple
+(session_key,sequence_no,invocation_grain,message_key) is unique. Usage grains obey
+section 4. Parent-session existence is not required (retained population may differ).
+
+For every (source_id,generation,canonical_harness,table) with at least one fact row
+in the snapshot, require EXACTLY one coverage row_ingestion row. Coverage tuples
+(source_id,generation,harness,target_table,dimension) are unique for ALL dimensions.
+Zero-row coverage is allowed; target_table excludes coverage, includes git_evidence.
+accepted_count always equals the corresponding fact population count. row_ingestion
+expected_population=encountered_count, observable=accepted_count, and
+unknown_or_missing=rejected_count+recognized_unprojected_count. Other dimensions
+have expected_population=count; observable counts the predicate below and unknown
+is its complement. Inapplicable table/dimension combinations fail.
+
+| Dimension | Tables | Observable predicate |
+| --- | --- | --- |
+| session_link_id | sessions | link ID != unlinked |
+| model_attribution | invocations, usage | model_status != unknown |
+| observed_cost_usd | usage | cost_provenance != unknown |
+| tool_outcome_pairing | tool_calls | outcome not pending/unknown |
+| git_outcome_evidence | outcomes, git_evidence | evidence_status != missing; session_match_status == matched respectively |
+| timestamp_fidelity | all six fact tables | sessions timestamp_status=complete; invocations/tools/usage occurred_at_status=observed; outcomes/git_evidence observed_at_status=observed |
+
+Recompute coverage_key from its tuple. After targeted purge only, producer coverage
+remains historical as section 5 states. Importer rejection coverage is separate.
+
+## 7. Evidence
+
+SHA256SUMS hashes exact bytes of SNAPSHOT.md, tables/README.md, seven schemas and
+vectors in lexicographic relative-path order. CONTRACT-DIGEST is SHA256 of exact
+SHA256SUMS bytes. Checkers, generator, reports, captures and link-id-v1 are excluded.
+Both independent checkers verify digests, replay vectors and compare statuses,
+cursors, import coverage, per-step active-table digests and final active tables. Passing is informative evidence,
+not authority to freeze or production-importer certification.

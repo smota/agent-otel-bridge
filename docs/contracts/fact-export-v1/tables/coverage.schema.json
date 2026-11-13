@@ -6,6 +6,7 @@
   "properties": {
     "accepted_count": {
       "description": "Count of records accepted and projected into target_table for this (source_id, source_generation, canonical_harness).",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -23,19 +24,20 @@
       },
       "x_parquet": {
         "field_id": 13,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     },
     "canonical_harness": {
-      "description": "Canonical harness identifier from the closed link-id-v1 vocabulary.",
+      "description": "Closed canonical harness vocabulary, including unknown.",
       "enum": [
         "antigravity",
         "claude",
         "codex",
         "grok",
-        "pi"
+        "pi",
+        "unknown"
       ],
       "type": "string",
       "x_justification": {
@@ -46,9 +48,9 @@
           "A5a"
         ],
         "missingness_semantics": "Required closed enum.",
-        "pseudonymization": "Closed 5-value enum (F12).",
+        "pseudonymization": "Closed canonical harness enum.",
         "why_present": "Partitions coverage and missingness denominators by harness platform (including 'pi' when connector_unimplemented per F1).",
-        "zero_content": "Closed enum literal (DE-004)."
+        "zero_content": "Closed six-value harness enum."
       },
       "x_parquet": {
         "field_id": 5,
@@ -89,7 +91,7 @@
       }
     },
     "coverage_key": {
-      "description": "Globally unique 64-character lowercase hex HMAC-SHA256 primary key of the coverage row, derived from (source_id, source_generation, canonical_harness, target_table, coverage_dimension).",
+      "description": "SHA256 of the length-prefixed public coverage tuple.",
       "pattern": "^[0-9a-f]{64}$",
       "type": "string",
       "x_justification": {
@@ -100,7 +102,7 @@
           "A5a"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Primary key for deterministic coverage row replacement across snapshots.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -148,7 +150,8 @@
         "accepted_invocations",
         "accepted_tool_calls",
         "accepted_usage_rows",
-        "accepted_outcome_rows"
+        "accepted_outcome_rows",
+        "accepted_git_evidence_rows"
       ],
       "type": "string",
       "x_justification": {
@@ -187,7 +190,7 @@
         ],
         "missingness_semantics": "Required closed enum.",
         "pseudonymization": "Closed 5-value enum; never contains filesystem paths.",
-        "why_present": "Distinguishes a harness with 0 sessions because the directory is empty vs not installed or unreadable (AGENTS.md \u00a73.6, D5).",
+        "why_present": "Distinguishes a harness with 0 sessions because the directory is empty vs not installed or unreadable (AGENTS.md §3.6, D5).",
         "zero_content": "Closed enum literal (DE-004)."
       },
       "x_parquet": {
@@ -199,6 +202,7 @@
     },
     "encountered_count": {
       "description": "Total raw records encountered during ingestion for this dimension: accepted_count + rejected_count + recognized_unprojected_count.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -214,13 +218,14 @@
       },
       "x_parquet": {
         "field_id": 16,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     },
     "expected_population_count": {
       "description": "Explicit denominator for coverage_dimension in target_table: observable_count + unknown_or_missing_count.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -232,12 +237,12 @@
         ],
         "missingness_semantics": "Required non-negative integer; must equal observable_count + unknown_or_missing_count.",
         "pseudonymization": "Aggregate record count.",
-        "why_present": "Guarantees every coverage metric carries its exact denominator alongside its numerator (MVP plan \u00a72 Decision 3, F14).",
+        "why_present": "Guarantees every coverage metric carries its exact denominator alongside its numerator (MVP plan §2 Decision 3, F14).",
         "zero_content": "Non-negative integer count only (DE-004)."
       },
       "x_parquet": {
         "field_id": 17,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -315,6 +320,7 @@
     },
     "observable_count": {
       "description": "Numerator of records in expected_population_count where the target dimension is known/observed.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -331,7 +337,7 @@
       },
       "x_parquet": {
         "field_id": 18,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -375,7 +381,7 @@
           "EN5c"
         ],
         "missingness_semantics": "Required non-empty identifier.",
-        "pseudonymization": "Key generation label; contains no secret material.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Tracks customer-held key rotation across coverage digests.",
         "zero_content": "Key generation label only (DE-004)."
       },
@@ -414,6 +420,7 @@
     },
     "recognized_unprojected_count": {
       "description": "Count of valid harness records recognized by the parser that intentionally do not project into target_table (retrieval_v1).",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -428,13 +435,14 @@
       },
       "x_parquet": {
         "field_id": 15,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     },
     "rejected_count": {
       "description": "Count of malformed, corrupt, or schema-invalid raw records rejected during extraction.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -450,13 +458,14 @@
       },
       "x_parquet": {
         "field_id": 14,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     },
     "source_generation": {
       "description": "Monotonic positive integer generation of the source extraction state.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": "integer",
       "x_justification": {
@@ -472,7 +481,7 @@
       },
       "x_parquet": {
         "field_id": 3,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -489,7 +498,7 @@
           "A5a"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Associates coverage denominators with the pseudonymized source root.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -507,7 +516,8 @@
         "invocations",
         "tool_calls",
         "usage",
-        "outcomes"
+        "outcomes",
+        "git_evidence"
       ],
       "type": "string",
       "x_justification": {
@@ -532,6 +542,7 @@
     },
     "unknown_or_missing_count": {
       "description": "Count of records in expected_population_count where the target dimension is explicitly unknown or missing (e.g. cost_provenance == 'unknown' or agent.session.link_id == null).",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -548,34 +559,34 @@
       },
       "x_parquet": {
         "field_id": 19,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     }
   },
   "required": [
-    "coverage_key",
-    "source_id",
-    "source_generation",
-    "pseudonym_key_id",
-    "canonical_harness",
-    "target_table",
-    "coverage_dimension",
-    "discovery_status",
-    "read_status",
-    "projection_status",
-    "field_fidelity",
-    "denominator_basis",
     "accepted_count",
-    "rejected_count",
-    "recognized_unprojected_count",
+    "canonical_harness",
+    "coverage_dimension",
+    "coverage_key",
+    "coverage_status",
+    "denominator_basis",
+    "discovery_status",
     "encountered_count",
     "expected_population_count",
+    "field_fidelity",
+    "gap_reasons",
     "observable_count",
-    "unknown_or_missing_count",
-    "coverage_status",
-    "gap_reasons"
+    "projection_status",
+    "pseudonym_key_id",
+    "read_status",
+    "recognized_unprojected_count",
+    "rejected_count",
+    "source_generation",
+    "source_id",
+    "target_table",
+    "unknown_or_missing_count"
   ],
   "title": "fact-export-v1 coverage table row",
   "type": "object",

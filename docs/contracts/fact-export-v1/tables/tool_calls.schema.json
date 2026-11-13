@@ -18,7 +18,7 @@
           "EN3c"
         ],
         "missingness_semantics": "Non-null iff call_id_status == 'observed'; null iff call_id_status == 'not_reported'.",
-        "pseudonymization": "HMAC-SHA256 digest qualified by session_key (F8, F13); never a raw call ID.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Pairs PreToolUse/tool_use with late PostToolUse/tool_result without cross-session collisions (F8, D1).",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -55,13 +55,14 @@
       }
     },
     "canonical_harness": {
-      "description": "Canonical harness identifier from the closed link-id-v1 vocabulary.",
+      "description": "Closed canonical harness vocabulary, including unknown.",
       "enum": [
         "antigravity",
         "claude",
         "codex",
         "grok",
-        "pi"
+        "pi",
+        "unknown"
       ],
       "type": "string",
       "x_justification": {
@@ -71,9 +72,9 @@
           "EN6a"
         ],
         "missingness_semantics": "Required closed enum.",
-        "pseudonymization": "Closed 5-value enum (F12).",
+        "pseudonymization": "Closed canonical harness enum.",
         "why_present": "Supports per-harness tool capability funnel (I06) and failure loop analysis (I08).",
-        "zero_content": "Closed enum literal (DE-004)."
+        "zero_content": "Closed six-value harness enum."
       },
       "x_parquet": {
         "field_id": 8,
@@ -110,6 +111,7 @@
     },
     "duration_us": {
       "description": "Tool execution duration in microseconds when both start and end boundaries are observed.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": [
         "integer",
@@ -170,7 +172,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Non-null iff fingerprint_status == 'observed'; null iff fingerprint_status == 'input_unavailable'.",
-        "pseudonymization": "Keyed HMAC-SHA256 digest over (tool_name, trimmed_lexical_input) under pseudonym_key_id; irreversible without key and input.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Enables identical-input retry and failure loop detection (I08) without persisting raw arguments or file paths.",
         "zero_content": "64-char hex HMAC digest; raw command/arguments are never stored (DE-004)."
       },
@@ -194,7 +196,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Non-null iff invocation_link_status == 'linked'; null when the tool event came from an unassociated hook or lacked a parent turn.",
-        "pseudonymization": "64-char hex HMAC-SHA256 invocation pseudonym (F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Links tool executions back to the model invocation turn that requested them.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -256,7 +258,8 @@
     },
     "occurred_at_us": {
       "description": "Tool execution timestamp in UTC microseconds since Unix epoch when observed.",
-      "minimum": 0,
+      "maximum": 9223372036854775807,
+      "minimum": 1,
       "type": [
         "integer",
         "null"
@@ -273,7 +276,7 @@
       },
       "x_parquet": {
         "field_id": 20,
-        "logical_type": "TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)",
+        "logical_type": "TIMESTAMP(MICROS, true)",
         "physical_type": "INT64",
         "repetition": "OPTIONAL"
       }
@@ -341,9 +344,9 @@
     },
     "pseudonym_key_id": {
       "description": "Identifier of the customer-held HMAC key used to pseudonymize entity keys in this row.",
-      "maxLength": 128,
-      "minLength": 1,
-      "pattern": "^[\\x21-\\x7E]{1,128}$",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
       "type": "string",
       "x_justification": {
         "consumers": [
@@ -352,7 +355,7 @@
           "EN5b"
         ],
         "missingness_semantics": "Required non-empty key identifier.",
-        "pseudonymization": "Identifies customer pseudonymization key (DE-004, F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Tracks key lineage for tool_call_key, call_id_hmac, and input_fingerprint_hmac.",
         "zero_content": "Key identifier slug only (DE-004)."
       },
@@ -365,6 +368,7 @@
     },
     "sequence_no": {
       "description": "Zero-based or positive source sequence order within the session generation.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -397,7 +401,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Required foreign key on every row.",
-        "pseudonymization": "64-char hex HMAC-SHA256 session pseudonym (F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Associates tool calls with their session for replacement and session-level rollups.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -437,6 +441,7 @@
     },
     "source_generation": {
       "description": "Monotonic ingestion generation number for source_id.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": "integer",
       "x_justification": {
@@ -471,7 +476,7 @@
           "EN3c"
         ],
         "missingness_semantics": "Required on every row.",
-        "pseudonymization": "64-char hex HMAC-SHA256 source pseudonym (F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Binds the tool call to its ingestion source for replacement and coverage accounting.",
         "zero_content": "Hex HMAC digest; never a file path (DE-004)."
       },
@@ -504,7 +509,7 @@
       }
     },
     "tool_archetype": {
-      "description": "Preference-agnostic Behavioral Execution Archetype per AGENTS.md \u00a71 Invariant 5 and DE-005.",
+      "description": "Preference-agnostic Behavioral Execution Archetype per AGENTS.md §1 Invariant 5 and DE-005.",
       "enum": [
         "filter_compressor",
         "structured_parser",
@@ -525,7 +530,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Uses 'unknown' when archetype cannot be classified; never null.",
-        "pseudonymization": "Closed 10-value preference-agnostic archetype enum (AGENTS.md \u00a71.5, DE-005).",
+        "pseudonymization": "Closed 10-value preference-agnostic archetype enum (AGENTS.md §1.5, DE-005).",
         "why_present": "Aligns AOB and dendro on a single preference-agnostic behavioral tool taxonomy.",
         "zero_content": "Closed enum literal (DE-004)."
       },
@@ -548,7 +553,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Required primary key on every row.",
-        "pseudonymization": "HMAC-SHA256 pseudonym over (source_id, source_generation, session_key, call_id_or_seq) under pseudonym_key_id (F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Uniquely identifies the tool call row across replacement snapshots.",
         "zero_content": "64-char hex HMAC digest only (DE-004, F13)."
       },
@@ -560,7 +565,7 @@
       }
     },
     "tool_category": {
-      "description": "Closed operational tool category from dendro_core::facts::ToolCategory (DATA_DICTIONARY.md \u00a73.2).",
+      "description": "Closed operational tool category from dendro_core::facts::ToolCategory (DATA_DICTIONARY.md §3.2).",
       "enum": [
         "coord_queue",
         "coord_status",
@@ -590,10 +595,62 @@
       }
     },
     "tool_name": {
-      "description": "Safe tool capability token (e.g. 'Read', 'Edit', 'Bash', 'exec', or 'mcp_custom_hmac_<16hex>'). Resolves F2.",
-      "maxLength": 64,
-      "minLength": 1,
-      "pattern": "^[A-Za-z0-9_.:-]{1,64}$",
+      "anyOf": [
+        {
+          "enum": [
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "Glob",
+            "Grep",
+            "LS",
+            "MultiEdit",
+            "NotebookEdit",
+            "NotebookRead",
+            "Read",
+            "Skill",
+            "Task",
+            "TodoRead",
+            "TodoWrite",
+            "WebFetch",
+            "WebSearch",
+            "Write",
+            "apply_patch",
+            "ask_question",
+            "define_subagent",
+            "edit_file",
+            "exec_command",
+            "find_by_name",
+            "grep_search",
+            "invoke_subagent",
+            "list_dir",
+            "manage_subagents",
+            "manage_task",
+            "multi_edit_file",
+            "read_file",
+            "read_url_content",
+            "request_user_input",
+            "run_command",
+            "schedule",
+            "search_web",
+            "send_message",
+            "shell",
+            "swarm",
+            "update_plan",
+            "view_code_item",
+            "view_file_outline",
+            "view_image",
+            "write_file",
+            "write_stdin"
+          ]
+        },
+        {
+          "maxLength": 73,
+          "minLength": 73,
+          "pattern": "^mcp_hmac_[0-9a-f]{64}$"
+        }
+      ],
+      "description": "Closed built-in vocabulary or mcp_hmac_<64hex>; custom names are keyed.",
       "type": "string",
       "x_justification": {
         "consumers": [
@@ -601,7 +658,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Required non-empty safe identifier token.",
-        "pseudonymization": "Built-in harness tool name or HMAC-masked custom MCP tool token (DATA_DICTIONARY.md \u00a72.1); never a shell command string or path.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Resolves F2 (Codex real tool names in shared scan) and feeds I06 capability funnel.",
         "zero_content": "Strict identifier token without whitespace, slashes, or arguments (DE-004)."
       },
@@ -614,30 +671,30 @@
     }
   },
   "required": [
-    "tool_call_key",
-    "source_id",
-    "source_generation",
-    "pseudonym_key_id",
-    "session_key",
-    "invocation_key",
-    "invocation_link_status",
-    "canonical_harness",
-    "sequence_no",
     "call_id_hmac",
     "call_id_status",
-    "tool_name",
-    "tool_category",
-    "tool_archetype",
-    "input_fingerprint_hmac",
+    "canonical_harness",
+    "duration_status",
+    "duration_us",
     "fingerprint_status",
-    "structured_write",
+    "input_fingerprint_hmac",
+    "invocation_key",
+    "invocation_link_status",
+    "occurred_at_status",
+    "occurred_at_us",
     "outcome_status",
     "outcome_unknown_reason",
-    "occurred_at_us",
-    "occurred_at_status",
-    "duration_us",
-    "duration_status",
-    "signal_source"
+    "pseudonym_key_id",
+    "sequence_no",
+    "session_key",
+    "signal_source",
+    "source_generation",
+    "source_id",
+    "structured_write",
+    "tool_archetype",
+    "tool_call_key",
+    "tool_category",
+    "tool_name"
   ],
   "title": "fact-export-v1 tool_calls table row",
   "type": "object",

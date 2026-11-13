@@ -2,7 +2,7 @@
   "$id": "https://github.com/smota/agent-otel-bridge/blob/main/docs/contracts/fact-export-v1/tables/outcomes.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Normative fact-export-v1 schema for the outcomes table. Exports historical git evidence extracted strictly from session records or workspace snapshots (D4c; never live git subprocesses during replay). Producer exports raw historical evidence only; the outcome proxy is computed exclusively in Enterprise (MVP plan \u00a72 Decision 5, EN6b, F4).",
+  "description": "Normative fact-export-v1 schema for the outcomes table. Exports historical git evidence extracted strictly from session records or workspace snapshots (D4c; never live git subprocesses during replay). Producer exports raw historical evidence only; the outcome proxy is computed exclusively in Enterprise (MVP plan §2 Decision 5, EN6b, F4).",
   "properties": {
     "base_commit_hmac": {
       "description": "64-character lowercase hex HMAC-SHA256 of the session's initial/base git commit SHA when observed. Never a raw 40-char git SHA (F13).",
@@ -18,7 +18,7 @@
           "EN6b"
         ],
         "missingness_semantics": "Non-null iff base_commit_status == 'observed'; null otherwise.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13); raw 40-char git SHAs are rejected.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Allows EN6b to compare base_commit_hmac vs head_commit_hmac to determine whether the session produced commits without exposing raw commit hashes.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -70,7 +70,7 @@
           "EN6b"
         ],
         "missingness_semantics": "Non-null iff branch_status == 'named_branch'; null when branch_status in ['detached_head', 'not_observed'].",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13); prevents developer names or ticket titles in branch names from leaking.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Groups sessions operating on the same branch for EN6b survival/rework proxy computation.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -82,7 +82,7 @@
       }
     },
     "branch_status": {
-      "description": "Explicit git HEAD branch state governing branch_name_hmac (AGENTS.md \u00a73.3).",
+      "description": "Explicit git HEAD branch state governing branch_name_hmac (AGENTS.md §3.3).",
       "enum": [
         "named_branch",
         "detached_head",
@@ -109,13 +109,14 @@
       }
     },
     "canonical_harness": {
-      "description": "Canonical harness identifier from the closed link-id-v1 vocabulary.",
+      "description": "Closed canonical harness vocabulary, including unknown.",
       "enum": [
         "antigravity",
         "claude",
         "codex",
         "grok",
-        "pi"
+        "pi",
+        "unknown"
       ],
       "type": "string",
       "x_justification": {
@@ -125,9 +126,9 @@
           "EN6b"
         ],
         "missingness_semantics": "Required closed enum.",
-        "pseudonymization": "Closed 5-value enum (F12).",
+        "pseudonymization": "Closed canonical harness enum.",
         "why_present": "Supports per-harness git evidence coverage and EN6b outcome proxy stratification.",
-        "zero_content": "Closed enum literal (DE-004)."
+        "zero_content": "Closed six-value harness enum."
       },
       "x_parquet": {
         "field_id": 6,
@@ -154,7 +155,7 @@
         ],
         "missingness_semantics": "Required closed enum.",
         "pseudonymization": "Closed 4-value enum.",
-        "why_present": "Certifies that git evidence came from historical session/telemetry records rather than live filesystem mutation (MVP plan \u00a72 Decision 5, D4c).",
+        "why_present": "Certifies that git evidence came from historical session/telemetry records rather than live filesystem mutation (MVP plan §2 Decision 5, D4c).",
         "zero_content": "Closed enum literal (DE-004)."
       },
       "x_parquet": {
@@ -205,7 +206,7 @@
           "EN6b"
         ],
         "missingness_semantics": "Non-null iff head_commit_status == 'observed'; null iff head_commit_status == 'not_observed'.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13); raw 40-char git SHAs are rejected.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Tracks the commit state reached by the session and replaceable within a generation as subsequent commits occur in the session.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -264,7 +265,7 @@
         ],
         "missingness_semantics": "Non-null iff evidence_status == 'missing'; null otherwise.",
         "pseudonymization": "Closed 4-reason vocabulary.",
-        "why_present": "Explains whether git evidence is absent because the workspace is not a git repo (AGENTS.md \u00a73.3) or because the harness log omitted git metadata.",
+        "why_present": "Explains whether git evidence is absent because the workspace is not a git repo (AGENTS.md §3.3) or because the harness log omitted git metadata.",
         "zero_content": "Closed enum literal or null (DE-004)."
       },
       "x_parquet": {
@@ -300,6 +301,7 @@
     },
     "observed_at_us": {
       "description": "UTC timestamp in microseconds since Unix epoch when the historical git evidence was captured in the session.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": [
         "integer",
@@ -334,7 +336,7 @@
           "EN6b"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Primary key for outcome evidence deduplication and in-generation replacement when later session events update git state.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -358,7 +360,7 @@
           "EN5c"
         ],
         "missingness_semantics": "Required non-empty identifier.",
-        "pseudonymization": "Key generation label; contains no secret material.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Supports customer-held key rotation across git evidence digests (DE-004).",
         "zero_content": "Key generation label only (DE-004)."
       },
@@ -397,7 +399,7 @@
       }
     },
     "repo_remote_hmac": {
-      "description": "64-character lowercase hex HMAC-SHA256 of the credential-sanitized canonical git origin URL (AGENTS.md \u00a73.3). Never a raw URL or path.",
+      "description": "64-character lowercase hex HMAC-SHA256 of the credential-sanitized canonical git origin URL (AGENTS.md §3.3). Never a raw URL or path.",
       "pattern": "^[0-9a-f]{64}$",
       "type": [
         "string",
@@ -410,7 +412,7 @@
           "EN6b"
         ],
         "missingness_semantics": "Non-null iff remote_status == 'observed'; null otherwise.",
-        "pseudonymization": "HMAC-SHA256 digest of credential-stripped canonical remote URL under customer-held key (DE-004, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Correlates git commits across developer workstations working on the same repository without leaking repository names or URLs.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -423,6 +425,7 @@
     },
     "sequence_no": {
       "description": "0-based monotonic ordinal of the git evidence checkpoint within the session.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -438,7 +441,7 @@
       },
       "x_parquet": {
         "field_id": 7,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -454,7 +457,7 @@
           "EN6b"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Links historical git evidence to the session that observed it.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -467,6 +470,7 @@
     },
     "source_generation": {
       "description": "Monotonic positive integer generation of the source extraction state.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": "integer",
       "x_justification": {
@@ -477,12 +481,12 @@
         ],
         "missingness_semantics": "Required integer >= 1.",
         "pseudonymization": "Generation counter.",
-        "why_present": "Allows an in-progress session's git evidence (e.g. new HEAD commit or worktree state transition) to be replaced in a later snapshot within the same generation (MVP plan \u00a72 Decision 3).",
+        "why_present": "Allows an in-progress session's git evidence (e.g. new HEAD commit or worktree state transition) to be replaced in a later snapshot within the same generation (MVP plan §2 Decision 3).",
         "zero_content": "Positive integer counter (DE-004)."
       },
       "x_parquet": {
         "field_id": 3,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -499,7 +503,7 @@
           "EN3c"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Partitions outcome replacement scope by source root.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -538,27 +542,27 @@
     }
   },
   "required": [
-    "outcome_key",
-    "source_id",
-    "source_generation",
-    "pseudonym_key_id",
-    "session_key",
-    "canonical_harness",
-    "sequence_no",
-    "evidence_source",
-    "evidence_status",
-    "missing_reason",
-    "repo_remote_hmac",
-    "remote_status",
-    "branch_name_hmac",
-    "branch_status",
-    "head_commit_hmac",
-    "head_commit_status",
     "base_commit_hmac",
     "base_commit_status",
-    "worktree_state",
+    "branch_name_hmac",
+    "branch_status",
+    "canonical_harness",
+    "evidence_source",
+    "evidence_status",
+    "head_commit_hmac",
+    "head_commit_status",
+    "missing_reason",
+    "observed_at_status",
     "observed_at_us",
-    "observed_at_status"
+    "outcome_key",
+    "pseudonym_key_id",
+    "remote_status",
+    "repo_remote_hmac",
+    "sequence_no",
+    "session_key",
+    "source_generation",
+    "source_id",
+    "worktree_state"
   ],
   "title": "fact-export-v1 outcomes table row",
   "type": "object",

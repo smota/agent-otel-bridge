@@ -1,122 +1,90 @@
-# `fact-export-v1` Normative Table Schemas & Parquet Logical-Type Mapping (`C1b`)
+# fact-export-v1 tables and pseudonym derivations
 
-**Contract Identifier**: `fact-export-v1`  
-**Contract Home**: `smota/agent-otel-bridge` (`docs/contracts/fact-export-v1/tables/`)  
-**Join-Key Dependency**: [`link-id-v1/SPEC.md`](../link-id-v1/SPEC.md) (`07dff9562958ec286c1b096f0eb15c91deddb284c26d99904afeba2b882d0ab5`)  
-**Authoritative Inputs**: `2026-11-11-mvp-plan.md` (§2 Decisions 3–5; Findings `F1`–`F4`, `F8`, `F9`, `F12`–`F14`), ADRs `DE-002`, `DE-004`, `DE-005`, `DE-006`, `DE-008`, and `dendro` `DATA_DICTIONARY.md` (`I01`–`I25`)  
-**Consumers**: `D1`, `D4b`, `D4c`, `D5`, `EN1`, `EN2`, `EN3a–c`, `EN5c`, `EN6a`, `EN6b`, `A4`, `A5a`
+SNAPSHOT.md is the single normative source. It incorporates the derivations and
+Parquet mappings here and the seven schemas' field constraints.
 
----
+| Table | Primary key | Grain |
+| --- | --- | --- |
+| sessions | session_key | Discovered session |
+| invocations | invocation_key | Qualified session/ordinal/grain/message |
+| tool_calls | tool_call_key | Tool execution |
+| usage | usage_key | Per-row delta; aggregate/per-turn exclusive |
+| outcomes | outcome_key | Historical session git checkpoint |
+| git_evidence | git_evidence_key | Local historical commit and ordered parents |
+| coverage | coverage_key | Source/generation/harness/table/dimension |
 
-## 1. Purpose & Replacement of the Legacy Aggregate Export (`F3`)
+## Incorporated normative derivations
 
-Prior to `fact-export-v1`, the prototype DuckLake exporter (`F3`) emitted a 4-column aggregate summary (`canonical_harness`, `session_count`, `event_count`, `total_tokens`), which could not support session-to-trace joining (`DE-006`), qualified `I01` invocation counting (`F9`), tool archetype/failure-loop analysis (`D1`), Enterprise contract-price estimation (`EN6a`), historical git outcome proxies (`EN6b`), or explicit missingness denominators (`F14`, `D5`).
+LP(s1,...,sn) concatenates each UTF-8 string preceded by its byte length as an
+unsigned u32 big-endian integer, exactly as C1a link-id-v1. No separator or
+terminator. Lengths exceeding u32 fail. Decimal integers have no leading zeros.
+Null optional derivation components use the empty string. Except coverage_key,
+pseudonyms are lowercase hex HMAC-SHA256 under the org-wide customer-held key
+identified by pseudonym_key_id. Message=LP(domain_prefix, canonical inputs below).
 
-`fact-export-v1` defines **six flat per-table schemas** exported as atomic Parquet snapshots (see [`../SNAPSHOT.md`](../SNAPSHOT.md)) and represented in replay vectors as canonical JSON:
+| Column | Domain prefix | Canonical inputs, in order |
+| --- | --- | --- |
+| producer.producer_id | fact-export.v1/producer | Provisioned stable random producer instance ID |
+| source_id | fact-export.v1/source | Provisioned stable random logical source ID, not a path |
+| session_key | fact-export.v1/session | source_id, canonical_harness, exact raw session ID |
+| endpoint_scope | fact-export.v1/endpoint_scope | Raw C1a printable ASCII endpoint slug, case preserved |
+| invocation_key | fact-export.v1/invocation | session_key, sequence_no, invocation_grain, message_key or empty |
+| message_key | fact-export.v1/message | session_key, exact raw message ID |
+| tool_call_key | fact-export.v1/tool_call | session_key, sequence_no, call_id_hmac or empty |
+| call_id_hmac | fact-export.v1/tool_call_id | session_key, exact raw tool-call ID |
+| input_fingerprint_hmac | fact-export.v1/tool_input_fingerprint | Canonical JSON of tool input under SNAPSHOT.md encoding rules |
+| tool_name custom | fact-export.v1/tool_name | Exact raw tool name, no normalization |
+| usage_key | fact-export.v1/usage | session_key, sequence_no, usage_grain |
+| outcome_key | fact-export.v1/outcome | session_key, sequence_no |
+| repo_remote_hmac | fact-export.v1/repo_remote | Historical URL with userinfo and query/fragment removed, otherwise exact |
+| branch_name_hmac | fact-export.v1/branch | Exact recorded historical branch name |
+| commit_hmac, parent_hmacs elements, head_commit_hmac, base_commit_hmac | fact-export.v1/commit | Canonical full commit ID |
+| git_evidence_key | fact-export.v1/git_evidence | source_id, commit_hmac, observed_at_us or empty, session_key or empty, session_match_status |
 
-| Table | Normative JSON Schema | Primary Key | Row Granularity | Primary Producers / Consumers |
-| :--- | :--- | :--- | :--- | :--- |
-| **`sessions`** | [`sessions.schema.json`](./sessions.schema.json) | `session_key` | One row per discovered agent session | `D1`, `D3`, `D4b`, `EN3c`, `EN6a`, `EN6b`, `A4`, `A5a` |
-| **`invocations`** | [`invocations.schema.json`](./invocations.schema.json) | `invocation_key` | One row per session-qualified `I01` model/agent invocation (`F9`) | `D1`, `D2`, `EN3c`, `EN6a`, `A4` |
-| **`tool_calls`** | [`tool_calls.schema.json`](./tool_calls.schema.json) | `tool_call_key` | One row per tool call execution with replaceable outcome status (`F2`, `F8`) | `D1`, `A3`, `EN3c`, `EN6a` |
-| **`usage`** | [`usage.schema.json`](./usage.schema.json) | `usage_key` | One row per normalized token/cost accounting delta (`I02`, `F14`) | `D1`, `EN3c`, `EN6a`, `A4` |
-| **`outcomes`** | [`outcomes.schema.json`](./outcomes.schema.json) | `outcome_key` | One row per historical git evidence checkpoint extracted from session records (`D4c`, `F4`) | `D4b`, `D4c`, `EN6b` |
-| **`coverage`** | [`coverage.schema.json`](./coverage.schema.json) | `coverage_key` | One row per `(source_id, source_generation, canonical_harness, target_table, coverage_dimension)` (`D5`, `F14`, `F1`) | `D5`, `EN3c`, `EN6a`, `EN6b`, `A5a` |
+Canonical commit input is lowercase full 40-hex SHA-1, or lowercase full 64-hex
+SHA-256 for SHA-256 repositories. Validate the repository hash algorithm; reject
+abbreviations/nonhex input. Commit-bearing columns deliberately share one identity
+domain so Enterprise can match them. Parent order is local git's recorded order.
+Enterprise matches pseudonyms with the same pseudonym_key_id, never raw SHAs.
+Dendro D4c uses LOCAL historical evidence as recorded, never current HEAD at export
+time or a network service. Default-branch evidence is historical or null/unknown.
+Session match statuses are matched, unmatched, ambiguous, unknown; ambiguous
+evidence never receives an arbitrary session link.
 
----
+producer_id and source_id are provisioned once under the initial org key and
+retained as routing identities through fact-key rotation. The provisioning key
+is retained separately; pseudonym_key_id identifies the rotating key for every
+other keyed column. Rotation purges ALL old-key source rows and re-exports at a
+higher generation. The producer purge ledger prevents reminting purged logical
+sessions under a new key.
 
-## 2. Cross-Table Invariants
+Built-ins are exactly tool_name's schema enum, case sensitive. Every other name
+is mcp_hmac_ followed by its full 64-hex keyed tool_name digest above. Raw MCP
+names, arbitrary safe-looking slugs and truncated digests are invalid.
 
-### 2.1 Zero-Content Guarantee (`DE-004`)
-Every column in all six tables is restricted to:
-- **64-character lowercase hexadecimal HMAC-SHA256 digests** (`^[0-9a-f]{64}$`);
-- **64-character lowercase hexadecimal `agent.session.link_id` tags or literal `"unlinked"`** (`^([0-9a-f]{64}|unlinked)$`, per `link-id-v1`);
-- **Closed-vocabulary enum strings** (harnesses, archetypes, statuses, reason codes);
-- **Bounded safe identifier slugs/tokens** (`pseudonym_key_id`, `org`, `endpoint_scope`, `team`, `link_epoch`, `harness_version`, `model`, `tool_name`) validated against strict character classes and prohibited from containing whitespace, filesystem slashes (`/` in paths, `\`), `@` email markers, URLs (`://`), secret prefixes (`sk-`, `ghp_`, `AKIA`, `AIza`, `xoxb-`), or G0a leak sentinels (`G0A_*_SENTINEL*`);
-- **Fixed-scale decimal strings** (`observed_usd`: `^[0-9]+\.[0-9]{6}$`); or
-- **Non-negative 64-bit integers and booleans**.
+coverage_key=SHA256(LP("fact-export.v1/coverage", source_id,
+decimal(source_generation), canonical_harness, target_table, coverage_dimension)).
+This public digest contains only pseudonymized scope metadata and is recomputable
+without a secret key. Exactly one row_ingestion row covers each populated tuple,
+including canonical_harness=unknown when applicable.
 
-Free-form prompts, completions, tool arguments, tool stdout/stderr, file paths, repository URLs, raw git branch names, raw 40-character git commit SHAs, email addresses, hostnames, and usernames are **structurally unrepresentable** and rejected by both the Rust (`agent_otel_core::fact_export`) and Python (`check_fact_vectors.py`) validators.
+org and team are operator-provided slugs, never inferred user names. Raw org,
+endpoint_scope and team follow C1a printable ASCII 0x21..0x7e, 1..1024, plus the
+zero-content denylist. Endpoint exports only its HMAC. Nulls require the status
+in SNAPSHOT.md; optional team's missing_org denotes absent org-provided
+attribution and does not itself prevent linking. agent.session.link_id and
+link_epoch follow the unchanged link-id-v1/SPEC.md.
 
-### 2.2 Customer-Held Key Pseudonymization (`F13`, `DE-004`)
-Finding `F13` identified that `dendro` previously used unkeyed SHA-256 hashes (which are deterministic content hashes rather than pseudonymization) and passed raw git commit SHAs. In `fact-export-v1`:
-1. Every pseudonymized digest column is computed as `HMAC-SHA256(customer_key, domain_prefix || canonical_input)` and formatted as 64 lowercase hex characters (`^[0-9a-f]{64}$`).
-2. Every row carries `pseudonym_key_id` identifying the customer-held key generation used to produce its digests, enabling key rotation and `EN5c` retention purges without exposing secret key material.
-3. Git evidence columns in `outcomes` (`repo_remote_hmac`, `branch_name_hmac`, `head_commit_hmac`, `base_commit_hmac`) are 64-character HMAC-SHA256 digests. Raw 40-character git SHAs are rejected.
+## Incorporated Parquet mapping
 
-### 2.3 Session-Qualified `I01` Invocation Identity (`F9`)
-Finding `F9` identified that `I01` in `dendro` previously deduplicated invocations by bare `message_id` or `(turn_index, call_id)` without `session_key`, causing cross-session collisions whenever two sessions shared identical raw message identifiers or lacked call identifiers. In `fact-export-v1`:
-- Every `invocations` row includes required `session_key`, `sequence_no`, `invocation_grain` (`"call"` vs `"usage_only"`), `message_key` (session-qualified 64-hex HMAC when `invocation_grain == "call"`), and `call_id_missing_reason` (when `invocation_grain == "usage_only"`).
-- `invocation_key` and `message_key` are derived with `session_key` bound into the HMAC message. Two sessions with identical raw `message_id` or `sequence_no = 0` always produce distinct `invocation_key` and `message_key` values because their `session_key` values differ.
+Schema x_parquet annotations assign stable field_id values, retained across this
+rework. Removing observed_usd leaves an intentional ID gap. All properties must
+be present in JSON; nullable values map to OPTIONAL. Strings are BYTE_ARRAY/STRING,
+integers signed INT64, epoch micros TIMESTAMP(MICROS,true), booleans BOOLEAN/NONE,
+string arrays GROUP/LIST<STRING> with STRING elements. Never zero-fill unknowns.
+Only observed_usd_micros INT64 deltas are exported. DOUBLE conversion is exact
+binary64 multiplication followed by round-half-even as SNAPSHOT.md specifies.
 
-### 2.4 Explicit Unknownness & Missingness (`F14`)
-Finding `F14` established that cost is `NULL` in 90–99.9% of local rows and timestamps are `NULL` in ~38% of Antigravity rows. Across all six tables:
-- **`null` never means `0`, and `0` never means `unknown`.**
-- Every nullable column has a required, non-null companion status or reason column enforced by bi-directional `x_invariants` in the JSON Schema:
-  - `sessions`: `agent.session.link_id` (`"unlinked"`) $\iff$ `unlinked_reason`; `harness_version` $\iff$ `harness_version_status`; `started_at_us`/`ended_at_us` $\iff$ `timestamp_status` (`"complete"`, `"start_only"`, `"not_observable"`); `parent_session_key` $\iff$ `lineage_status` & `lineage_relation`.
-  - `invocations`: `message_key` & `call_id_missing_reason` $\iff$ `invocation_grain` (`"call"` vs `"usage_only"`); `model` $\iff$ `model_status` & `model_unknown_reason`; `occurred_at_us` $\iff$ `occurred_at_status`.
-  - `tool_calls`: `invocation_key` $\iff$ `invocation_link_status`; `call_id_hmac` $\iff$ `call_id_status`; `input_fingerprint_hmac` $\iff$ `fingerprint_status`; `outcome_status` $\iff$ `outcome_unknown_reason`; `occurred_at_us` $\iff$ `occurred_at_status`; `duration_us` $\iff$ `duration_status`.
-  - `usage`: `invocation_key` $\iff$ `invocation_link_status`; `occurred_at_us` $\iff$ `occurred_at_status`; `model` $\iff$ `model_status` & `model_unknown_reason`; `predecessor_usage_key` $\iff$ `counter_semantics`; `reasoning_tokens` $\iff$ `reasoning_status`; `observed_usd` & `observed_usd_micros` $\iff$ `cost_provenance` & `cost_unknown_reason`.
-  - `outcomes`: `missing_reason` $\iff$ `evidence_status`; `repo_remote_hmac` $\iff$ `remote_status`; `branch_name_hmac` $\iff$ `branch_status`; `head_commit_hmac` $\iff$ `head_commit_status`; `base_commit_hmac` $\iff$ `base_commit_status`; `observed_at_us` $\iff$ `observed_at_status`.
-  - `coverage`: zero nullable columns; all denominators (`encountered_count`, `expected_population_count`) and numerators (`accepted_count`, `observable_count`, `unknown_or_missing_count`) are required non-negative integers with strict additive invariants.
-
----
-
-## 3. Normative Parquet Logical-Type Mapping
-
-Each property in `tables/*.schema.json` carries an `x_parquet` annotation specifying its Parquet `field_id` (1-based sequential per table), `repetition` (`REQUIRED` or `OPTIONAL`), `physical_type`, and `logical_type`:
-
-| JSON Schema Type / Pattern | Parquet `physical_type` | Parquet `logical_type` | Canonical JSON Representation |
-| :--- | :--- | :--- | :--- |
-| `string` (HMAC hex, enum, token) | `BYTE_ARRAY` | `STRING` (UTF-8) | JSON string (`"..."`) or `null` if `OPTIONAL` |
-| `integer` (`minimum: 0` or `1`, counts/ordinals/durations) | `INT64` | `INT(64, false)` / `INT(64, isSigned=true)` | JSON integer (`0`, `1`, ...) or `null` if `OPTIONAL` |
-| `integer` (`*_at_us` UTC epoch microseconds) | `INT64` | `TIMESTAMP(MICROS, true)` | JSON integer (`1762900000000000`) or `null` if `OPTIONAL` |
-| `boolean` | `BOOLEAN` | `NONE` | JSON boolean (`true` / `false`) |
-| `string` (`observed_usd`: `^[0-9]+\.[0-9]{6}$`) | `INT64` | `DECIMAL(18, 6)` | Fixed 6-decimal string (`"0.014250"`) paired with `observed_usd_micros` (`14250`) |
-| `array` of `string` (`coverage.gap_reasons`) | `GROUP` | `LIST<STRING>` | Non-empty JSON array of unique enum strings (`["none"]`) |
-
-Because canonical JSON rows use only strings, 64-bit integers, booleans, arrays, and `null` (never IEEE-754 floats), canonical JSON serialization (`sort_keys=True`, compact separators `,` and `:`) is 100% deterministic and byte-identical across Rust and Python without requiring a Parquet library to validate replay vectors.
-
----
-
-## 4. Column-by-Column Justification Summary
-
-Every column in every schema file includes an embedded `x_justification` object with five required keys:
-1. `why_present`: Analytical or operational requirement from the MVP plan.
-2. `consumers`: Downstream work items (`D1`, `D2`, `D3`, `D4b`, `D5`, `EN3a–c`, `EN5c`, `EN6a`, `EN6b`, `A4`, `A5a`).
-3. `zero_content`: How the column satisfies `DE-004`.
-4. `pseudonymization`: How the column satisfies `F13` and `DE-004`.
-5. `missingness_semantics`: How the column satisfies `F14` without null-means-zero ambiguity.
-
-### 4.1 `sessions` (`tables/sessions.schema.json` — 23 columns)
-- **Identity & Scope**: `session_key` (PK, 64-hex HMAC), `source_id` (64-hex HMAC), `source_generation` (`>= 1`), `pseudonym_key_id`, `org`, `endpoint_scope`, `team`.
-- **Trace Join (`DE-006`, `C1a`)**: `agent.session.link_id` (64-hex lowercase HMAC-SHA256 tag or literal `"unlinked"`), `link_epoch` (key epoch slug or `null`), `unlinked_reason` (closed 9-reason vocabulary from `link-id-v1` or `null`), `origin` (`"harness"`, `"synthetic"`, `"unknown"`).
-- **Platform & Surface**: `canonical_harness` (`antigravity`, `claude`, `codex`, `grok`, `pi`, `unknown`), `harness_version` + `harness_version_status` (`observed`, `not_reported`), `signal_source` (`session_log`, `hook_ipc`, `native_otlp`).
-- **Lifecycle & Timestamps (`F14`)**: `session_status` (`active`, `completed`, `failed`, `cancelled`, `interrupted`, `unknown`), `started_at_us`, `ended_at_us`, `timestamp_status` (`complete`, `start_only`, `not_observable`).
-- **Lineage (`I03`, `I09`)**: `is_root` (`boolean`), `parent_session_key` (64-hex HMAC or `null`), `lineage_relation` (`root`, `spawn`, `delegate`, `handoff`, `return`, `join`, `retry`, `unknown`), `lineage_status` (`root`, `evidenced`, `absent`, `truncated`, `conflict`).
-
-### 4.2 `invocations` (`tables/invocations.schema.json` — 18 columns)
-- **Qualified `I01` Identity (`F9`)**: `invocation_key` (PK, 64-hex HMAC), `session_key`, `sequence_no` (`>= 0`), `invocation_grain` (`"call"` vs `"usage_only"`), `message_key` (session-qualified 64-hex HMAC when `invocation_grain == "call"`, else `null`), `call_id_missing_reason` (`"usage_row_without_message_id"`, `"unreported_by_harness"`, or `null`).
-- **Source & Platform**: `source_id`, `source_generation`, `pseudonym_key_id`, `canonical_harness`, `signal_source` (`session_log`, `hook_ipc`, `native_otlp`).
-- **Replaceable Model, Effort & Outcome Attribution (`MVP plan §2 Decision 3`)**: `model`, `model_status` (`observed`, `unknown`), `model_unknown_reason` (`not_reported_in_event`, `pending_turn_attribution`, `redacted_unallowlisted`, or `null`), `effort` (`minimal`, `low`, `medium`, `high`, `max`, `not_applicable`, `unknown`), `invocation_status` (`succeeded`, `failed`, `cancelled`, `pending`, `unknown`), `occurred_at_us`, `occurred_at_status` (`observed`, `not_observable`).
-
-### 4.3 `tool_calls` (`tables/tool_calls.schema.json` — 24 columns)
-- **Identity & Pairing (`F8`, `D1`)**: `tool_call_key` (PK, 64-hex HMAC), `source_id`, `source_generation`, `pseudonym_key_id`, `session_key`, `invocation_key` + `invocation_link_status` (`linked`, `unassociated_hook_event`, `missing_parent_turn`), `canonical_harness`, `sequence_no`, `call_id_hmac` + `call_id_status` (`observed`, `not_reported`).
-- **Capability & Preference-Agnostic Archetype (`F2`, `AGENTS.md §1 Invariant 5`)**: `tool_name` (safe identifier token or `mcp_custom_hmac_<16hex>`), `tool_category` (`coord_queue`, `coord_status`, `governance_phase`, `eng_build_test`, `eng_code_edit`, `eng_vcs`, `inspect_read`, `other`), `tool_archetype` (`filter_compressor`, `structured_parser`, `inspector_diff`, `search_retrieval`, `build_test_verify`, `generic_exec`, `file_read`, `file_write`, `agent_delegate`, `unknown`), `structured_write` (`boolean`).
-- **Loop Detection (`I08`)**: `input_fingerprint_hmac` (64-hex HMAC) + `fingerprint_status` (`observed`, `input_unavailable`).
-- **Replaceable Outcome & Latency (`D1`, `F14`)**: `outcome_status` (`succeeded`, `failed`, `cancelled`, `pending`, `unknown`) + `outcome_unknown_reason` (`awaiting_tool_result`, `result_not_recorded`, `stream_truncated`, or `null`), `occurred_at_us` + `occurred_at_status` (`observed`, `not_observable`), `duration_us` + `duration_status` (`observed`, `single_point_only`, `not_observable`), `signal_source` (`session_log`, `hook_ipc`, `native_otlp`).
-
-### 4.4 `usage` (`tables/usage.schema.json` — 29 columns)
-- **Identity & Attribution**: `usage_key` (PK, 64-hex HMAC), `source_id`, `source_generation`, `pseudonym_key_id`, `session_key`, `invocation_key` + `invocation_link_status` (`linked`, `session_level_summary`, `unattributed_turn`), `canonical_harness`, `sequence_no`, `occurred_at_us` + `occurred_at_status` (`observed`, `not_observable`).
-- **Model & Effort (`MVP plan §2 Decision 4`)**: `model` + `model_status` (`observed`, `inferred_from_session`, `unknown`) + `model_unknown_reason` (`not_reported_by_harness`, `redacted_unrecognized_format`, `awaiting_turn_completion`, or `null`), `effort` (`minimal`, `low`, `medium`, `high`, `max`, `not_applicable`, `unknown`).
-- **Normalized Token Deltas (`accounting_v1`, `I02`)**: `counter_semantics` (`per_turn_delta`, `cumulative_delta`, `cumulative_monotonic_skip`, `cumulative_reset_rebaseline`, `session_aggregate`), `predecessor_usage_key`, `input_uncached_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `total_tokens` (exact sum of the 4 components), `reasoning_tokens` + `reasoning_status` (`observed`, `included_in_output_only`, `not_supported`, `not_reported`).
-- **Observed Cost & Provenance (`F14`, `EN6a`)**: `observed_usd` (fixed 6-decimal string or `null`), `observed_usd_micros` (integer micro-dollars or `null`), `cost_provenance` (`harness_observed_exact`, `provider_receipt_exact`, `unknown`), `cost_unknown_reason` (`not_reported_by_harness`, `subscription_unmetered`, `deferred_to_enterprise_rate_card`, `unpriced_model`, or `null`), `signal_source` (`session_log`, `hook_ipc`, `native_otlp`).
-
-### 4.5 `outcomes` (`tables/outcomes.schema.json` — 21 columns)
-- **Historical Git Evidence Only (`MVP plan §2 Decision 5`, `D4c`, `F4`, `EN6b`)**: `outcome_key` (PK, 64-hex HMAC), `source_id`, `source_generation`, `pseudonym_key_id`, `session_key`, `canonical_harness`, `sequence_no`, `evidence_source` (`session_record_header`, `session_record_event`, `session_tool_output_metadata`, `otel_workspace_snapshot` — never a live `git` subprocess), `evidence_status` (`observed_full`, `observed_partial`, `missing`), `missing_reason`.
-- **Pseudonymized Git State (`F13`, `AGENTS.md §3.3`)**: `repo_remote_hmac` + `remote_status` (`observed`, `no_remote_configured`, `not_observed`), `branch_name_hmac` + `branch_status` (`named_branch`, `detached_head`, `not_observed`), `head_commit_hmac` + `head_commit_status` (`observed`, `not_observed`), `base_commit_hmac` + `base_commit_status` (`observed`, `single_point_only`, `not_observed`), `worktree_state` (`clean`, `dirty`, `unknown`), `observed_at_us` + `observed_at_status` (`observed`, `not_observable`).
-
-### 4.6 `coverage` (`tables/coverage.schema.json` — 21 columns)
-- **Dimension Key (`D5`, `F1`, `F14`, `A5a`)**: `coverage_key` (PK, 64-hex HMAC), `source_id`, `source_generation`, `pseudonym_key_id`, `canonical_harness`, `target_table` (`sessions`, `invocations`, `tool_calls`, `usage`, `outcomes`), `coverage_dimension` (`row_ingestion`, `session_link_id`, `model_attribution`, `observed_cost_usd`, `tool_outcome_pairing`, `git_outcome_evidence`, `timestamp_fidelity`).
-- **Pipeline Statuses (`retrieval_v1`, `F1`)**: `discovery_status`, `read_status`, `projection_status` (includes `connector_unimplemented` for `pi` per `F1`), `field_fidelity` (`exact`, `inferred_or_partial`, `unavailable`).
-- **Explicit Denominators & Numerators (`F14`)**: `denominator_basis`, `accepted_count`, `rejected_count`, `recognized_unprojected_count`, `encountered_count` (`== accepted + rejected + recognized_unprojected`), `expected_population_count` (`== observable + unknown_or_missing`), `observable_count`, `unknown_or_missing_count`, `coverage_status` (`complete`, `partial`, `empty`, `unavailable`), `gap_reasons` (non-empty array of closed reason codes).
+x_justification records each column's consumer, content restrictions, derivation
+and missingness. x_invariants are explanatory mirrors; SNAPSHOT.md defines the
+complete cross-field rules.

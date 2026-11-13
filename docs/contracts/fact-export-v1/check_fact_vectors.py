@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Stdlib-only normative validator for fact-export-v1 schemas, replay vectors, and digests (C1b).
+"""Informative, independent stdlib-only implementation of SNAPSHOT.md.
 
-Verifies:
-1. All 6 table JSON Schemas under tables/*.schema.json (Parquet mapping, field_ids, justifications).
-2. Canonical schema bundle digest (schema_digest).
-3. All 7 replay vector files under vectors/*.json via the normative SNAPSHOT.md state machine.
-4. Zero-content (DE-004), customer-held key pseudonymization (F13), qualified I01 identity (F9),
-   and explicit missingness/coverage denominator invariants (F14, D5).
-5. vectors/SHA256SUMS and CONTRACT-DIGEST bundle integrity.
+Checkers do not define or freeze the contract. Production transport is not replayed.
 """
 
 from __future__ import annotations
@@ -30,25 +24,16 @@ CANONICAL_TABLES: tuple[str, ...] = (
     "tool_calls",
     "usage",
     "outcomes",
+    "git_evidence",
     "coverage",
 )
 
-EXPECTED_VECTOR_FILES: tuple[str, ...] = (
-    "clean_sequence.json",
-    "outcome_replacement.json",
-    "stale_out_of_order.json",
-    "duplicate_idempotent.json",
-    "partial_publication.json",
-    "schema_mismatch.json",
-    "coverage_missingness.json",
-)
 
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 KEY_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 TENANT_RE = re.compile(r"^tn_[a-z0-9][a-z0-9_-]{1,60}$")
 STREAM_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$")
-USD_DECIMAL_RE = re.compile(r"^([0-9]+)\.([0-9]{6})$")
 
 FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
     "g0a_",
@@ -79,6 +64,7 @@ PRIMARY_KEY_BY_TABLE: dict[str, str] = {
     "tool_calls": "tool_call_key",
     "usage": "usage_key",
     "outcomes": "outcome_key",
+    "git_evidence": "git_evidence_key",
     "coverage": "coverage_key",
 }
 
@@ -108,7 +94,7 @@ def compute_manifest_digest(manifest: dict[str, Any]) -> str:
 
 
 def verify_and_load_schemas(base_dir: pathlib.Path) -> tuple[dict[str, dict[str, Any]], str]:
-    """Validate all 6 table schemas and return (schemas_by_table, schema_digest)."""
+    """Validate the seven table schemas and return (schemas_by_table, schema_digest)."""
     tables_dir = base_dir / "tables"
     schemas: dict[str, dict[str, Any]] = {}
     digest_lines: list[str] = []
@@ -153,7 +139,7 @@ def verify_and_load_schemas(base_dir: pathlib.Path) -> tuple[dict[str, dict[str,
             if not isinstance(pq, dict):
                 raise AssertionError(f"{table}.{col_name}: missing x_parquet")
             fid = pq.get("field_id")
-            if not isinstance(fid, int) or fid < 1 or fid > len(props):
+            if type(fid) is not int or fid < 1:
                 raise AssertionError(f"{table}.{col_name}: invalid field_id {fid}")
             if fid in seen_field_ids:
                 raise AssertionError(f"{table}.{col_name}: duplicate field_id {fid}")
@@ -167,9 +153,18 @@ def verify_and_load_schemas(base_dir: pathlib.Path) -> tuple[dict[str, dict[str,
                     f"{table}.{col_name}: repetition {pq.get('repetition')} != {expected_rep}"
                 )
 
-        if seen_field_ids != set(range(1, len(props) + 1)):
-            raise AssertionError(f"{table}: non-contiguous Parquet field_ids")
 
+        for name, spec in props.items():
+            types = spec["type"] if isinstance(spec["type"], list) else [spec["type"]]
+            base_type = next(t for t in types if t != "null")
+            physical, logical = {
+                "string": ("BYTE_ARRAY", "STRING"),
+                "integer": ("INT64", "TIMESTAMP(MICROS, true)" if name.endswith("_at_us") else "INT(64, isSigned=true)"),
+                "boolean": ("BOOLEAN", "NONE"),
+                "array": ("GROUP", "LIST<STRING>"),
+            }[base_type]
+            assert spec["x_parquet"]["physical_type"] == physical, (table, name, "physical")
+            assert spec["x_parquet"]["logical_type"] == logical, (table, name, "logical")
         schemas[table] = schema
         table_sha = sha256_hex(canonical_json(schema).encode("utf-8"))
         digest_lines.append(f"{table_sha}  tables/{table}.schema.json\n")
@@ -185,148 +180,66 @@ def is_int(val: Any) -> bool:
 
 def check_zero_content_string(val: str) -> bool:
     """Return True if string passes DE-004 zero-content checks."""
-    lower = val.lower()
+    lower = val.translate(str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"))
     for forbidden in FORBIDDEN_SUBSTRINGS:
         if forbidden in lower:
             return False
     return True
 
 
-def parse_usd_micros(val: str) -> int | None:
-    """Parse fixed 6-decimal USD string into integer micro-dollars."""
-    m = USD_DECIMAL_RE.match(val)
-    if not m:
-        return None
-    whole = int(m.group(1))
-    frac = int(m.group(2))
-    return whole * 1_000_000 + frac
-
-
-def validate_row_against_schema(
-    table: str,
-    row: Any,
-    schema: dict[str, Any],
-    expected_key_id: str,
-) -> bool:
-    """Validate a single row against its JSON Schema, zero-content rules, and x_invariants."""
-    if not isinstance(row, dict):
-        return False
-    props = schema["properties"]
-    if set(row.keys()) != set(props.keys()):
-        return False
-
-    for col_name, col_spec in props.items():
-        val = row[col_name]
-        if isinstance(val, str) and not check_zero_content_string(val):
-            return False
-
-        col_type = col_spec["type"]
-        allowed_types = col_type if isinstance(col_type, list) else [col_type]
-        if val is None:
-            if "null" not in allowed_types:
-                return False
-            continue
-
-        if "string" in allowed_types and isinstance(val, str):
-            if "enum" in col_spec and val not in col_spec["enum"]:
-                return False
-            if "minLength" in col_spec and len(val) < col_spec["minLength"]:
-                return False
-            if "maxLength" in col_spec and len(val) > col_spec["maxLength"]:
-                return False
-            if "pattern" in col_spec and not re.match(col_spec["pattern"], val):
-                return False
-        elif "integer" in allowed_types and is_int(val):
-            if "minimum" in col_spec and val < col_spec["minimum"]:
-                return False
-        elif "boolean" in allowed_types and isinstance(val, bool):
-            pass
-        elif "array" in allowed_types and isinstance(val, list):
-            if "minItems" in col_spec and len(val) < col_spec["minItems"]:
-                return False
-            if col_spec.get("uniqueItems") and len(set(val)) != len(val):
-                return False
-            item_spec = col_spec.get("items", {})
-            for item in val:
-                if not isinstance(item, str) or not check_zero_content_string(item):
-                    return False
-                if "enum" in item_spec and item not in item_spec["enum"]:
-                    return False
-        else:
-            return False
-
-    if row.get("pseudonym_key_id") != expected_key_id:
-        return False
-
-    if table == "sessions":
-        return _validate_sessions_invariants(row)
-    if table == "invocations":
-        return _validate_invocations_invariants(row)
-    if table == "tool_calls":
-        return _validate_tool_calls_invariants(row)
-    if table == "usage":
-        return _validate_usage_invariants(row)
-    if table == "outcomes":
-        return _validate_outcomes_invariants(row)
-    if table == "coverage":
-        return _validate_coverage_invariants(row)
-    return False
-
-
-def _validate_sessions_invariants(r: dict[str, Any]) -> bool:
-    link_id = r["agent.session.link_id"]
-    unlinked_reason = r["unlinked_reason"]
-    if (link_id == "unlinked") != (unlinked_reason is not None):
-        return False
-    if link_id != "unlinked":
-        if (
-            r["link_epoch"] is None
-            or r["origin"] != "harness"
-            or r["canonical_harness"] == "unknown"
-        ):
-            return False
-    else:
-        if unlinked_reason == "invalid_key_material" and r["link_epoch"] is not None:
-            return False
-    if r["origin"] != "harness":
-        if link_id != "unlinked" or unlinked_reason != "non_harness_origin":
-            return False
-    if (r["harness_version_status"] == "observed") != (r["harness_version"] is not None):
-        return False
-    ts = r["timestamp_status"]
-    s_us, e_us = r["started_at_us"], r["ended_at_us"]
-    if ts == "complete":
-        if s_us is None or e_us is None or e_us < s_us:
-            return False
-    elif ts == "start_only":
-        if s_us is None or e_us is not None:
-            return False
-    elif ts == "not_observable":
-        if s_us is not None or e_us is not None:
-            return False
-    else:
-        return False
-
-    if r["is_root"]:
-        if (
-            r["lineage_relation"] != "root"
-            or r["lineage_status"] != "root"
-            or r["parent_session_key"] is not None
-        ):
-            return False
-    if r["lineage_status"] == "evidenced":
-        if (
-            r["is_root"]
-            or r["parent_session_key"] is None
-            or r["parent_session_key"] == r["session_key"]
-            or r["lineage_relation"] == "root"
-        ):
-            return False
-    else:
-        if r["parent_session_key"] is not None:
-            return False
+def _field_valid(value,rule):
+    if "enum" in rule and value not in rule["enum"]: return False
+    if "anyOf" in rule and not any(_field_valid(value,r) for r in rule["anyOf"]): return False
+    types=rule.get("type")
+    if types is not None:
+        types=types if isinstance(types,list) else [types]
+        kind=("null" if value is None else "boolean" if isinstance(value,bool) else "integer" if is_int(value) else
+              "string" if isinstance(value,str) else "array" if isinstance(value,list) else "invalid")
+        if kind not in types: return False
+    if value is None: return True
+    if isinstance(value,str):
+        if not check_zero_content_string(value): return False
+        if not rule.get("minLength",0)<=len(value)<=rule.get("maxLength",sys.maxsize): return False
+        if "pattern" in rule and re.fullmatch(rule["pattern"],value) is None: return False
+    elif is_int(value):
+        if not -(2**63)<=value<=2**63-1: return False
+        if not rule.get("minimum",-(2**63))<=value<=rule.get("maximum",2**63-1): return False
+    elif isinstance(value,list):
+        if len(value)<rule.get("minItems",0): return False
+        if rule.get("uniqueItems") and len({canonical_json(x) for x in value})!=len(value): return False
+        if not all(_field_valid(x,rule.get("items",{})) for x in value): return False
     return True
 
+def validate_row_against_schema(table,row,schema,expected_key_id):
+    if not isinstance(row,dict) or set(row)!=set(schema["properties"]): return False
+    if row["pseudonym_key_id"]!=expected_key_id: return False
+    if not all(_field_valid(row[n],rule) for n,rule in schema["properties"].items()): return False
+    validators={"sessions":_validate_sessions_invariants,"invocations":_validate_invocations_invariants,
+        "tool_calls":_validate_tool_calls_invariants,"usage":_validate_usage_invariants,
+        "outcomes":_validate_outcomes_invariants,"git_evidence":_validate_git_invariants,"coverage":_validate_coverage_invariants}
+    return validators[table](row)
+
+def _validate_sessions_invariants(r):
+    linked=r["agent.session.link_id"]!="unlinked"
+    if linked!=(r["unlinked_reason"] is None) or linked!=(r["link_epoch"] is not None): return False
+    if linked and (r["origin"]!="harness" or r["canonical_harness"]=="unknown"): return False
+    for name in ("org","endpoint_scope","team"):
+        if (r[name+"_status"]=="observed")!=(r[name] is not None): return False
+    statuses=(r["org_status"],r["endpoint_scope_status"])
+    reason=("invalid_field_characters" if "invalid_field_characters" in statuses else "missing_org" if statuses[0]=="missing_org"
+            else "missing_endpoint_scope" if statuses[1]=="missing_endpoint_scope" else None)
+    if reason and (linked or r["unlinked_reason"]!=reason): return False
+    if (r["harness_version_status"]=="observed")!=(r["harness_version"] is not None): return False
+    start,end=r["started_at_us"],r["ended_at_us"]
+    if r["timestamp_status"]=="complete":
+        if start is None or end is None or end<start: return False
+    elif r["timestamp_status"]=="start_only":
+        if start is None or end is not None: return False
+    elif start is not None or end is not None: return False
+    if r["is_root"] and (r["lineage_relation"]!="root" or r["lineage_status"]!="root" or r["parent_session_key"] is not None): return False
+    if r["lineage_status"]=="evidenced":
+        return not r["is_root"] and r["parent_session_key"] not in (None,r["session_key"]) and r["lineage_relation"]!="root"
+    return r["parent_session_key"] is None
 
 def _validate_invocations_invariants(r: dict[str, Any]) -> bool:
     grain = r["invocation_grain"]
@@ -402,25 +315,17 @@ def _validate_usage_invariants(r: dict[str, Any]) -> bool:
         return False
     if (r["reasoning_status"] == "observed") != (r["reasoning_tokens"] is not None):
         return False
-    cp = r["cost_provenance"]
-    if cp in ("harness_observed_exact", "provider_receipt_exact"):
-        if (
-            r["observed_usd"] is None
-            or r["observed_usd_micros"] is None
-            or r["cost_unknown_reason"] is not None
-        ):
-            return False
-        parsed = parse_usd_micros(r["observed_usd"])
-        if parsed is None or parsed != r["observed_usd_micros"]:
-            return False
-    elif cp == "unknown":
-        if (
-            r["observed_usd"] is not None
-            or r["observed_usd_micros"] is not None
-            or r["cost_unknown_reason"] is None
-        ):
-            return False
-    return True
+    aggregate=r["usage_grain"]=="session_aggregate"
+    if aggregate!=(r["counter_semantics"]=="session_aggregate"): return False
+    if aggregate!=(r["invocation_link_status"]=="session_level_summary"): return False
+    known=r["cost_provenance"]!="unknown"
+    return known==(r["observed_usd_micros"] is not None) and known==(r["cost_unknown_reason"] is None)
+
+def _validate_git_invariants(r):
+    for status,value in (("merge_status","is_merge"),("default_branch_status","on_default_branch"),("observed_at_status","observed_at_us")):
+        if (r[status]=="observed")!=(r[value] is not None): return False
+    if r["is_merge"] is not None and r["is_merge"]!=(len(r["parent_hmacs"])>1): return False
+    return (r["session_match_status"]=="matched")==(r["session_key"] is not None)
 
 
 def _validate_outcomes_invariants(r: dict[str, Any]) -> bool:
@@ -510,684 +415,281 @@ def _validate_coverage_invariants(r: dict[str, Any]) -> bool:
     return True
 
 
-def validate_manifest_structure(manifest: Any) -> bool:
-    """Validate structural and digest invariants of MANIFEST.json."""
-    if not isinstance(manifest, dict):
-        return False
-    required_keys = {
-        "contract_id",
-        "contract_version",
-        "schema_digest",
-        "producer",
-        "tenant_placeholder",
-        "stream",
-        "snapshot_sequence",
-        "published_at_us",
-        "replacement_scope",
-        "files",
-        "manifest_digest",
-    }
-    if set(manifest.keys()) != required_keys:
-        return False
-    if manifest["contract_id"] != CONTRACT_ID or manifest["contract_version"] != CONTRACT_VERSION:
-        return False
-    if not isinstance(manifest["schema_digest"], str) or not HEX64_RE.match(
-        manifest["schema_digest"]
-    ):
-        return False
-    if not isinstance(manifest["tenant_placeholder"], str) or not TENANT_RE.match(
-        manifest["tenant_placeholder"]
-    ):
-        return False
-    if not isinstance(manifest["stream"], str) or not STREAM_RE.match(manifest["stream"]):
-        return False
-    if not is_int(manifest["snapshot_sequence"]) or manifest["snapshot_sequence"] < 1:
-        return False
-    if not is_int(manifest["published_at_us"]) or manifest["published_at_us"] < 1:
-        return False
 
-    prod = manifest["producer"]
-    if not isinstance(prod, dict) or set(prod.keys()) != {
-        "producer_id",
-        "producer_kind",
-        "producer_version",
-        "pseudonym_key_id",
-    }:
-        return False
-    if not isinstance(prod["producer_id"], str) or not HEX64_RE.match(prod["producer_id"]):
-        return False
-    if prod["producer_kind"] not in (
-        "dendro_cli",
-        "agent_otel_daemon",
-        "dendro_station_exporter",
-    ):
-        return False
-    if not isinstance(prod["producer_version"], str) or not SEMVER_RE.match(
-        prod["producer_version"]
-    ):
-        return False
-    if not isinstance(prod["pseudonym_key_id"], str) or not KEY_ID_RE.match(
-        prod["pseudonym_key_id"]
-    ):
-        return False
+def lp(*parts):
+    return b"".join(len(p.encode("utf-8")).to_bytes(4,"big")+p.encode("utf-8") for p in parts)
 
-    scope = manifest["replacement_scope"]
-    if not isinstance(scope, dict) or set(scope.keys()) != {
-        "scope_mode",
-        "operation",
-        "source_id",
-        "source_generation",
-        "supersedes_generations",
-        "session_keys",
-        "reason",
-    }:
-        return False
-    mode = scope["scope_mode"]
-    op = scope["operation"]
-    if mode not in ("source_generation", "session_keys", "full_stream"):
-        return False
-    if op not in ("upsert_replace", "purge_delete"):
-        return False
-    if scope["reason"] not in (
-        "initial_export",
-        "in_generation_outcome_or_attribution_update",
-        "source_generation_advance",
-        "retention_or_redaction_purge",
-        "full_stream_rebaseline",
-    ):
-        return False
-    if not isinstance(scope["supersedes_generations"], list) or any(
-        not is_int(g) or g < 1 for g in scope["supersedes_generations"]
-    ):
-        return False
-    if not isinstance(scope["session_keys"], list) or any(
-        not isinstance(sk, str) or not HEX64_RE.match(sk) for sk in scope["session_keys"]
-    ):
-        return False
+def coverage_key(r):
+    return sha256_hex(lp("fact-export.v1/coverage",r["source_id"],str(r["source_generation"]),r["canonical_harness"],r["target_table"],r["coverage_dimension"]))
 
-    if mode in ("source_generation", "session_keys"):
-        if not isinstance(scope["source_id"], str) or not HEX64_RE.match(scope["source_id"]):
-            return False
-        if not is_int(scope["source_generation"]) or scope["source_generation"] < 1:
-            return False
-    else:
-        if scope["source_id"] is not None or scope["source_generation"] is not None:
-            return False
+def round_usd_micros(value):
+    """Exact binary64 rational scaling, followed by ties-to-even."""
+    import math
+    if not math.isfinite(value) or value<0: return None
+    n,d=value.as_integer_ratio()
+    q,rem=divmod(n*1_000_000,d)
+    if rem*2>d or rem*2==d and q%2: q+=1
+    return q if q<=2**63-1 else None
 
-    if mode == "session_keys":
-        if len(scope["session_keys"]) < 1:
-            return False
-    else:
-        if len(scope["session_keys"]) != 0:
-            return False
-
-    files = manifest["files"]
-    if not isinstance(files, list) or len(files) != len(CANONICAL_TABLES):
-        return False
-    for idx, expected_table in enumerate(CANONICAL_TABLES):
-        f_desc = files[idx]
-        if not isinstance(f_desc, dict) or set(f_desc.keys()) != {
-            "table",
-            "path",
-            "format",
-            "row_count",
-            "byte_length",
-            "sha256",
-        }:
-            return False
-        if f_desc["table"] != expected_table:
-            return False
-        if f_desc["format"] not in ("parquet", "canonical_json_rows"):
-            return False
-        if not is_int(f_desc["row_count"]) or f_desc["row_count"] < 0:
-            return False
-        if not is_int(f_desc["byte_length"]) or f_desc["byte_length"] < 0:
-            return False
-        if not isinstance(f_desc["sha256"], str) or not HEX64_RE.match(f_desc["sha256"]):
-            return False
-
-    if manifest["manifest_digest"] != compute_manifest_digest(manifest):
-        return False
+def validate_manifest_structure(m,*,vector_mode=False):
+    if not isinstance(m,dict) or set(m)!={"contract_id","contract_version","schema_digest","producer","tenant_placeholder","stream","snapshot_sequence","published_at_us","replacement_scope","files","manifest_digest","skip_reason"}: return False
+    if m["contract_id"]!=CONTRACT_ID or not is_int(m["contract_version"]) or m["contract_version"]!=1: return False
+    def pattern(p,v): return isinstance(v,str) and re.fullmatch(p,v) is not None
+    if not all(pattern(HEX64_RE,x) for x in (m["schema_digest"],m["manifest_digest"])): return False
+    if not pattern(TENANT_RE,m["tenant_placeholder"]) or not pattern(STREAM_RE,m["stream"]): return False
+    if not all(is_int(m[n]) and 1<=m[n]<=2**63-1 for n in ("snapshot_sequence","published_at_us")): return False
+    p=m["producer"]
+    if not isinstance(p,dict) or set(p)!={"producer_id","producer_kind","producer_version","pseudonym_key_id"}: return False
+    if not pattern(HEX64_RE,p["producer_id"]) or not pattern(KEY_ID_RE,p["pseudonym_key_id"]) or not pattern(SEMVER_RE,p["producer_version"]): return False
+    if p["producer_kind"] not in ("dendro_cli","agent_otel_daemon","dendro_station_exporter"): return False
+    sc=m["replacement_scope"]
+    if not isinstance(sc,dict) or set(sc)!={"scope_mode","operation","reason","source_id","source_generation","session_keys"}: return False
+    if sc["scope_mode"] not in ("source_generation","session_keys") or sc["operation"] not in ("upsert_replace","purge_delete"): return False
+    if sc["reason"] not in ("initial_export","in_generation_outcome_or_attribution_update","source_generation_advance","retention_or_redaction_purge","key_rotation"): return False
+    if not pattern(HEX64_RE,sc["source_id"]) or not is_int(sc["source_generation"]) or not 1<=sc["source_generation"]<=2**63-1: return False
+    keys=sc["session_keys"]
+    if not isinstance(keys,list) or not all(pattern(HEX64_RE,k) for k in keys) or len(set(keys))!=len(keys): return False
+    if (sc["scope_mode"]=="session_keys")!=bool(keys) or keys and sc["operation"]!="purge_delete": return False
+    files=m["files"]
+    if not isinstance(files,list): return False
+    if m["skip_reason"] is not None:
+        return m["skip_reason"] in ("abandoned_publication","source_unavailable","producer_recovery") and not files and not keys and sc["operation"]=="upsert_replace"
+    if len(files)!=len(CANONICAL_TABLES): return False
+    for t,f in zip(CANONICAL_TABLES,files):
+        if not isinstance(f,dict) or set(f)!={"table","path","format","row_count","byte_length","sha256"}: return False
+        if f["table"]!=t or f["format"] not in ("parquet","canonical_json_rows"): return False
+        if f["format"]=="canonical_json_rows" and not vector_mode: return False
+        ext="jsonl" if f["format"]=="canonical_json_rows" else "parquet"
+        if f["path"]!=f"tables/{t}.{ext}" or not pattern(HEX64_RE,f["sha256"]): return False
+        if not all(is_int(f[n]) and 0<=f[n]<=2**63-1 for n in ("row_count","byte_length")): return False
     return True
 
+def verify_cross_table_and_coverage(tables):
+    """SPEC sections 4/6, evaluated for the complete affected-source candidate."""
+    sessions=tables["sessions"]
+    inv=tables["invocations"]
+    identities=set()
+    grains={}
+    for t in CANONICAL_TABLES[1:-1]:
+        for r in tables[t].values():
+            sk=r["session_key"]
+            if sk is not None:
+                parent=sessions.get(sk)
+                if parent is None or any(r[n]!=parent[n] for n in ("source_id","source_generation","canonical_harness","pseudonym_key_id")): return False
+            if t in ("usage","tool_calls") and r["invocation_key"] is not None:
+                target=inv.get(r["invocation_key"])
+                if target is None or target["session_key"]!=sk: return False
+            if t=="invocations":
+                ident=tuple(r[n] for n in ("session_key","sequence_no","invocation_grain","message_key"))
+                if ident in identities: return False
+                identities.add(ident)
+            if t=="usage":
+                grain=r["usage_grain"]
+                prior=grains.get(sk)
+                if prior and (prior!=grain or grain=="session_aggregate"): return False
+                grains[sk]=grain
+    populations={}
+    for t in CANONICAL_TABLES[:-1]:
+        for r in tables[t].values():
+            key=(r["source_id"],r["source_generation"],r["canonical_harness"],t)
+            populations.setdefault(key,[]).append(r)
+    seen=set()
+    ingestion=set()
+    for c in tables["coverage"].values():
+        key=(c["source_id"],c["source_generation"],c["canonical_harness"],c["target_table"])
+        dimension=c["coverage_dimension"]
+        if key+(dimension,) in seen or c["coverage_key"]!=coverage_key(c): return False
+        seen.add(key+(dimension,))
+        rows=populations.get(key,[])
+        total=len(rows)
+        t=c["target_table"]
+        if c["accepted_count"]!=total: return False
+        if dimension=="row_ingestion":
+            ingestion.add(key)
+            if c["expected_population_count"]!=c["encountered_count"] or c["observable_count"]!=total or c["unknown_or_missing_count"]!=c["rejected_count"]+c["recognized_unprojected_count"]: return False
+            continue
+        if dimension=="session_link_id" and t=="sessions": observed=sum(r["agent.session.link_id"]!="unlinked" for r in rows)
+        elif dimension=="model_attribution" and t in ("invocations","usage"): observed=sum(r["model_status"]!="unknown" for r in rows)
+        elif dimension=="observed_cost_usd" and t=="usage": observed=sum(r["cost_provenance"]!="unknown" for r in rows)
+        elif dimension=="tool_outcome_pairing" and t=="tool_calls": observed=sum(r["outcome_status"] not in ("pending","unknown") for r in rows)
+        elif dimension=="git_outcome_evidence" and t in ("outcomes","git_evidence"):
+            observed=sum(r["evidence_status"]!="missing" if t=="outcomes" else r["session_match_status"]=="matched" for r in rows)
+        elif dimension=="timestamp_fidelity":
+            field={"sessions":"timestamp_status","invocations":"occurred_at_status","tool_calls":"occurred_at_status","usage":"occurred_at_status","outcomes":"observed_at_status","git_evidence":"observed_at_status"}[t]
+            observed=sum(r[field]==("complete" if t=="sessions" else "observed") for r in rows)
+        else: return False
+        if c["expected_population_count"]!=total or c["observable_count"]!=observed or c["unknown_or_missing_count"]!=total-observed: return False
+    return set(populations)<=ingestion
 
 class ReplayStateMachine:
-    """Deterministic implementation of the SNAPSHOT.md import state machine."""
+    """One isolated tenant/producer/stream state, using vector transport only."""
+    def __init__(self,schemas,expected_schema_digest,expected_tenant,expected_producer_id,expected_stream):
+        self.schemas=schemas
+        self.expected_schema_digest=expected_schema_digest
+        self.key=(expected_tenant,expected_producer_id,expected_stream)
+        self.high_water_sequence=0
+        self.committed_manifests={}
+        self.active_source_generations={}
+        self.purged_source_generations={}
+        self.source_key_ids={}
+        self.tombstoned_session_keys=set()
+        self.tables={t:{} for t in CANONICAL_TABLES}
+        self.import_coverage=[]
 
-    def __init__(
-        self,
-        schemas: dict[str, dict[str, Any]],
-        expected_schema_digest: str,
-        expected_tenant: str,
-        expected_producer_id: str,
-        expected_stream: str,
-    ) -> None:
-        self.schemas = schemas
-        self.expected_schema_digest = expected_schema_digest
-        self.expected_tenant = expected_tenant
-        self.expected_producer_id = expected_producer_id
-        self.expected_stream = expected_stream
+    def active_row_counts(self):
+        return {t:len(self.tables[t]) for t in CANONICAL_TABLES}
 
-        self.high_water_sequence: int = 0
-        self.committed_manifests: dict[int, str] = {}
-        self.active_source_generations: dict[str, int] = {}
-        self.purged_source_generations: dict[str, int] = {}
-        self.tombstoned_session_keys: dict[str, int] = {}
-        self.tables: dict[str, dict[str, dict[str, Any]]] = {t: {} for t in CANONICAL_TABLES}
+    def export_sorted_tables(self):
+        return {t:[self.tables[t][k] for k in sorted(self.tables[t])] for t in CANONICAL_TABLES}
 
-    def active_row_counts(self) -> dict[str, int]:
-        return {t: len(self.tables[t]) for t in CANONICAL_TABLES}
+    def _consume(self,m,status):
+        q=m["snapshot_sequence"]
+        self.high_water_sequence=q
+        self.committed_manifests[q]=m["manifest_digest"]
+        kind="accepted" if status=="APPLIED" else "skipped" if status=="SKIPPED" else "rejected"
+        self.import_coverage.append(dict(tenant_placeholder=self.key[0],producer_id=self.key[1],stream=self.key[2],
+            snapshot_sequence=q,manifest_digest=m["manifest_digest"],status=kind,
+            reason=None if kind=="accepted" else m["skip_reason"] if kind=="skipped" else status))
+        return status
 
-    def export_sorted_tables(self) -> dict[str, list[dict[str, Any]]]:
-        return {
-            t: [self.tables[t][pk] for pk in sorted(self.tables[t].keys())]
-            for t in CANONICAL_TABLES
-        }
-
-    def apply_step(self, step: dict[str, Any]) -> str:
-        manifest = step.get("committed_manifest")
-        staged = step.get("staged_tables", {})
-
-        # Step 1: Atomic visibility (no manifest => uncommitted partial publication)
-        if manifest is None:
-            return "IGNORED_UNCOMMITTED_NO_MANIFEST"
-
-        # Step 2: Producer & tenant authorization (EN3a)
-        if (
-            manifest.get("tenant_placeholder") != self.expected_tenant
-            or manifest.get("producer", {}).get("producer_id") != self.expected_producer_id
-            or manifest.get("stream") != self.expected_stream
-        ):
-            return "REJECTED_TENANT_OR_PRODUCER_MISMATCH"
-
-        # Step 3: Manifest structure & digest verification
-        if not validate_manifest_structure(manifest):
-            return "REJECTED_INVALID_MANIFEST"
-
-        # Step 4: Schema digest verification (EN3c)
-        if manifest["schema_digest"] != self.expected_schema_digest:
-            return "REJECTED_SCHEMA_MISMATCH"
-
-        # Step 5: Sequence idempotency, conflict, stale & out-of-order checks
-        seq = manifest["snapshot_sequence"]
-        m_digest = manifest["manifest_digest"]
-        if seq in self.committed_manifests:
-            if self.committed_manifests[seq] == m_digest:
-                return "DUPLICATE_NOOP"
-            if seq < self.high_water_sequence:
-                return "REJECTED_STALE_SEQUENCE"
-            return "REJECTED_CONFLICTING_DUPLICATE_SEQUENCE"
-        if seq < self.high_water_sequence:
-            return "REJECTED_STALE_SEQUENCE"
-        if seq > self.high_water_sequence + 1:
-            return "REJECTED_OUT_OF_ORDER_SEQUENCE_GAP"
-
-        # Step 6: File presence, byte_length, sha256, and row_count integrity
-        if not isinstance(staged, dict):
-            return "REJECTED_FILE_INTEGRITY"
-        for f_desc in manifest["files"]:
-            t_name = f_desc["table"]
-            rows = staged.get(t_name)
-            if not isinstance(rows, list):
-                return "REJECTED_FILE_INTEGRITY"
-            if len(rows) != f_desc["row_count"]:
-                return "REJECTED_FILE_INTEGRITY"
-            payload_bytes = canonical_table_jsonl_bytes(rows)
-            if len(payload_bytes) != f_desc["byte_length"]:
-                return "REJECTED_FILE_INTEGRITY"
-            if sha256_hex(payload_bytes) != f_desc["sha256"]:
-                return "REJECTED_FILE_INTEGRITY"
-
-        # Step 7: Row schema, zero-content (DE-004), pseudonymization (F13) & missingness (F14)
-        key_id = manifest["producer"]["pseudonym_key_id"]
-        for t_name in CANONICAL_TABLES:
-            pk_col = PRIMARY_KEY_BY_TABLE[t_name]
-            seen_pks: set[str] = set()
-            for row in staged[t_name]:
-                if not validate_row_against_schema(t_name, row, self.schemas[t_name], key_id):
-                    return "REJECTED_ROW_SCHEMA_VIOLATION"
-                pk_val = row[pk_col]
-                if pk_val in seen_pks:
-                    return "REJECTED_ROW_SCHEMA_VIOLATION"
-                seen_pks.add(pk_val)
-
-        # Step 8: Replacement scope, anti-resurrection & cross-table / coverage reconciliation
-        scope = manifest["replacement_scope"]
-        mode = scope["scope_mode"]
-        op = scope["operation"]
-        src_id = scope["source_id"]
-        src_gen = scope["source_generation"]
-        sess_keys = set(scope["session_keys"])
-
-        if mode in ("source_generation", "session_keys"):
-            assert src_id is not None and src_gen is not None
-            active_gen = self.active_source_generations.get(src_id, 0)
-            purged_gen = self.purged_source_generations.get(src_id, 0)
-            if src_gen < active_gen or src_gen <= purged_gen:
-                return "REJECTED_STALE_GENERATION_OR_TOMBSTONE"
-            if op == "purge_delete" and mode == "source_generation" and src_gen <= active_gen:
-                return "REJECTED_STALE_GENERATION_OR_TOMBSTONE"
-
-        candidate_tables = copy.deepcopy(self.tables)
-        candidate_active_gens = dict(self.active_source_generations)
-        candidate_purged_gens = dict(self.purged_source_generations)
-        candidate_tombstones = dict(self.tombstoned_session_keys)
-
-        if mode == "source_generation":
-            assert src_id is not None and src_gen is not None
-            if op == "purge_delete":
-                if any(len(staged[t]) != 0 for t in CANONICAL_TABLES):
-                    return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-                for t in CANONICAL_TABLES:
-                    candidate_tables[t] = {
-                        pk: r
-                        for pk, r in candidate_tables[t].items()
-                        if r["source_id"] != src_id or r["source_generation"] > src_gen
-                    }
-                candidate_purged_gens[src_id] = max(candidate_purged_gens.get(src_id, 0), src_gen)
-                candidate_active_gens[src_id] = max(candidate_active_gens.get(src_id, 0), src_gen)
-            else:
-                for t in CANONICAL_TABLES:
-                    for r in staged[t]:
-                        if r["source_id"] != src_id or r["source_generation"] != src_gen:
-                            return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-                        if t != "coverage":
-                            tomb_key = f"{src_id}:{r['session_key']}"
-                            if src_gen <= candidate_tombstones.get(tomb_key, 0):
-                                return "REJECTED_STALE_GENERATION_OR_TOMBSTONE"
-                    candidate_tables[t] = {
-                        pk: r
-                        for pk, r in candidate_tables[t].items()
-                        if r["source_id"] != src_id
-                    }
-                    pk_col = PRIMARY_KEY_BY_TABLE[t]
-                    for r in staged[t]:
-                        candidate_tables[t][r[pk_col]] = r
-                candidate_active_gens[src_id] = src_gen
-
-        elif mode == "session_keys":
-            assert src_id is not None and src_gen is not None
-            if op == "purge_delete":
-                for t in ("sessions", "invocations", "tool_calls", "usage", "outcomes"):
-                    if len(staged[t]) != 0:
-                        return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-                    candidate_tables[t] = {
-                        pk: r
-                        for pk, r in candidate_tables[t].items()
-                        if not (r["source_id"] == src_id and r["session_key"] in sess_keys)
-                    }
-                for sk in sess_keys:
-                    tomb_key = f"{src_id}:{sk}"
-                    candidate_tombstones[tomb_key] = max(
-                        candidate_tombstones.get(tomb_key, 0), src_gen
-                    )
-                for t in ("sessions", "invocations", "tool_calls", "usage", "outcomes"):
-                    for r in candidate_tables[t].values():
-                        if r["source_id"] == src_id:
-                            r["source_generation"] = src_gen
-                for r in staged["coverage"]:
-                    if r["source_id"] != src_id or r["source_generation"] != src_gen:
-                        return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-                candidate_tables["coverage"] = {
-                    pk: r
-                    for pk, r in candidate_tables["coverage"].items()
-                    if r["source_id"] != src_id
-                }
-                for r in staged["coverage"]:
-                    candidate_tables["coverage"][r["coverage_key"]] = r
-                candidate_active_gens[src_id] = src_gen
-            else:
-                for sk in sess_keys:
-                    tomb_key = f"{src_id}:{sk}"
-                    if src_gen <= candidate_tombstones.get(tomb_key, 0):
-                        return "REJECTED_STALE_GENERATION_OR_TOMBSTONE"
-                for t in ("sessions", "invocations", "tool_calls", "usage", "outcomes"):
-                    for r in staged[t]:
-                        if (
-                            r["source_id"] != src_id
-                            or r["source_generation"] != src_gen
-                            or r["session_key"] not in sess_keys
-                        ):
-                            return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-                    candidate_tables[t] = {
-                        pk: r
-                        for pk, r in candidate_tables[t].items()
-                        if not (r["source_id"] == src_id and r["session_key"] in sess_keys)
-                    }
-                    pk_col = PRIMARY_KEY_BY_TABLE[t]
-                    for r in staged[t]:
-                        candidate_tables[t][r[pk_col]] = r
-                for r in staged["coverage"]:
-                    if r["source_id"] != src_id or r["source_generation"] != src_gen:
-                        return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-                    candidate_tables["coverage"][r["coverage_key"]] = r
-                candidate_active_gens[src_id] = src_gen
-
-        elif mode == "full_stream":
-            candidate_tables = {t: {} for t in CANONICAL_TABLES}
-            for t in CANONICAL_TABLES:
-                pk_col = PRIMARY_KEY_BY_TABLE[t]
-                for r in staged[t]:
-                    candidate_tables[t][r[pk_col]] = r
-                    candidate_active_gens[r["source_id"]] = max(
-                        candidate_active_gens.get(r["source_id"], 0),
-                        r["source_generation"],
-                    )
-
-        if not _verify_cross_table_and_coverage(candidate_tables):
-            return "REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH"
-
-        # Step 9: Commit state atomically
-        self.tables = candidate_tables
-        self.active_source_generations = candidate_active_gens
-        self.purged_source_generations = candidate_purged_gens
-        self.tombstoned_session_keys = candidate_tombstones
-        self.high_water_sequence = seq
-        self.committed_manifests[seq] = m_digest
-        return "APPLIED"
-
-
-def _verify_cross_table_and_coverage(
-    tables: dict[str, dict[str, dict[str, Any]]],
-) -> bool:
-    """Verify foreign keys, F9 invocation uniqueness, and coverage denominators."""
-    sessions = tables["sessions"]
-    invocations = tables["invocations"]
-    tool_calls = tables["tool_calls"]
-    usage = tables["usage"]
-    outcomes = tables["outcomes"]
-    coverage = tables["coverage"]
-
-    seen_i01_tuples: set[tuple[str, int, str, str | None]] = set()
-    for inv in invocations.values():
-        sk = inv["session_key"]
-        parent = sessions.get(sk)
-        if parent is None:
-            return False
-        if (
-            inv["source_id"] != parent["source_id"]
-            or inv["source_generation"] != parent["source_generation"]
-            or inv["canonical_harness"] != parent["canonical_harness"]
-        ):
-            return False
-        i01_tuple = (
-            sk,
-            inv["sequence_no"],
-            inv["invocation_grain"],
-            inv["message_key"],
-        )
-        if i01_tuple in seen_i01_tuples:
-            return False
-        seen_i01_tuples.add(i01_tuple)
-
-    for tc in tool_calls.values():
-        sk = tc["session_key"]
-        parent = sessions.get(sk)
-        if parent is None:
-            return False
-        if (
-            tc["source_id"] != parent["source_id"]
-            or tc["source_generation"] != parent["source_generation"]
-            or tc["canonical_harness"] != parent["canonical_harness"]
-        ):
-            return False
-        if tc["invocation_link_status"] == "linked":
-            inv_row = invocations.get(tc["invocation_key"])
-            if inv_row is None or inv_row["session_key"] != sk:
-                return False
-
-    for usg in usage.values():
-        sk = usg["session_key"]
-        parent = sessions.get(sk)
-        if parent is None:
-            return False
-        if (
-            usg["source_id"] != parent["source_id"]
-            or usg["source_generation"] != parent["source_generation"]
-            or usg["canonical_harness"] != parent["canonical_harness"]
-        ):
-            return False
-        if usg["invocation_link_status"] == "linked":
-            inv_row = invocations.get(usg["invocation_key"])
-            if inv_row is None or inv_row["session_key"] != sk:
-                return False
-
-    for out in outcomes.values():
-        sk = out["session_key"]
-        parent = sessions.get(sk)
-        if parent is None:
-            return False
-        if (
-            out["source_id"] != parent["source_id"]
-            or out["source_generation"] != parent["source_generation"]
-            or out["canonical_harness"] != parent["canonical_harness"]
-        ):
-            return False
-
-    seen_cov_tuples: set[tuple[str, int, str, str, str]] = set()
-    for cov in coverage.values():
-        cov_tuple = (
-            cov["source_id"],
-            cov["source_generation"],
-            cov["canonical_harness"],
-            cov["target_table"],
-            cov["coverage_dimension"],
-        )
-        if cov_tuple in seen_cov_tuples:
-            return False
-        seen_cov_tuples.add(cov_tuple)
-
-        t_name = cov["target_table"]
-        target_rows = [
-            r
-            for r in tables[t_name].values()
-            if r["source_id"] == cov["source_id"]
-            and r["source_generation"] == cov["source_generation"]
-            and r["canonical_harness"] == cov["canonical_harness"]
-        ]
-        if cov["accepted_count"] != len(target_rows):
-            return False
-
-        dim = cov["coverage_dimension"]
-        if dim == "row_ingestion":
-            if cov["expected_population_count"] != cov["encountered_count"]:
-                return False
-            if cov["observable_count"] != cov["accepted_count"]:
-                return False
-            if (
-                cov["unknown_or_missing_count"]
-                != cov["rejected_count"] + cov["recognized_unprojected_count"]
-            ):
-                return False
+    def apply_step(self,step):
+        m=step.get("committed_manifest")
+        if m is None: return "IGNORED_UNCOMMITTED_NO_MANIFEST"
+        if not isinstance(m,dict): return "REJECTED_INVALID_MANIFEST"
+        p=m.get("producer")
+        p=p if isinstance(p,dict) else {}
+        if (m.get("tenant_placeholder"),p.get("producer_id"),m.get("stream"))!=self.key: return "REJECTED_TENANT_OR_PRODUCER_MISMATCH"
+        if not validate_manifest_structure(m,vector_mode=True): return "REJECTED_INVALID_MANIFEST"
+        q=m["snapshot_sequence"]
+        if q in self.committed_manifests:
+            return "DUPLICATE_IDEMPOTENT" if self.committed_manifests[q]==m["manifest_digest"] else "CONFLICTING_DUPLICATE"
+        if q>self.high_water_sequence+1: return "GAP_PENDING"
+        def reject(reason): return self._consume(m,reason)
+        if compute_manifest_digest(m)!=m["manifest_digest"]: return reject("REJECTED_INVALID_MANIFEST")
+        if m["schema_digest"]!=self.expected_schema_digest: return reject("REJECTED_SCHEMA_MISMATCH")
+        if m["skip_reason"] is not None: return self._consume(m,"SKIPPED")
+        staged=step.get("staged_tables")
+        if not isinstance(staged,dict): return reject("REJECTED_FILE_INTEGRITY")
+        for f in m["files"]:
+            rows=staged.get(f["table"])
+            if not isinstance(rows,list): return reject("REJECTED_FILE_INTEGRITY")
+            data=canonical_table_jsonl_bytes(rows)
+            if len(rows)!=f["row_count"] or len(data)!=f["byte_length"] or sha256_hex(data)!=f["sha256"]: return reject("REJECTED_FILE_INTEGRITY")
+        key_id=m["producer"]["pseudonym_key_id"]
+        for table in CANONICAL_TABLES:
+            rows=staged[table]
+            pk=PRIMARY_KEY_BY_TABLE[table]
+            if not all(validate_row_against_schema(table,r,self.schemas[table],key_id) for r in rows): return reject("REJECTED_ROW_SCHEMA_VIOLATION")
+            if len({r[pk] for r in rows})!=len(rows): return reject("REJECTED_ROW_SCHEMA_VIOLATION")
+        scope=m["replacement_scope"]
+        source=scope["source_id"]
+        generation=scope["source_generation"]
+        active=self.active_source_generations.get(source,0)
+        purged=self.purged_source_generations.get(source,0)
+        session_purge=scope["scope_mode"]=="session_keys"
+        purge=scope["operation"]=="purge_delete"
+        if (session_purge and (generation!=active or self.source_key_ids.get(source)!=key_id)
+                or not session_purge and (generation<active or generation<=purged)):
+            return reject("REJECTED_STALE_GENERATION_OR_TOMBSTONE")
+        if not purge:
+            old_key=self.source_key_ids.get(source)
+            if old_key and old_key!=key_id and purged<active: return reject("REJECTED_STALE_GENERATION_OR_TOMBSTONE")
+            if any(r.get("session_key") in self.tombstoned_session_keys for t in CANONICAL_TABLES for r in staged[t]):
+                return reject("REJECTED_STALE_GENERATION_OR_TOMBSTONE")
+        if purge and any(staged[t] for t in CANONICAL_TABLES): return reject("REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH")
+        candidate=copy.deepcopy(self.tables)
+        if session_purge:
+            selected=set(scope["session_keys"])
+            for table in CANONICAL_TABLES[:-1]:
+                candidate[table]={k:r for k,r in candidate[table].items() if not (r["source_id"]==source and r.get("session_key") in selected)}
         else:
-            if cov["expected_population_count"] != len(target_rows):
-                return False
-            if dim == "session_link_id":
-                if t_name != "sessions":
-                    return False
-                obs = sum(1 for r in target_rows if r["agent.session.link_id"] != "unlinked")
-            elif dim == "timestamp_fidelity":
-                if t_name != "sessions":
-                    return False
-                obs = sum(1 for r in target_rows if r["timestamp_status"] == "complete")
-            elif dim == "model_attribution":
-                if t_name not in ("invocations", "usage"):
-                    return False
-                obs = sum(
-                    1
-                    for r in target_rows
-                    if r["model_status"] in ("observed", "inferred_from_session")
-                )
-            elif dim == "observed_cost_usd":
-                if t_name != "usage":
-                    return False
-                obs = sum(
-                    1
-                    for r in target_rows
-                    if r["cost_provenance"]
-                    in ("harness_observed_exact", "provider_receipt_exact")
-                )
-            elif dim == "tool_outcome_pairing":
-                if t_name != "tool_calls":
-                    return False
-                obs = sum(
-                    1
-                    for r in target_rows
-                    if r["outcome_status"] in ("succeeded", "failed", "cancelled")
-                )
-            elif dim == "git_outcome_evidence":
-                if t_name != "outcomes":
-                    return False
-                obs = sum(
-                    1
-                    for r in target_rows
-                    if r["evidence_status"] in ("observed_full", "observed_partial")
-                )
-            else:
-                return False
+            for table in CANONICAL_TABLES:
+                candidate[table]={k:r for k,r in candidate[table].items() if r["source_id"]!=source}
+                if not purge:
+                    pk=PRIMARY_KEY_BY_TABLE[table]
+                    for row in staged[table]:
+                        if row["source_id"]!=source or row["source_generation"]!=generation or row[pk] in candidate[table]:
+                            return reject("REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH")
+                        candidate[table][row[pk]]=copy.deepcopy(row)
+            if not purge:
+                focused={t:{k:r for k,r in candidate[t].items() if r["source_id"]==source} for t in CANONICAL_TABLES}
+                if not verify_cross_table_and_coverage(focused): return reject("REJECTED_REFERENTIAL_OR_COVERAGE_MISMATCH")
+        self.tables=candidate
+        if session_purge: self.tombstoned_session_keys.update(scope["session_keys"])
+        else:
+            self.active_source_generations[source]=generation
+            if purge: self.purged_source_generations[source]=generation
+            else: self.source_key_ids[source]=key_id
+        return self._consume(m,"APPLIED")
 
-            if cov["observable_count"] != obs:
-                return False
-            if cov["unknown_or_missing_count"] != len(target_rows) - obs:
-                return False
+def verify_vector_files(base,schemas,schema_digest):
+    import struct
+    files=sorted((base/"vectors").glob("*.json"))
+    assert files,"No vectors"
+    count=0
+    for path in files:
+        doc=json.loads(path.read_text(encoding="utf-8"))
+        assert doc["expected_schema_digest"]==schema_digest,path.name
+        assert doc["vector_file"]==path.name and doc["contract_id"]==CONTRACT_ID and doc["contract_version"]==1
+        sm=ReplayStateMachine(schemas,schema_digest,doc["expected_tenant_placeholder"],doc["expected_producer_id"],doc["expected_stream"])
+        for step in doc["steps"]:
+            count+=1
+            got=sm.apply_step(step)
+            exp=step["expected_step_result"]
+            assert got==exp["status"],(path.name,step["step_id"],got,exp["status"])
+            assert sm.high_water_sequence==exp["high_water_sequence"],(path.name,step["step_id"],"cursor")
+            assert sm.active_row_counts()==exp["active_row_counts"],(path.name,step["step_id"],"counts")
+            assert sm.import_coverage==exp["import_coverage"],(path.name,step["step_id"],"import coverage")
+            assert {t:sha256_hex(canonical_table_jsonl_bytes(rows)) for t,rows in sm.export_sorted_tables().items()}==exp["active_table_digests"],(path.name,step["step_id"],"row bytes")
+        final=doc["expected_final_state"]
+        assert sm.export_sorted_tables()==final["active_tables"],(path.name,"active rows")
+        assert sm.high_water_sequence==final["high_water_sequence"],(path.name,"final cursor")
+        for name in ("active_source_generations","purged_source_generations","source_key_ids"):
+            assert getattr(sm,name)==final[name],(path.name,name)
+        assert sorted(sm.tombstoned_session_keys)==final["tombstoned_session_keys"],(path.name,"tombstones")
+        assert sorted(sm.committed_manifests)==final["committed_sequences"],(path.name,"sequences")
+        for case in doc.get("rounding_cases",[]):
+            value=struct.unpack(">d",bytes.fromhex(case["binary64_hex"]))[0]
+            assert round_usd_micros(value)==case["expected_micros"],case
+        for step in doc["steps"]:
+            manifest=step.get("committed_manifest")
+            if manifest and manifest["skip_reason"] is None and validate_manifest_structure(manifest,vector_mode=True):
+                assert not validate_manifest_structure(manifest),"Production must reject vector transport"
+    # Verify actual separate states for tenant in K, not merely authorization.
+    doc=json.loads((base/"vectors/clean_sequence.json").read_text())
+    event=doc["steps"][0]
+    first=ReplayStateMachine(schemas,schema_digest,doc["expected_tenant_placeholder"],doc["expected_producer_id"],doc["expected_stream"])
+    second=ReplayStateMachine(schemas,schema_digest,"tn_other_tenant",doc["expected_producer_id"],doc["expected_stream"])
+    changed=copy.deepcopy(event)
+    changed["committed_manifest"]["tenant_placeholder"]="tn_other_tenant"
+    changed["committed_manifest"]["manifest_digest"]=compute_manifest_digest(changed["committed_manifest"])
+    assert first.apply_step(changed)=="REJECTED_TENANT_OR_PRODUCER_MISMATCH" and first.high_water_sequence==0
+    assert second.apply_step(changed)=="APPLIED" and first.high_water_sequence==0
+    assert first.apply_step(event)=="APPLIED"
+    return len(files),count
 
-    return True
+def verify_digests(base):
+    paths=sorted(["SNAPSHOT.md","tables/README.md"]+[f"tables/{t}.schema.json" for t in CANONICAL_TABLES]+
+                 [p.relative_to(base).as_posix() for p in (base/"vectors").glob("*.json")])
+    raw=(base/"SHA256SUMS").read_bytes()
+    lines=raw.decode("utf-8").splitlines()
+    assert [line.split("  ",1)[1] for line in lines]==paths,"Exact contract inventory"
+    for line in lines:
+        digest,name=line.split("  ",1)
+        assert sha256_hex((base/name).read_bytes())==digest,name
+    result=sha256_hex(raw)
+    assert (base/"CONTRACT-DIGEST").read_text().strip()==result,"Contract digest"
+    expected="".join(f"{sha256_hex(p.read_bytes())}  {p.name}\n" for p in sorted((base/"vectors").glob("*.json")))
+    assert (base/"vectors/SHA256SUMS").read_text()==expected
+    return result
 
-
-def verify_vector_files(
-    base_dir: pathlib.Path,
-    schemas: dict[str, dict[str, Any]],
-    schema_digest: str,
-) -> tuple[int, int]:
-    """Verify all 7 replay vector files and return (num_files, total_steps)."""
-    vectors_dir = base_dir / "vectors"
-    total_steps = 0
-
-    for filename in EXPECTED_VECTOR_FILES:
-        vec_path = vectors_dir / filename
-        if not vec_path.is_file():
-            raise AssertionError(f"Missing vector file: {vec_path}")
-        doc = json.loads(vec_path.read_text(encoding="utf-8"))
-        if doc.get("contract_id") != CONTRACT_ID or doc.get("contract_version") != CONTRACT_VERSION:
-            raise AssertionError(f"{filename}: invalid contract header")
-        if doc.get("vector_file") != filename:
-            raise AssertionError(f"{filename}: vector_file field mismatch")
-        if doc.get("expected_schema_digest") != schema_digest:
-            raise AssertionError(
-                f"{filename}: expected_schema_digest {doc.get('expected_schema_digest')} != {schema_digest}"
-            )
-
-        sm = ReplayStateMachine(
-            schemas=schemas,
-            expected_schema_digest=schema_digest,
-            expected_tenant=doc["expected_tenant_placeholder"],
-            expected_producer_id=doc["expected_producer_id"],
-            expected_stream=doc["expected_stream"],
-        )
-
-        steps = doc.get("steps", [])
-        if not steps:
-            raise AssertionError(f"{filename}: empty steps")
-
-        for step in steps:
-            total_steps += 1
-            step_id = step["step_id"]
-            actual_status = sm.apply_step(step)
-            exp_res = step["expected_step_result"]
-            if actual_status != exp_res["status"]:
-                raise AssertionError(
-                    f"{filename}:{step_id}: status {actual_status} != expected {exp_res['status']}"
-                )
-            if sm.high_water_sequence != exp_res["high_water_sequence"]:
-                raise AssertionError(
-                    f"{filename}:{step_id}: high_water_sequence {sm.high_water_sequence} != {exp_res['high_water_sequence']}"
-                )
-            if sm.active_row_counts() != exp_res["active_row_counts"]:
-                raise AssertionError(
-                    f"{filename}:{step_id}: active_row_counts {sm.active_row_counts()} != {exp_res['active_row_counts']}"
-                )
-
-        final = doc["expected_final_state"]
-        if sm.high_water_sequence != final["high_water_sequence"]:
-            raise AssertionError(f"{filename}: final high_water_sequence mismatch")
-        if sorted(sm.committed_manifests.keys()) != final["committed_sequences"]:
-            raise AssertionError(f"{filename}: final committed_sequences mismatch")
-        if sm.active_source_generations != final["active_source_generations"]:
-            raise AssertionError(f"{filename}: final active_source_generations mismatch")
-        if sm.purged_source_generations != final["purged_source_generations"]:
-            raise AssertionError(f"{filename}: final purged_source_generations mismatch")
-        if sm.tombstoned_session_keys != final["tombstoned_session_keys"]:
-            raise AssertionError(f"{filename}: final tombstoned_session_keys mismatch")
-        if sm.export_sorted_tables() != final["active_tables"]:
-            raise AssertionError(f"{filename}: final active_tables mismatch")
-
-    return len(EXPECTED_VECTOR_FILES), total_steps
-
-
-def verify_digests(base_dir: pathlib.Path) -> str:
-    """Verify vectors/SHA256SUMS and CONTRACT-DIGEST bundle SHA-256."""
-    vectors_sha_path = base_dir / "vectors" / "SHA256SUMS"
-    seen_vector_files: list[str] = []
-    for line in vectors_sha_path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        expected_sha, filename = s.split("  ", 1)
-        actual_sha = sha256_hex((base_dir / "vectors" / filename).read_bytes())
-        if actual_sha != expected_sha:
-            raise AssertionError(
-                f"vectors/SHA256SUMS mismatch for {filename}: {actual_sha} != {expected_sha}"
-            )
-        seen_vector_files.append(filename)
-
-    if set(seen_vector_files) != set(EXPECTED_VECTOR_FILES) or len(seen_vector_files) != len(
-        EXPECTED_VECTOR_FILES
-    ):
-        raise AssertionError("vectors/SHA256SUMS does not list the exact 7 expected vector files")
-
-    digest_path = base_dir / "CONTRACT-DIGEST"
-    file_entries: list[str] = []
-    declared_bundle_sha: str | None = None
-    for line in digest_path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        if s.startswith("# BUNDLE-SHA256:"):
-            declared_bundle_sha = s.split(":", 1)[1].strip()
-            continue
-        if s.startswith("#"):
-            continue
-        expected_sha, rel_path = s.split("  ", 1)
-        actual_sha = sha256_hex((base_dir / rel_path).read_bytes())
-        if actual_sha != expected_sha:
-            raise AssertionError(
-                f"CONTRACT-DIGEST mismatch for {rel_path}: {actual_sha} != {expected_sha}"
-            )
-        file_entries.append(f"{expected_sha}  {rel_path}\n")
-
-    if not file_entries or declared_bundle_sha is None:
-        raise AssertionError("CONTRACT-DIGEST missing file entries or BUNDLE-SHA256 footer")
-
-    computed_bundle_sha = sha256_hex("".join(file_entries).encode("utf-8"))
-    if computed_bundle_sha != declared_bundle_sha:
-        raise AssertionError(
-            f"CONTRACT-DIGEST BUNDLE-SHA256 mismatch: {computed_bundle_sha} != {declared_bundle_sha}"
-        )
-    return computed_bundle_sha
-
-
-def main() -> int:
-    base_dir = pathlib.Path(__file__).resolve().parent
-    schemas, schema_digest = verify_and_load_schemas(base_dir)
-    num_files, total_steps = verify_vector_files(base_dir, schemas, schema_digest)
-    bundle_sha = verify_digests(base_dir)
-    print(
-        f"OK: fact-export-v1 verified (6 table schemas, schema_digest={schema_digest[:16]}..., "
-        f"{num_files} vector files, {total_steps} replay steps, SHA256SUMS, "
-        f"CONTRACT-DIGEST bundle={bundle_sha})"
-    )
+def main():
+    base=pathlib.Path(__file__).resolve().parent
+    schemas,schema_digest=verify_and_load_schemas(base)
+    files,steps=verify_vector_files(base,schemas,schema_digest)
+    digest=verify_digests(base)
+    print(f"OK: 7 schemas; {files} vectors; {steps} steps; schema_digest={schema_digest}; CONTRACT-DIGEST={digest}")
     return 0
 
-
-if __name__ == "__main__":
+if __name__=="__main__":
     sys.exit(main())

@@ -6,6 +6,7 @@
   "properties": {
     "cache_read_tokens": {
       "description": "Normalized delta of cached input tokens read during this usage record (0 when none read).",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -21,13 +22,14 @@
       },
       "x_parquet": {
         "field_id": 20,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     },
     "cache_write_tokens": {
       "description": "Normalized delta of cache creation/write tokens during this usage record (0 when none written).",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -43,19 +45,20 @@
       },
       "x_parquet": {
         "field_id": 21,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
     },
     "canonical_harness": {
-      "description": "Canonical harness identifier from the closed link-id-v1 vocabulary.",
+      "description": "Closed canonical harness vocabulary, including unknown.",
       "enum": [
         "antigravity",
         "claude",
         "codex",
         "grok",
-        "pi"
+        "pi",
+        "unknown"
       ],
       "type": "string",
       "x_justification": {
@@ -66,9 +69,9 @@
           "A4"
         ],
         "missingness_semantics": "Required closed enum.",
-        "pseudonymization": "Closed 5-value enum (F12).",
+        "pseudonymization": "Closed canonical harness enum.",
         "why_present": "Partitions token and cost accounting by harness platform.",
-        "zero_content": "Closed enum literal (DE-004)."
+        "zero_content": "Closed six-value harness enum."
       },
       "x_parquet": {
         "field_id": 8,
@@ -78,9 +81,9 @@
       }
     },
     "cost_provenance": {
-      "description": "Explicit provenance for observed_usd / observed_usd_micros. Producer never fabricates rate-card estimates; Enterprise computes contract-price estimates downstream (MVP plan \u00a72 Decision 4, F14).",
+      "description": "harness_reported is observed, not certified exact; costs are row deltas.",
       "enum": [
-        "harness_observed_exact",
+        "harness_reported",
         "provider_receipt_exact",
         "unknown"
       ],
@@ -92,8 +95,8 @@
           "EN6a",
           "A4"
         ],
-        "missingness_semantics": "Governs whether observed_usd and observed_usd_micros are non-null ('harness_observed_exact' or 'provider_receipt_exact') vs null ('unknown').",
-        "pseudonymization": "Closed 3-value enum.",
+        "missingness_semantics": "See SNAPSHOT.md section 4; no decimal string is exported.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Resolves F14 (cost is NULL in 90-99.9% of local rows) by explicitly separating producer-observed USD from unknown cost that requires Enterprise rate-card estimation.",
         "zero_content": "Closed enum literal (DE-004)."
       },
@@ -123,7 +126,7 @@
           "D5",
           "EN6a"
         ],
-        "missingness_semantics": "Non-null iff cost_provenance == 'unknown'; null iff cost_provenance != 'unknown'.",
+        "missingness_semantics": "See SNAPSHOT.md section 4; no decimal string is exported.",
         "pseudonymization": "Closed 4-reason vocabulary.",
         "why_present": "Tells Enterprise why observed USD is missing and whether rate-card pricing should be applied (F14, EN6a).",
         "zero_content": "Closed enum literal or null (DE-004)."
@@ -164,11 +167,13 @@
       }
     },
     "effort": {
-      "description": "Normalized reasoning/thinking effort level for the usage record (MVP plan \u00a72 Decision 4).",
+      "description": "Shared observed reasoning effort vocabulary.",
       "enum": [
+        "minimal",
         "low",
         "medium",
         "high",
+        "xhigh",
         "max",
         "not_applicable",
         "unknown"
@@ -182,9 +187,9 @@
           "A4"
         ],
         "missingness_semantics": "Required closed enum with explicit 'not_applicable' and 'unknown' states.",
-        "pseudonymization": "Closed 6-value enum.",
-        "why_present": "Distinguishes reasoning effort tiers for cost-efficiency and latency analysis (MVP plan \u00a72 Decision 4).",
-        "zero_content": "Closed enum literal (DE-004)."
+        "pseudonymization": "Closed effort enum.",
+        "why_present": "Distinguishes reasoning effort tiers for cost-efficiency and latency analysis (MVP plan §2 Decision 4).",
+        "zero_content": "Closed effort enum including minimal and xhigh."
       },
       "x_parquet": {
         "field_id": 15,
@@ -195,6 +200,7 @@
     },
     "input_uncached_tokens": {
       "description": "Normalized delta of uncached input/prompt tokens during this usage record.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -210,7 +216,7 @@
       },
       "x_parquet": {
         "field_id": 18,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -229,7 +235,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Non-null iff invocation_link_status == 'linked'; null otherwise.",
-        "pseudonymization": "64-char hex HMAC-SHA256 digest (F9, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Joins token and cost deltas to the exact qualified invocation (I01, I02).",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -267,10 +273,10 @@
       }
     },
     "model": {
-      "description": "Sanitized model identifier token when known (e.g. 'claude-opus-4-6', 'gpt-5-codex'). Null when model_status == 'unknown'.",
-      "maxLength": 96,
+      "description": "Observed public model token, maximum 128 ASCII characters, or null with explicit status.",
+      "maxLength": 128,
       "minLength": 1,
-      "pattern": "^[A-Za-z0-9._:/-]{1,96}$",
+      "pattern": "^[A-Za-z0-9._:/-]{1,128}$",
       "type": [
         "string",
         "null"
@@ -283,9 +289,9 @@
           "A4"
         ],
         "missingness_semantics": "Non-null iff model_status in ['observed', 'inferred_from_session']; null iff model_status == 'unknown'.",
-        "pseudonymization": "Public model family/release token validated against strict identifier characters; never a filesystem path or user string.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Required for model attribution, replaceable within a generation when late turn metadata resolves an unknown model, and used by EN6a rate cards.",
-        "zero_content": "Strict model identifier token without whitespace or paths (DE-004)."
+        "zero_content": "Restricted public model token of 1..128 ASCII characters."
       },
       "x_parquet": {
         "field_id": 12,
@@ -310,7 +316,7 @@
         ],
         "missingness_semantics": "Governs whether model is non-null ('observed', 'inferred_from_session') or null ('unknown').",
         "pseudonymization": "Closed 3-value enum.",
-        "why_present": "Tracks whether model attribution came directly from the turn record, was inherited from session config, or is unknown (MVP plan \u00a72 Decision 3, F14).",
+        "why_present": "Tracks whether model attribution came directly from the turn record, was inherited from session config, or is unknown (MVP plan §2 Decision 3, F14).",
         "zero_content": "Closed enum literal (DE-004)."
       },
       "x_parquet": {
@@ -350,33 +356,9 @@
         "repetition": "OPTIONAL"
       }
     },
-    "observed_usd": {
-      "description": "Producer-observed exact monetary cost in USD formatted as a fixed 6-decimal string (e.g. '0.014250'). Null when cost_provenance == 'unknown' (never '0.000000' for unknown cost).",
-      "pattern": "^[0-9]+\\.[0-9]{6}$",
-      "type": [
-        "string",
-        "null"
-      ],
-      "x_justification": {
-        "consumers": [
-          "D1",
-          "EN6a",
-          "A4"
-        ],
-        "missingness_semantics": "Non-null iff cost_provenance != 'unknown'; null iff cost_provenance == 'unknown'. '0.000000' is reserved strictly for a verified zero-cost receipt.",
-        "pseudonymization": "Fixed-precision decimal currency string.",
-        "why_present": "Preserves exact producer-observed USD without IEEE-754 floating-point drift across JSON and Parquet (MVP plan \u00a72 Decision 4, F14).",
-        "zero_content": "Fixed-scale numeric string only (DE-004)."
-      },
-      "x_parquet": {
-        "field_id": 25,
-        "logical_type": "DECIMAL(18, 6)",
-        "physical_type": "INT64",
-        "repetition": "OPTIONAL"
-      }
-    },
     "observed_usd_micros": {
-      "description": "Producer-observed exact monetary cost in integer micro-dollars (1 USD = 1,000,000 micro-dollars). Null when cost_provenance == 'unknown'.",
+      "description": "Observed per-row USD delta as nonnegative signed INT64 micros; round-half-even.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": [
         "integer",
@@ -388,14 +370,14 @@
           "EN6a",
           "A4"
         ],
-        "missingness_semantics": "Non-null iff cost_provenance != 'unknown'; must equal the exact integer micro-dollar value of observed_usd.",
-        "pseudonymization": "Integer micro-dollar amount.",
+        "missingness_semantics": "Known provenance iff micros present and reason null; otherwise micros null and reason present.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Allows direct integer aggregation in SQL/DuckDB without string parsing while matching the Parquet INT64 physical representation of DECIMAL(18, 6).",
         "zero_content": "Non-negative integer only (DE-004)."
       },
       "x_parquet": {
         "field_id": 26,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "OPTIONAL"
       }
@@ -426,6 +408,7 @@
     },
     "occurred_at_us": {
       "description": "UTC timestamp in microseconds since Unix epoch when the usage record occurred.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": [
         "integer",
@@ -452,6 +435,7 @@
     },
     "output_tokens": {
       "description": "Normalized delta of output/completion tokens during this usage record.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -467,7 +451,7 @@
       },
       "x_parquet": {
         "field_id": 19,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -485,7 +469,7 @@
           "EN3c"
         ],
         "missingness_semantics": "Non-null iff counter_semantics in ['cumulative_delta', 'cumulative_monotonic_skip']; null otherwise.",
-        "pseudonymization": "64-char hex HMAC-SHA256 digest (F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Provides a verifiable audit chain for cumulative token counter subtraction (accounting_v1).",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -509,7 +493,7 @@
           "EN5c"
         ],
         "missingness_semantics": "Required non-empty identifier.",
-        "pseudonymization": "Metadata identifier of the HMAC key version; contains no secret material.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Tracks key rotation for customer-held pseudonymization (DE-004).",
         "zero_content": "Key generation label only (DE-004)."
       },
@@ -549,6 +533,7 @@
     },
     "reasoning_tokens": {
       "description": "Normalized delta of reasoning/thinking tokens when separately reported by the harness. Null unless reasoning_status == 'observed'.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": [
         "integer",
@@ -567,13 +552,14 @@
       },
       "x_parquet": {
         "field_id": 23,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "OPTIONAL"
       }
     },
     "sequence_no": {
       "description": "0-based monotonic ordinal of the usage record within the session.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -589,7 +575,7 @@
       },
       "x_parquet": {
         "field_id": 9,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -606,7 +592,7 @@
           "A4"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Scopes usage records to a parent session for session-level replacement and cost rollups.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -645,6 +631,7 @@
     },
     "source_generation": {
       "description": "Monotonic positive integer generation of the source extraction state.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": "integer",
       "x_justification": {
@@ -655,12 +642,12 @@
         ],
         "missingness_semantics": "Required integer >= 1.",
         "pseudonymization": "Generation counter.",
-        "why_present": "Enables non-append-only replacement when model attribution, cumulative token normalization, or late cost receipts update within a generation (MVP plan \u00a72 Decision 3).",
+        "why_present": "Enables non-append-only replacement when model attribution, cumulative token normalization, or late cost receipts update within a generation (MVP plan §2 Decision 3).",
         "zero_content": "Positive integer counter (DE-004)."
       },
       "x_parquet": {
         "field_id": 3,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
         "repetition": "REQUIRED"
       }
@@ -677,7 +664,7 @@
           "EN3c"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Partitions usage replacement scope by source root.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -690,6 +677,7 @@
     },
     "total_tokens": {
       "description": "Exact sum of input_uncached_tokens + output_tokens + cache_read_tokens + cache_write_tokens.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -705,8 +693,33 @@
       },
       "x_parquet": {
         "field_id": 22,
-        "logical_type": "INT(64, false)",
+        "logical_type": "INT(64, isSigned=true)",
         "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "usage_grain": {
+      "description": "Aggregate or per-turn rows, mutually exclusive per session.",
+      "enum": [
+        "session_aggregate",
+        "per_turn"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Aggregate or per-turn rows, mutually exclusive per session.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 30,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
         "repetition": "REQUIRED"
       }
     },
@@ -723,7 +736,7 @@
           "A4"
         ],
         "missingness_semantics": "Required 64-char hex digest.",
-        "pseudonymization": "HMAC-SHA256 digest under customer-held key (DE-004, F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Primary key for usage deduplication, cumulative delta chaining, and snapshot replacement.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -736,50 +749,41 @@
     }
   },
   "required": [
-    "usage_key",
-    "source_id",
-    "source_generation",
-    "pseudonym_key_id",
-    "session_key",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "canonical_harness",
+    "cost_provenance",
+    "cost_unknown_reason",
+    "counter_semantics",
+    "effort",
+    "input_uncached_tokens",
     "invocation_key",
     "invocation_link_status",
-    "canonical_harness",
-    "sequence_no",
-    "occurred_at_us",
-    "occurred_at_status",
     "model",
     "model_status",
     "model_unknown_reason",
-    "effort",
-    "counter_semantics",
-    "predecessor_usage_key",
-    "input_uncached_tokens",
-    "output_tokens",
-    "cache_read_tokens",
-    "cache_write_tokens",
-    "total_tokens",
-    "reasoning_tokens",
-    "reasoning_status",
-    "observed_usd",
     "observed_usd_micros",
-    "cost_provenance",
-    "cost_unknown_reason",
-    "signal_source"
+    "occurred_at_status",
+    "occurred_at_us",
+    "output_tokens",
+    "predecessor_usage_key",
+    "pseudonym_key_id",
+    "reasoning_status",
+    "reasoning_tokens",
+    "sequence_no",
+    "session_key",
+    "signal_source",
+    "source_generation",
+    "source_id",
+    "total_tokens",
+    "usage_key",
+    "usage_grain"
   ],
   "title": "fact-export-v1 usage table row",
   "type": "object",
   "x_contract": "fact-export-v1",
   "x_invariants": [
-    "invocation_link_status == 'linked' <=> invocation_key != null",
-    "occurred_at_status == 'observed' <=> occurred_at_us != null",
-    "(model_status == 'observed' || model_status == 'inferred_from_session') <=> (model != null && model_unknown_reason == null)",
-    "model_status == 'unknown' <=> (model == null && model_unknown_reason != null)",
-    "(counter_semantics == 'cumulative_delta' || counter_semantics == 'cumulative_monotonic_skip') <=> predecessor_usage_key != null",
-    "total_tokens == input_uncached_tokens + output_tokens + cache_read_tokens + cache_write_tokens",
-    "reasoning_status == 'observed' <=> reasoning_tokens != null",
-    "(cost_provenance == 'harness_observed_exact' || cost_provenance == 'provider_receipt_exact') <=> (observed_usd != null && observed_usd_micros != null && cost_unknown_reason == null)",
-    "cost_provenance == 'unknown' <=> (observed_usd == null && observed_usd_micros == null && cost_unknown_reason != null)",
-    "observed_usd != null => parse_usd_micros(observed_usd) == observed_usd_micros"
+    "See SNAPSHOT.md section 4 for usage, delta cost and grain invariants."
   ],
   "x_primary_key": "usage_key",
   "x_replacement_scope_keys": [

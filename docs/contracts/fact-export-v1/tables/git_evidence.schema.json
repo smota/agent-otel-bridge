@@ -1,0 +1,425 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "canonical_harness": {
+      "description": "Closed canonical harness vocabulary, including unknown.",
+      "enum": [
+        "antigravity",
+        "claude",
+        "codex",
+        "grok",
+        "pi",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "Closed canonical harness enum.",
+        "why_present": "Harness where known.",
+        "zero_content": "Closed six-value harness enum."
+      },
+      "x_parquet": {
+        "field_id": 6,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "commit_hmac": {
+      "description": "Keyed historical commit identity.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Keyed historical commit identity.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 7,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "default_branch_status": {
+      "description": "Historical default-branch knowledge.",
+      "enum": [
+        "observed",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Historical default-branch knowledge.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 12,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "evidence_source": {
+      "description": "D4c local historical evidence only.",
+      "enum": [
+        "local_git_history"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "D4c local historical evidence only.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 16,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "git_evidence_key": {
+      "description": "Historical git record primary key.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Historical git record primary key.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 1,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "is_merge": {
+      "description": "Historical merge flag.",
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Historical merge flag.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 9,
+        "logical_type": "NONE",
+        "physical_type": "BOOLEAN",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "merge_status": {
+      "description": "Merge observation status.",
+      "enum": [
+        "observed",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Merge observation status.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 10,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "observed_at_status": {
+      "description": "Timestamp fidelity.",
+      "enum": [
+        "observed",
+        "not_observable"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Timestamp fidelity.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 14,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "observed_at_us": {
+      "description": "Historical observation time, never export time.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Historical observation time, never export time.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 13,
+        "logical_type": "TIMESTAMP(MICROS, true)",
+        "physical_type": "INT64",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "on_default_branch": {
+      "description": "Historically on default branch.",
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Historically on default branch.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 11,
+        "logical_type": "NONE",
+        "physical_type": "BOOLEAN",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "parent_hmacs": {
+      "description": "Ordered keyed local parent commits.",
+      "items": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "type": "array",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Ordered keyed local parent commits.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 8,
+        "logical_type": "LIST<STRING>",
+        "physical_type": "GROUP",
+        "repetition": "REQUIRED"
+      }
+    },
+    "pseudonym_key_id": {
+      "description": "Org-wide fact key identifier.",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Org-wide fact key identifier.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 4,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "session_key": {
+      "description": "Session linkage only when uniquely matched.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Session linkage only when uniquely matched.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 5,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "session_match_status": {
+      "description": "Explicit session match status.",
+      "enum": [
+        "matched",
+        "unmatched",
+        "ambiguous",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Explicit session match status.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 15,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_generation": {
+      "description": "Source generation.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "Source generation.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 3,
+        "logical_type": "INT(64, isSigned=true)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_id": {
+      "description": "Stable provisioned source pseudonym.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Stable provisioned source pseudonym.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 2,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    }
+  },
+  "required": [
+    "git_evidence_key",
+    "source_id",
+    "source_generation",
+    "pseudonym_key_id",
+    "session_key",
+    "canonical_harness",
+    "commit_hmac",
+    "parent_hmacs",
+    "is_merge",
+    "merge_status",
+    "on_default_branch",
+    "default_branch_status",
+    "observed_at_us",
+    "observed_at_status",
+    "session_match_status",
+    "evidence_source"
+  ],
+  "title": "fact-export-v1 historical git evidence",
+  "type": "object",
+  "x_contract": "fact-export-v1",
+  "x_invariants": [
+    "See SNAPSHOT.md section 4."
+  ],
+  "x_primary_key": "git_evidence_key",
+  "x_spdx_license_identifier": "Apache-2.0",
+  "x_table": "git_evidence",
+  "x_version": 1
+}

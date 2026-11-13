@@ -34,13 +34,14 @@
       }
     },
     "canonical_harness": {
-      "description": "Canonical harness identifier from the closed link-id-v1 vocabulary.",
+      "description": "Closed canonical harness vocabulary, including unknown.",
       "enum": [
         "antigravity",
         "claude",
         "codex",
         "grok",
-        "pi"
+        "pi",
+        "unknown"
       ],
       "type": "string",
       "x_justification": {
@@ -50,9 +51,9 @@
           "EN6a"
         ],
         "missingness_semantics": "Required canonical harness enum token.",
-        "pseudonymization": "Closed 5-value enum (F12).",
+        "pseudonymization": "Closed canonical harness enum.",
         "why_present": "Qualifies invocation identity across harnesses and supports per-harness invocation breakdowns.",
-        "zero_content": "Closed enum literal (DE-004)."
+        "zero_content": "Closed six-value harness enum."
       },
       "x_parquet": {
         "field_id": 6,
@@ -62,12 +63,13 @@
       }
     },
     "effort": {
-      "description": "Observed model reasoning/thinking effort level for this invocation.",
+      "description": "Shared observed reasoning effort vocabulary.",
       "enum": [
         "minimal",
         "low",
         "medium",
         "high",
+        "xhigh",
         "max",
         "not_applicable",
         "unknown"
@@ -80,9 +82,9 @@
           "EN6a"
         ],
         "missingness_semantics": "Uses 'unknown' when effort is not reported and 'not_applicable' for non-reasoning models; never null.",
-        "pseudonymization": "Closed 7-value enum.",
+        "pseudonymization": "Closed effort enum.",
         "why_present": "Supports model configuration divergence (I05) and cost-by-effort analysis in Enterprise.",
-        "zero_content": "Closed enum literal (DE-004)."
+        "zero_content": "Closed effort enum including minimal and xhigh."
       },
       "x_parquet": {
         "field_id": 16,
@@ -127,7 +129,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Required primary key on every row.",
-        "pseudonymization": "Session-qualified HMAC-SHA256 pseudonym under pseudonym_key_id; resolves F9 (bare message_id collision across sessions) and F13.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Uniquely identifies each model invocation across the fleet and links usage and tool_calls to their parent turn.",
         "zero_content": "64-char hex HMAC digest only (DE-004, F9, F13)."
       },
@@ -180,7 +182,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Non-null iff invocation_grain == 'call'; null iff invocation_grain == 'usage_only'.",
-        "pseudonymization": "Computed as HMAC-SHA256(K_pseudo, LP('fact.invocation.message/v1', session_key, raw_message_id)) so identical raw message_id values in different sessions never collide (F9, D2).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Provides the qualified deduplication key for I01.distinct_calls.",
         "zero_content": "64-char hex HMAC digest only (DE-004, F9, F13)."
       },
@@ -192,7 +194,7 @@
       }
     },
     "model": {
-      "description": "Observed model identifier token (e.g. 'claude-opus-4-6', 'gpt-6.1-sol') when model_status == 'observed'.",
+      "description": "Observed public model token, maximum 128 ASCII characters, or null with explicit status.",
       "maxLength": 128,
       "minLength": 1,
       "pattern": "^[A-Za-z0-9._:/-]{1,128}$",
@@ -208,9 +210,9 @@
           "EN6a"
         ],
         "missingness_semantics": "Non-null iff model_status == 'observed'; null iff model_status == 'unknown' (accompanied by model_unknown_reason). Never defaults to 'google' or 'unknown' string (#29).",
-        "pseudonymization": "Allowlisted model identifier slug.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Carries per-invocation model attribution, which may be refined by replacement snapshots within a generation.",
-        "zero_content": "Model slug only; no prompt or response content (DE-004)."
+        "zero_content": "Restricted public model token of 1..128 ASCII characters."
       },
       "x_parquet": {
         "field_id": 13,
@@ -300,7 +302,8 @@
     },
     "occurred_at_us": {
       "description": "Invocation timestamp in UTC microseconds since Unix epoch when observed.",
-      "minimum": 0,
+      "maximum": 9223372036854775807,
+      "minimum": 1,
       "type": [
         "integer",
         "null"
@@ -317,16 +320,16 @@
       },
       "x_parquet": {
         "field_id": 11,
-        "logical_type": "TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)",
+        "logical_type": "TIMESTAMP(MICROS, true)",
         "physical_type": "INT64",
         "repetition": "OPTIONAL"
       }
     },
     "pseudonym_key_id": {
       "description": "Identifier of the customer-held HMAC key used to pseudonymize entity keys in this row.",
-      "maxLength": 128,
-      "minLength": 1,
-      "pattern": "^[\\x21-\\x7E]{1,128}$",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
       "type": "string",
       "x_justification": {
         "consumers": [
@@ -335,7 +338,7 @@
           "EN5b"
         ],
         "missingness_semantics": "Required non-empty key identifier.",
-        "pseudonymization": "Identifies customer pseudonymization key (DE-004, F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Tracks key lineage for pseudonymized invocation and message keys.",
         "zero_content": "Key identifier slug only (DE-004)."
       },
@@ -348,6 +351,7 @@
     },
     "sequence_no": {
       "description": "Zero-based or positive source sequence order within the session generation.",
+      "maximum": 9223372036854775807,
       "minimum": 0,
       "type": "integer",
       "x_justification": {
@@ -380,7 +384,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Required foreign key on every invocation row.",
-        "pseudonymization": "64-char hex HMAC-SHA256 session pseudonym (F13).",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
         "why_present": "Qualifies I01 invocations by session (F9) and joins invocations to session metadata and link_id.",
         "zero_content": "64-char hex HMAC digest only (DE-004)."
       },
@@ -419,6 +423,7 @@
     },
     "source_generation": {
       "description": "Monotonic ingestion generation number for source_id.",
+      "maximum": 9223372036854775807,
       "minimum": 1,
       "type": "integer",
       "x_justification": {
@@ -451,7 +456,7 @@
           "EN3c"
         ],
         "missingness_semantics": "Required on every row.",
-        "pseudonymization": "64-char hex HMAC-SHA256 source pseudonym (F13).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Binds the invocation row to its ingestion source for replacement and coverage accounting.",
         "zero_content": "Hex HMAC digest; never a file path (DE-004)."
       },
@@ -464,24 +469,24 @@
     }
   },
   "required": [
-    "invocation_key",
-    "source_id",
-    "source_generation",
-    "pseudonym_key_id",
-    "session_key",
-    "canonical_harness",
-    "sequence_no",
-    "invocation_grain",
-    "message_key",
     "call_id_missing_reason",
-    "occurred_at_us",
-    "occurred_at_status",
+    "canonical_harness",
+    "effort",
+    "invocation_grain",
+    "invocation_key",
+    "invocation_status",
+    "message_key",
     "model",
     "model_status",
     "model_unknown_reason",
-    "effort",
-    "invocation_status",
-    "signal_source"
+    "occurred_at_status",
+    "occurred_at_us",
+    "pseudonym_key_id",
+    "sequence_no",
+    "session_key",
+    "signal_source",
+    "source_generation",
+    "source_id"
   ],
   "title": "fact-export-v1 invocations table row",
   "type": "object",
