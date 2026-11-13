@@ -1,0 +1,747 @@
+{
+  "$id": "https://github.com/smota/agent-otel-bridge/blob/main/docs/contracts/fact-export-v1/tables/sessions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Normative fact-export-v1 schema for the sessions table. Carries the keyed session-to-trace link identifier (agent.session.link_id from link-id-v1) or an explicit unlinked_reason, canonical harness identity, lifecycle timestamps, and parent-child lineage.",
+  "properties": {
+    "agent.session.link_id": {
+      "description": "Keyed session-to-trace join identifier per link-id-v1 (64-char lowercase hex HMAC-SHA256) or the exact literal 'unlinked'.",
+      "pattern": "^([0-9a-f]{64}|unlinked)$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "EN4",
+          "EN6a",
+          "EN8"
+        ],
+        "missingness_semantics": "Never null and never guessed. Resolves to literal 'unlinked' with a required non-null unlinked_reason whenever any link-id-v1 input or key is invalid or origin is non-harness.",
+        "pseudonymization": "256-bit HMAC-SHA256 tag under team/epoch-scoped K_link (DE-006, F6); computationally indistinguishable from random without K_link.",
+        "why_present": "Joins exported dendro session facts to OpenObserve trace spans on column agent_session_link_id without storing spans in Enterprise.",
+        "zero_content": "Cryptographic HMAC tag or fixed literal 'unlinked'; contains no prompt, path, or email (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 13,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "canonical_harness": {
+      "description": "Closed canonical harness vocabulary, including unknown.",
+      "enum": [
+        "antigravity",
+        "claude",
+        "codex",
+        "grok",
+        "pi",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "A4",
+          "D1",
+          "D2",
+          "D3",
+          "D4b",
+          "D5",
+          "EN4",
+          "EN6a"
+        ],
+        "missingness_semantics": "Uses explicit 'unknown' enum variant (accompanied by agent.session.link_id = 'unlinked' and unlinked_reason = 'missing_harness' or 'unknown_harness').",
+        "pseudonymization": "Closed canonical harness enum.",
+        "why_present": "Normalizes harness names across AOB ('claude-code') and dendro ('claude') per F12 and prevents provider-name misattribution (#29).",
+        "zero_content": "Closed six-value harness enum."
+      },
+      "x_parquet": {
+        "field_id": 8,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "ended_at_us": {
+      "description": "Session end timestamp in UTC microseconds since Unix epoch when observed.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN6a",
+          "EN6c"
+        ],
+        "missingness_semantics": "Null when timestamp_status is 'start_only' or 'not_observable' (e.g. active session). Must be non-null and >= started_at_us when timestamp_status is 'complete'.",
+        "pseudonymization": "Numeric epoch timestamp; no identifier material.",
+        "why_present": "Bounds session duration and supports time-window cohort filtering and replacement when an active session completes.",
+        "zero_content": "Integer UTC microsecond timestamp only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 17,
+        "logical_type": "TIMESTAMP(MICROS, true)",
+        "physical_type": "INT64",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "endpoint_scope": {
+      "description": "Keyed endpoint pseudonym; raw C1a slug never exported.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "EN3a",
+          "EN5b"
+        ],
+        "missingness_semantics": "Observed iff non-null; otherwise status gives the reason.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Prevents cross-machine session ID collisions while keeping AOB and dendro link derivation deterministic.",
+        "zero_content": "Printable ASCII administrative slug without spaces, paths, or emails (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 6,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "endpoint_scope_status": {
+      "description": "C1a-compatible attribution status.",
+      "enum": [
+        "observed",
+        "missing_endpoint_scope",
+        "invalid_field_characters"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "C1a-compatible attribution status.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 25,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "harness_version": {
+      "description": "Observed harness version token (e.g. '2.1.322', '0.167.0') when reported by the source.",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._+-]{1,64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "D5",
+          "EN6a"
+        ],
+        "missingness_semantics": "Non-null iff harness_version_status == 'observed'; null iff harness_version_status == 'not_reported'. Never defaults to a fabricated version.",
+        "pseudonymization": "Public software release version token.",
+        "why_present": "Required for version-keyed native mapping equivalence (A4) and cohort comparability across harness upgrades.",
+        "zero_content": "Strict alphanumeric version token; no paths or command-line flags (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 9,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "harness_version_status": {
+      "description": "Explicit observability status for harness_version.",
+      "enum": [
+        "observed",
+        "not_reported"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "D5",
+          "EN6a"
+        ],
+        "missingness_semantics": "Explicitly distinguishes an observed version from an unreported version.",
+        "pseudonymization": "Closed 2-value status enum.",
+        "why_present": "Prevents null ambiguity on harness_version.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 10,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "is_root": {
+      "description": "True when the session is a root session with no evidenced parent session; false for child/delegated sessions.",
+      "type": "boolean",
+      "x_justification": {
+        "consumers": [
+          "EN6a",
+          "EN6c"
+        ],
+        "missingness_semantics": "Required boolean paired with lineage_status ('root', 'evidenced', 'absent', 'truncated', 'conflict').",
+        "pseudonymization": "Boolean structural flag.",
+        "why_present": "Separates inclusive root totals from exclusive child totals so descendants are never double-counted in fleet rollups (I03, accounting_v1).",
+        "zero_content": "Boolean flag only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 20,
+        "logical_type": "NONE",
+        "physical_type": "BOOLEAN",
+        "repetition": "REQUIRED"
+      }
+    },
+    "lineage_relation": {
+      "description": "Parent-to-child relationship kind from session_edges, or 'root' for root sessions.",
+      "enum": [
+        "root",
+        "spawn",
+        "delegate",
+        "handoff",
+        "return",
+        "join",
+        "retry",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "EN6a",
+          "EN6c"
+        ],
+        "missingness_semantics": "Uses 'root' when is_root is true and 'unknown' when lineage_status is 'absent', 'truncated', or 'conflict'.",
+        "pseudonymization": "Closed enum vocabulary from DATA_DICTIONARY.md §3.9.",
+        "why_present": "Supports subgraph token rollups (I03) and delegation depth analysis (I09) in Enterprise.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 22,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "lineage_status": {
+      "description": "Evidence status of the parent-child session link per DATA_DICTIONARY.md §5.1.",
+      "enum": [
+        "root",
+        "evidenced",
+        "absent",
+        "truncated",
+        "conflict"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "EN6a"
+        ],
+        "missingness_semantics": "Only 'evidenced' edges are traversed for inclusive subgraph reachability; 'absent', 'truncated', and 'conflict' explicitly record incomplete or conflicting lineage.",
+        "pseudonymization": "Closed enum vocabulary.",
+        "why_present": "Prevents unverified or conflicting parent links from corrupting inclusive token and cost rollups (I03).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 23,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "link_epoch": {
+      "description": "Key rotation epoch slug used to derive K_link when agent.session.link_id is linked.",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[\\x21-\\x7E]{1,128}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "EN4",
+          "EN5c"
+        ],
+        "missingness_semantics": "Required non-null when agent.session.link_id != 'unlinked'; null only when unlinked due to invalid_key_material.",
+        "pseudonymization": "Administrative key epoch identifier (e.g. '2026-Q4') per link-id-v1 §6.",
+        "why_present": "Enables bounded dual-epoch overlap window joins and post-compromise epoch retirement.",
+        "zero_content": "Printable ASCII epoch slug (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 14,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "org": {
+      "description": "Operator-provided C1a printable ASCII attribution slug or null; see SNAPSHOT.md.",
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^[\\x21-\\x7E]{1,1024}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "EN3a",
+          "EN5b"
+        ],
+        "missingness_semantics": "Observed iff non-null; otherwise status gives the reason.",
+        "pseudonymization": "Organization tenant slug bound into link-id-v1 LP payload.",
+        "why_present": "Binds exported facts to the customer organization boundary (EN3a).",
+        "zero_content": "C1a 1..1024 printable ASCII plus the normative denylist."
+      },
+      "x_parquet": {
+        "field_id": 5,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "org_status": {
+      "description": "C1a-compatible attribution status.",
+      "enum": [
+        "observed",
+        "missing_org",
+        "invalid_field_characters"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "C1a-compatible attribution status.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 24,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "origin": {
+      "description": "Origin classification of the session record per link-id-v1 §5.3.4.",
+      "enum": [
+        "harness",
+        "synthetic",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "EN3a",
+          "EN4"
+        ],
+        "missingness_semantics": "Explicitly distinguishes real 'harness' sessions from 'synthetic' test/collision frames or 'unknown' origins.",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Enforces D3 and link-id-v1 §5.3.4: non-harness origins MUST resolve to agent.session.link_id = 'unlinked' with unlinked_reason = 'non_harness_origin'.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 11,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "parent_session_key": {
+      "description": "Pseudonymized session_key of the parent session when lineage_status == 'evidenced'.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "EN6a",
+          "EN6c"
+        ],
+        "missingness_semantics": "Non-null iff is_root == false and lineage_status == 'evidenced'; null when is_root == true or lineage is 'absent', 'truncated', or 'conflict'.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Provides the parent-to-child graph edge for inclusive root token/cost rollups (I03).",
+        "zero_content": "Hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 21,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "pseudonym_key_id": {
+      "description": "Identifier of the customer-held HMAC key used to pseudonymize entity keys in this row.",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3a",
+          "EN5b",
+          "EN5c"
+        ],
+        "missingness_semantics": "Required non-empty key identifier on every row.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Allows customer-controlled re-identification and key rotation auditing.",
+        "zero_content": "Key identifier slug only; never key material (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 4,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "session_key": {
+      "description": "Primary key: 64-character lowercase hex HMAC-SHA256 pseudonym of the session identity.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D3",
+          "D4b",
+          "EN3c",
+          "EN6a",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required primary key on every session row.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Primary join key across sessions, invocations, tool_calls, usage, and outcomes within fact-export-v1.",
+        "zero_content": "64-char hex HMAC digest; never raw native_session (DE-004, F13)."
+      },
+      "x_parquet": {
+        "field_id": 1,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "session_status": {
+      "description": "Lifecycle status of the session at snapshot capture time.",
+      "enum": [
+        "active",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Uses 'unknown' when session lifecycle state cannot be determined from source records.",
+        "pseudonymization": "Closed 6-value enum.",
+        "why_present": "Tracks session progression across snapshots; an 'active' session in sequence N can be replaced by 'completed' in sequence N+1.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 19,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "signal_source": {
+      "description": "Observation surface that produced the session record.",
+      "enum": [
+        "session_log",
+        "hook_ipc",
+        "native_otlp"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "A5a",
+          "D4b",
+          "EN6a"
+        ],
+        "missingness_semantics": "Required closed enum identifying the capture path.",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Distinguishes harness session logs from hook IPC and native OTLP ingress (A4, A5a).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 12,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_generation": {
+      "description": "Monotonic ingestion generation number for source_id.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D4a",
+          "D4b",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required positive integer (>= 1).",
+        "pseudonymization": "Monotonic integer counter.",
+        "why_present": "Defines the replacement scope boundary for within-generation updates and generation supersession.",
+        "zero_content": "Integer counter only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 3,
+        "logical_type": "INT(64, isSigned=true)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_id": {
+      "description": "Pseudonymized 64-character hex HMAC-SHA256 identifier of the ingestion source.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D5",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required on every row.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Scopes replacement manifests and coverage denominators to a specific ingestion source.",
+        "zero_content": "Hex HMAC digest; never a file path (DE-004, F5)."
+      },
+      "x_parquet": {
+        "field_id": 2,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "started_at_us": {
+      "description": "Session start timestamp in UTC microseconds since Unix epoch when observed.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN4",
+          "EN6a",
+          "EN6c"
+        ],
+        "missingness_semantics": "Non-null when timestamp_status is 'complete' or 'start_only'; null iff timestamp_status == 'not_observable'.",
+        "pseudonymization": "Numeric UTC timestamp.",
+        "why_present": "Anchors session time-window queries and epoch overlap window checks.",
+        "zero_content": "Integer UTC microsecond timestamp only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 16,
+        "logical_type": "TIMESTAMP(MICROS, true)",
+        "physical_type": "INT64",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "team": {
+      "description": "Operator-provided C1a printable ASCII attribution slug or null; see SNAPSHOT.md.",
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^[\\x21-\\x7E]{1,1024}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "EN5b",
+          "EN6a"
+        ],
+        "missingness_semantics": "Observed iff non-null; otherwise status gives the reason.",
+        "pseudonymization": "Administrative team scope slug (e.g. 'platform-eng'); never an individual developer name or email.",
+        "why_present": "Enforces team-scoped access control (EN5b) and team-scoped HKDF key isolation (link-id-v1 §7.2).",
+        "zero_content": "C1a 1..1024 printable ASCII plus the normative denylist."
+      },
+      "x_parquet": {
+        "field_id": 7,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "team_status": {
+      "description": "C1a-compatible attribution status.",
+      "enum": [
+        "observed",
+        "missing_team",
+        "invalid_field_characters"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "SNAPSHOT.md section 4.",
+        "pseudonymization": "tables/README.md derivation or closed vocabulary.",
+        "why_present": "C1a-compatible attribution status.",
+        "zero_content": "Restricted field; SNAPSHOT.md section 4."
+      },
+      "x_parquet": {
+        "field_id": 26,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "timestamp_status": {
+      "description": "Explicit completeness status for started_at_us and ended_at_us.",
+      "enum": [
+        "complete",
+        "start_only",
+        "not_observable"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a"
+        ],
+        "missingness_semantics": "Governs whether started_at_us and ended_at_us are non-null.",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Eliminates null ambiguity on session boundary timestamps.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 18,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "unlinked_reason": {
+      "description": "Normative reason code from link-id-v1 §4.3/§5 when agent.session.link_id == 'unlinked'; null when linked.",
+      "enum": [
+        "invalid_key_material",
+        "non_harness_origin",
+        "missing_org",
+        "missing_endpoint_scope",
+        "missing_harness",
+        "unknown_harness",
+        "conflicting_harness",
+        "missing_native_session",
+        "invalid_field_characters",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A2",
+          "D3",
+          "D5",
+          "EN4",
+          "EN6a"
+        ],
+        "missingness_semantics": "Must be null when agent.session.link_id is a 64-hex digest, and must be a non-null link-id-v1 reason code when agent.session.link_id == 'unlinked'.",
+        "pseudonymization": "Closed vocabulary of 9 link-id-v1 diagnostic reason codes.",
+        "why_present": "Preserves exact root cause for unlinked sessions so coverage denominators can separate synthetic frames from configuration errors.",
+        "zero_content": "Closed enum literal or null (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 15,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    }
+  },
+  "required": [
+    "agent.session.link_id",
+    "canonical_harness",
+    "ended_at_us",
+    "endpoint_scope",
+    "harness_version",
+    "harness_version_status",
+    "is_root",
+    "lineage_relation",
+    "lineage_status",
+    "link_epoch",
+    "org",
+    "origin",
+    "parent_session_key",
+    "pseudonym_key_id",
+    "session_key",
+    "session_status",
+    "signal_source",
+    "source_generation",
+    "source_id",
+    "started_at_us",
+    "team",
+    "timestamp_status",
+    "unlinked_reason",
+    "org_status",
+    "endpoint_scope_status",
+    "team_status"
+  ],
+  "title": "fact-export-v1 sessions table row",
+  "type": "object",
+  "x_contract": "fact-export-v1",
+  "x_invariants": [
+    "See SNAPSHOT.md section 4 for session invariants."
+  ],
+  "x_primary_key": "session_key",
+  "x_replacement_scope_keys": [
+    "source_id",
+    "source_generation",
+    "session_key"
+  ],
+  "x_spdx_license_identifier": "Apache-2.0",
+  "x_table": "sessions",
+  "x_version": 1
+}

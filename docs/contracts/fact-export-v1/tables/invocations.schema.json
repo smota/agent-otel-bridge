@@ -1,0 +1,515 @@
+{
+  "$id": "https://github.com/smota/agent-otel-bridge/blob/main/docs/contracts/fact-export-v1/tables/invocations.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Normative fact-export-v1 schema for the invocations table. Resolves Finding F9 (I01 bare message_id collision) by qualifying invocation_key and message_key with session identity, and separates call grain from usage_only grain.",
+  "properties": {
+    "call_id_missing_reason": {
+      "description": "Explicit reason when invocation_grain == 'usage_only' and message_key is null.",
+      "enum": [
+        "usage_row_without_message_id",
+        "unreported_by_harness",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D2",
+          "D5",
+          "EN6a"
+        ],
+        "missingness_semantics": "Null iff invocation_grain == 'call' (message_key != null); non-null iff invocation_grain == 'usage_only' (message_key == null).",
+        "pseudonymization": "Closed 2-value reason enum.",
+        "why_present": "Explains why a usage emission lacked a call/message identifier in I01.",
+        "zero_content": "Closed enum literal or null (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 10,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "canonical_harness": {
+      "description": "Closed canonical harness vocabulary, including unknown.",
+      "enum": [
+        "antigravity",
+        "claude",
+        "codex",
+        "grok",
+        "pi",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "D2",
+          "EN6a"
+        ],
+        "missingness_semantics": "Required canonical harness enum token.",
+        "pseudonymization": "Closed canonical harness enum.",
+        "why_present": "Qualifies invocation identity across harnesses and supports per-harness invocation breakdowns.",
+        "zero_content": "Closed six-value harness enum."
+      },
+      "x_parquet": {
+        "field_id": 6,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "effort": {
+      "description": "Shared observed reasoning effort vocabulary.",
+      "enum": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "not_applicable",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "D4b",
+          "EN6a"
+        ],
+        "missingness_semantics": "Uses 'unknown' when effort is not reported and 'not_applicable' for non-reasoning models; never null.",
+        "pseudonymization": "Closed effort enum.",
+        "why_present": "Supports model configuration divergence (I05) and cost-by-effort analysis in Enterprise.",
+        "zero_content": "Closed effort enum including minimal and xhigh."
+      },
+      "x_parquet": {
+        "field_id": 16,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "invocation_grain": {
+      "description": "I01 grain classification: 'call' for evidenced model calls with a message_key, 'usage_only' for usage rows without a call identifier.",
+      "enum": [
+        "call",
+        "usage_only"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D2",
+          "EN6a"
+        ],
+        "missingness_semantics": "Required closed enum matching i01_invocations.rs ('I01.distinct_calls' vs 'I01.usage_only').",
+        "pseudonymization": "Closed 2-value enum.",
+        "why_present": "Prevents usage-only counter rows from inflating distinct model invocation counts (I01).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 8,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "invocation_key": {
+      "description": "Primary key: 64-character lowercase hex HMAC-SHA256 digest over (org, endpoint_scope, canonical_harness, session_key, message_key_or_seq).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D2",
+          "D4b",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Required primary key on every row.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Uniquely identifies each model invocation across the fleet and links usage and tool_calls to their parent turn.",
+        "zero_content": "64-char hex HMAC digest only (DE-004, F9, F13)."
+      },
+      "x_parquet": {
+        "field_id": 1,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "invocation_status": {
+      "description": "Execution outcome status of the model invocation.",
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled",
+        "pending",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "D4b",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Uses 'pending' while a turn is in flight and 'unknown' when completion is not recorded; replaceable within a generation.",
+        "pseudonymization": "Closed 5-value enum.",
+        "why_present": "Tracks turn completion and error rates without exporting error message strings (F5).",
+        "zero_content": "Closed enum literal; never raw error messages (DE-004, F5)."
+      },
+      "x_parquet": {
+        "field_id": 17,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "message_key": {
+      "description": "Session-qualified 64-character hex HMAC-SHA256 pseudonym of the harness message_id when invocation_grain == 'call'.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D2",
+          "EN6a"
+        ],
+        "missingness_semantics": "Non-null iff invocation_grain == 'call'; null iff invocation_grain == 'usage_only'.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Provides the qualified deduplication key for I01.distinct_calls.",
+        "zero_content": "64-char hex HMAC digest only (DE-004, F9, F13)."
+      },
+      "x_parquet": {
+        "field_id": 9,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "model": {
+      "description": "Observed public model token, maximum 128 ASCII characters, or null with explicit status.",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:/-]{1,128}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "D4b",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Non-null iff model_status in ['observed', 'inferred_from_session']; null iff model_status == 'unknown' (accompanied by model_unknown_reason).",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Carries per-invocation model attribution, which may be refined by replacement snapshots within a generation.",
+        "zero_content": "Restricted public model token of 1..128 ASCII characters."
+      },
+      "x_parquet": {
+        "field_id": 13,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "model_status": {
+      "description": "Explicit observability status for model attribution.",
+      "enum": [
+        "observed",
+        "inferred_from_session",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Governs whether model is non-null ('observed', 'inferred_from_session') or null ('unknown').",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Tracks model attribution completeness for coverage denominators.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 14,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "model_unknown_reason": {
+      "description": "Shared explicit reason code when model_status == 'unknown'; null when model is observed or inferred_from_session.",
+      "enum": [
+        "not_reported_in_event",
+        "not_reported_by_harness",
+        "pending_turn_attribution",
+        "awaiting_turn_completion",
+        "redacted_unallowlisted",
+        "redacted_unrecognized_format",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Non-null iff model_status == 'unknown'; null otherwise.",
+        "pseudonymization": "Closed shared 6-reason vocabulary.",
+        "why_present": "Distinguishes in-flight turns awaiting model attribution from events that omit model names.",
+        "zero_content": "Closed enum literal or null (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 15,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "occurred_at_status": {
+      "description": "Explicit observability status for occurred_at_us.",
+      "enum": [
+        "observed",
+        "not_observable"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D5",
+          "EN6a"
+        ],
+        "missingness_semantics": "Governs whether occurred_at_us is non-null.",
+        "pseudonymization": "Closed 2-value enum.",
+        "why_present": "Eliminates null ambiguity on invocation timestamps.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 12,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "occurred_at_us": {
+      "description": "Invocation timestamp in UTC microseconds since Unix epoch when observed.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN6a"
+        ],
+        "missingness_semantics": "Non-null iff occurred_at_status == 'observed'; null iff occurred_at_status == 'not_observable'.",
+        "pseudonymization": "Numeric UTC timestamp.",
+        "why_present": "Orders invocations temporally and supports time-window slicing.",
+        "zero_content": "Integer UTC microsecond timestamp only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 11,
+        "logical_type": "TIMESTAMP(MICROS, true)",
+        "physical_type": "INT64",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "pseudonym_key_id": {
+      "description": "Identifier of the customer-held HMAC key used to pseudonymize entity keys in this row.",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3a",
+          "EN5b"
+        ],
+        "missingness_semantics": "Required non-empty key identifier.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Tracks key lineage for pseudonymized invocation and message keys.",
+        "zero_content": "Key identifier slug only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 4,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "sequence_no": {
+      "description": "Zero-based or positive source sequence order within the session generation.",
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D2",
+          "D4b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required non-negative integer.",
+        "pseudonymization": "Ordinal sequence counter.",
+        "why_present": "Preserves deterministic within-session ordering even when timestamps tie or are absent.",
+        "zero_content": "Integer sequence number only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 7,
+        "logical_type": "INT(64, isSigned=true)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "session_key": {
+      "description": "Foreign key to sessions.session_key (64-character lowercase hex HMAC-SHA256).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D2",
+          "D4b",
+          "EN3c",
+          "EN6a"
+        ],
+        "missingness_semantics": "Required foreign key on every invocation row.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Qualifies I01 invocations by session (F9) and joins invocations to session metadata and link_id.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 5,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "signal_source": {
+      "description": "Observation surface that produced the invocation record.",
+      "enum": [
+        "session_log",
+        "hook_ipc",
+        "native_otlp"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "A4",
+          "A5a",
+          "D4b"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Tracks signal provenance across session logs, hooks, and native OTLP.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 18,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_generation": {
+      "description": "Monotonic ingestion generation number for source_id.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required positive integer (>= 1).",
+        "pseudonymization": "Monotonic integer counter.",
+        "why_present": "Scopes snapshot replacement for within-generation updates.",
+        "zero_content": "Integer counter only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 3,
+        "logical_type": "INT(64, isSigned=true)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_id": {
+      "description": "Pseudonymized 64-character hex HMAC-SHA256 identifier of the ingestion source.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D5",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required on every row.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Binds the invocation row to its ingestion source for replacement and coverage accounting.",
+        "zero_content": "Hex HMAC digest; never a file path (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 2,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    }
+  },
+  "required": [
+    "call_id_missing_reason",
+    "canonical_harness",
+    "effort",
+    "invocation_grain",
+    "invocation_key",
+    "invocation_status",
+    "message_key",
+    "model",
+    "model_status",
+    "model_unknown_reason",
+    "occurred_at_status",
+    "occurred_at_us",
+    "pseudonym_key_id",
+    "sequence_no",
+    "session_key",
+    "signal_source",
+    "source_generation",
+    "source_id"
+  ],
+  "title": "fact-export-v1 invocations table row",
+  "type": "object",
+  "x_contract": "fact-export-v1",
+  "x_invariants": [
+    "invocation_grain == 'call' <=> (message_key != null && call_id_missing_reason == null)",
+    "invocation_grain == 'usage_only' <=> (message_key == null && call_id_missing_reason != null)",
+    "occurred_at_status == 'observed' <=> occurred_at_us != null",
+    "model_status in ['observed', 'inferred_from_session'] <=> (model != null && model_unknown_reason == null)",
+    "model_status == 'unknown' <=> (model == null && model_unknown_reason != null)"
+  ],
+  "x_primary_key": "invocation_key",
+  "x_replacement_scope_keys": [
+    "source_id",
+    "source_generation",
+    "session_key",
+    "invocation_key"
+  ],
+  "x_spdx_license_identifier": "Apache-2.0",
+  "x_table": "invocations",
+  "x_version": 1
+}

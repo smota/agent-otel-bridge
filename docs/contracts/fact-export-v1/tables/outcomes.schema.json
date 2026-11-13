@@ -1,0 +1,590 @@
+{
+  "$id": "https://github.com/smota/agent-otel-bridge/blob/main/docs/contracts/fact-export-v1/tables/outcomes.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Normative fact-export-v1 schema for the outcomes table. Exports historical git evidence extracted strictly from session records or workspace snapshots (D4c; never live git subprocesses during replay). Producer exports raw historical evidence only; the outcome proxy is computed exclusively in Enterprise (MVP plan §2 Decision 5, EN6b, F4).",
+  "properties": {
+    "base_commit_hmac": {
+      "description": "64-character lowercase hex HMAC-SHA256 of the session's initial/base git commit SHA when observed. Never a raw 40-char git SHA (F13).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Non-null iff base_commit_status == 'observed'; null otherwise.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Allows EN6b to compare base_commit_hmac vs head_commit_hmac to determine whether the session produced commits without exposing raw commit hashes.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 17,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "base_commit_status": {
+      "description": "Explicit observability status for base_commit_hmac.",
+      "enum": [
+        "observed",
+        "single_point_only",
+        "not_observed"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Governs whether base_commit_hmac is non-null ('observed') vs null ('single_point_only' when only a single commit point was captured, 'not_observed' when git commit state is absent).",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Distinguishes single-point commit captures (e.g. session start only) from completely missing git state.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 18,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "branch_name_hmac": {
+      "description": "64-character lowercase hex HMAC-SHA256 of the normalized git branch name when on a named branch. Null on detached HEAD or when branch state is unobserved.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Non-null iff branch_status == 'named_branch'; null when branch_status in ['detached_head', 'not_observed'].",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Groups sessions operating on the same branch for EN6b survival/rework proxy computation.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 13,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "branch_status": {
+      "description": "Explicit git HEAD branch state governing branch_name_hmac (AGENTS.md §3.3).",
+      "enum": [
+        "named_branch",
+        "detached_head",
+        "not_observed"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Governs whether branch_name_hmac is non-null ('named_branch') vs null ('detached_head' or 'not_observed').",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Separates detached-HEAD worktrees (e.g. CI/meshloop workers) from missing branch metadata.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 14,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "canonical_harness": {
+      "description": "Closed canonical harness vocabulary, including unknown.",
+      "enum": [
+        "antigravity",
+        "claude",
+        "codex",
+        "grok",
+        "pi",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed canonical harness enum.",
+        "why_present": "Supports per-harness git evidence coverage and EN6b outcome proxy stratification.",
+        "zero_content": "Closed six-value harness enum."
+      },
+      "x_parquet": {
+        "field_id": 6,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "evidence_source": {
+      "description": "Historical artifact surface from which the git evidence was extracted. Live git subprocess execution during replay is prohibited (D4c, AGENTS.md Invariant 4).",
+      "enum": [
+        "session_record_header",
+        "session_record_event",
+        "session_tool_output_metadata",
+        "otel_workspace_snapshot"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required closed enum.",
+        "pseudonymization": "Closed 4-value enum.",
+        "why_present": "Certifies that git evidence came from historical session/telemetry records rather than live filesystem mutation (MVP plan §2 Decision 5, D4c).",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 8,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "evidence_status": {
+      "description": "Overall completeness of historical git evidence in this record.",
+      "enum": [
+        "observed_full",
+        "observed_partial",
+        "missing"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Governs missing_reason and whether all four git component statuses are observed ('observed_full'), a non-empty subset is observed ('observed_partial'), or none are observed ('missing').",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Provides an explicit denominator classifier for EN6b proxy eligibility and D5 coverage reporting.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 9,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "head_commit_hmac": {
+      "description": "64-character lowercase hex HMAC-SHA256 of the observed HEAD git commit SHA. Never a raw 40-char git SHA (F13).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Non-null iff head_commit_status == 'observed'; null iff head_commit_status == 'not_observed'.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Tracks the commit state reached by the session and replaceable within a generation as subsequent commits occur in the session.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 15,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "head_commit_status": {
+      "description": "Explicit observability status for head_commit_hmac.",
+      "enum": [
+        "observed",
+        "not_observed"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Governs whether head_commit_hmac is non-null ('observed') vs null ('not_observed').",
+        "pseudonymization": "Closed 2-value enum.",
+        "why_present": "Eliminates null ambiguity on HEAD commit digests.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 16,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "missing_reason": {
+      "description": "Explicit reason code when evidence_status == 'missing'. Null when full or partial git evidence is observed.",
+      "enum": [
+        "not_git_repository",
+        "not_recorded_in_session",
+        "redacted_unparseable",
+        "unsupported_by_harness",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Non-null iff evidence_status == 'missing'; null otherwise.",
+        "pseudonymization": "Closed 4-reason vocabulary.",
+        "why_present": "Explains whether git evidence is absent because the workspace is not a git repo (AGENTS.md §3.3) or because the harness log omitted git metadata.",
+        "zero_content": "Closed enum literal or null (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 10,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "observed_at_status": {
+      "description": "Explicit observability status for observed_at_us.",
+      "enum": [
+        "observed",
+        "not_observable"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D5"
+        ],
+        "missingness_semantics": "Governs whether observed_at_us is non-null.",
+        "pseudonymization": "Closed 2-value enum.",
+        "why_present": "Prevents missing git snapshot timestamps from defaulting to epoch 0.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 21,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "observed_at_us": {
+      "description": "UTC timestamp in microseconds since Unix epoch when the historical git evidence was captured in the session.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN6b"
+        ],
+        "missingness_semantics": "Non-null iff observed_at_status == 'observed'; null iff observed_at_status == 'not_reported'.",
+        "pseudonymization": "UTC timestamp in microseconds.",
+        "why_present": "Orders git state transitions across sessions for EN6b commit lineage proxy calculation.",
+        "zero_content": "Integer UTC epoch microseconds (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 20,
+        "logical_type": "TIMESTAMP(MICROS, true)",
+        "physical_type": "INT64",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "outcome_key": {
+      "description": "Globally unique 64-character lowercase hex HMAC-SHA256 primary key of the historical git evidence record, derived from (session_key, sequence_no).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required 64-char hex digest.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Primary key for outcome evidence deduplication and in-generation replacement when later session events update git state.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 1,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "pseudonym_key_id": {
+      "description": "Identifier of the customer-held HMAC key generation used to pseudonymize identifiers in this row (DE-004, F13).",
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "EN3a",
+          "EN3c",
+          "EN5c"
+        ],
+        "missingness_semantics": "Required non-empty identifier.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Supports customer-held key rotation across git evidence digests (DE-004).",
+        "zero_content": "Key generation label only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 4,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "remote_status": {
+      "description": "Explicit observability status for repo_remote_hmac.",
+      "enum": [
+        "observed",
+        "no_remote_configured",
+        "not_observed"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "D5",
+          "EN6b"
+        ],
+        "missingness_semantics": "Governs whether repo_remote_hmac is non-null ('observed') vs null ('no_remote_configured' or 'not_observed').",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Separates local-only git repositories without an origin remote from missing repository metadata.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 12,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "repo_remote_hmac": {
+      "description": "64-character lowercase hex HMAC-SHA256 of the credential-sanitized canonical git origin URL (AGENTS.md §3.3). Never a raw URL or path.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Non-null iff remote_status == 'observed'; null otherwise.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Correlates git commits across developer workstations working on the same repository without leaking repository names or URLs.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 11,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "OPTIONAL"
+      }
+    },
+    "sequence_no": {
+      "description": "0-based monotonic ordinal of the git evidence checkpoint within the session.",
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required non-negative integer ordinal.",
+        "pseudonymization": "Ordinal counter.",
+        "why_present": "Orders initial vs updated git evidence snapshots within a session.",
+        "zero_content": "Integer ordinal only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 7,
+        "logical_type": "INT(64, isSigned=true)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "session_key": {
+      "description": "Foreign key to sessions.session_key (64-character lowercase hex HMAC-SHA256).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required 64-char hex digest.",
+        "pseudonymization": "The incorporated derivation in tables/README.md is authoritative.",
+        "why_present": "Links historical git evidence to the session that observed it.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 5,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_generation": {
+      "description": "Monotonic positive integer generation of the source extraction state.",
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": "integer",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required integer >= 1.",
+        "pseudonymization": "Generation counter.",
+        "why_present": "Allows an in-progress session's git evidence (e.g. new HEAD commit or worktree state transition) to be replaced in a later snapshot within the same generation (MVP plan §2 Decision 3).",
+        "zero_content": "Positive integer counter (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 3,
+        "logical_type": "INT(64, isSigned=true)",
+        "physical_type": "INT64",
+        "repetition": "REQUIRED"
+      }
+    },
+    "source_id": {
+      "description": "Pseudonymized 64-character lowercase hex HMAC-SHA256 of the logical source root.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D5",
+          "EN3b",
+          "EN3c"
+        ],
+        "missingness_semantics": "Required 64-char hex digest.",
+        "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
+        "why_present": "Partitions outcome replacement scope by source root.",
+        "zero_content": "64-char hex HMAC digest only (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 2,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    },
+    "worktree_state": {
+      "description": "Historical git working-tree cleanliness state when captured in session records.",
+      "enum": [
+        "clean",
+        "dirty",
+        "unknown"
+      ],
+      "type": "string",
+      "x_justification": {
+        "consumers": [
+          "D4b",
+          "D4c",
+          "EN6b"
+        ],
+        "missingness_semantics": "Required closed enum with explicit 'unknown' state.",
+        "pseudonymization": "Closed 3-value enum.",
+        "why_present": "Indicates whether uncommitted modifications remained alongside head_commit_hmac for EN6b proxy confidence scoring.",
+        "zero_content": "Closed enum literal (DE-004)."
+      },
+      "x_parquet": {
+        "field_id": 19,
+        "logical_type": "STRING",
+        "physical_type": "BYTE_ARRAY",
+        "repetition": "REQUIRED"
+      }
+    }
+  },
+  "required": [
+    "base_commit_hmac",
+    "base_commit_status",
+    "branch_name_hmac",
+    "branch_status",
+    "canonical_harness",
+    "evidence_source",
+    "evidence_status",
+    "head_commit_hmac",
+    "head_commit_status",
+    "missing_reason",
+    "observed_at_status",
+    "observed_at_us",
+    "outcome_key",
+    "pseudonym_key_id",
+    "remote_status",
+    "repo_remote_hmac",
+    "sequence_no",
+    "session_key",
+    "source_generation",
+    "source_id",
+    "worktree_state"
+  ],
+  "title": "fact-export-v1 outcomes table row",
+  "type": "object",
+  "x_contract": "fact-export-v1",
+  "x_invariants": [
+    "remote_status == 'observed' <=> repo_remote_hmac != null",
+    "branch_status == 'named_branch' <=> branch_name_hmac != null",
+    "head_commit_status == 'observed' <=> head_commit_hmac != null",
+    "base_commit_status == 'observed' <=> base_commit_hmac != null",
+    "evidence_status == 'missing' <=> (missing_reason != null && remote_status == 'not_observed' && branch_status == 'not_observed' && head_commit_status == 'not_observed' && base_commit_status == 'not_observed')",
+    "evidence_status == 'observed_full' <=> (missing_reason == null && remote_status == 'observed' && branch_status == 'named_branch' && head_commit_status == 'observed' && base_commit_status == 'observed')",
+    "evidence_status == 'observed_partial' <=> (missing_reason == null && (remote_status == 'observed' || branch_status != 'not_observed' || head_commit_status == 'observed' || base_commit_status == 'observed') && !(remote_status == 'observed' && branch_status == 'named_branch' && head_commit_status == 'observed' && base_commit_status == 'observed'))",
+    "observed_at_status == 'observed' <=> observed_at_us != null"
+  ],
+  "x_primary_key": "outcome_key",
+  "x_replacement_scope_keys": [
+    "source_id",
+    "source_generation",
+    "session_key",
+    "outcome_key"
+  ],
+  "x_spdx_license_identifier": "Apache-2.0",
+  "x_table": "outcomes",
+  "x_version": 1
+}
