@@ -18,6 +18,7 @@ use std::sync::atomic::Ordering;
 fn diagnostic_snapshot() -> DiagnosticSnapshot {
     DiagnosticSnapshot {
         pseudonym_key_unavailable: 1,
+        trace_fallback_unkeyed: 2,
         transformed: 30,
         invalid: 3,
         span_size: 4,
@@ -103,7 +104,23 @@ fn appends_cumulative_event_outcomes_without_conflating_unknown() {
         false,
     );
 
-    assert_eq!(appended, 9);
+    assert_eq!(appended, 10);
+    let fallback = metric_named(&request, "agent.bridge.trace_fallback.unkeyed");
+    let metric::Data::Sum(fallback) = fallback.data.as_ref().unwrap() else {
+        panic!("counter");
+    };
+    assert!(fallback.is_monotonic);
+    assert_eq!(
+        fallback.aggregation_temporality,
+        AggregationTemporality::Cumulative as i32
+    );
+    assert_eq!(fallback.data_points.len(), 1);
+    assert_eq!(fallback.data_points[0].attributes.len(), 1);
+    assert_eq!(
+        label(&fallback.data_points[0], "reason"),
+        Some("key_unavailable")
+    );
+    assert_eq!(int_value(&fallback.data_points[0]), 2);
     let events = metric_named(&request, METRIC_BRIDGE_EVENTS);
     assert_eq!(events.unit, "{event}");
     let metric::Data::Sum(sum) = events.data.as_ref().expect("event metric data") else {

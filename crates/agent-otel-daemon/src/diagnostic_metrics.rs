@@ -75,6 +75,17 @@ pub fn append_bridge_metrics(
             pipeline.pseudonym_key_unavailable,
         )],
     ));
+    metrics.push(counter(
+        "agent.bridge.trace_fallback.unkeyed",
+        "Events using the legacy unkeyed trace fallback because no keyed fallback was available.",
+        "{event}",
+        observed_at_unix_nano,
+        vec![point1(
+            "reason",
+            "key_unavailable",
+            pipeline.trace_fallback_unkeyed,
+        )],
+    ));
     let appended = metrics.len();
     scope_metrics(request).metrics.extend(metrics);
     appended

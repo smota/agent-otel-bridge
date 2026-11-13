@@ -469,6 +469,7 @@ fn transform(
         }
     }
 
+    stats.record_trace_fallback(outcome.trace_fallback_unkeyed);
     stats.transformed.fetch_add(1, Ordering::Relaxed);
     for span in assembler.observe(outcome.span, now_instant) {
         match batch.try_push(span, Instant::now()) {

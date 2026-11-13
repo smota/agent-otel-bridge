@@ -54,7 +54,7 @@ pub fn collect_git_stats(workspace: &str) -> GitStats {
         return GitStats::default();
     }
 
-    let output = Command::new("git")
+    let output = crate::session_link::remove_link_environment(&mut Command::new("git"))
         .args(["diff", "--shortstat"])
         .current_dir(ws_path)
         .output();
@@ -78,7 +78,7 @@ pub fn collect_git_stats(workspace: &str) -> GitStats {
     }
 
     if stats.files_changed.is_none() {
-        if let Ok(log_out) = Command::new("git")
+        if let Ok(log_out) = crate::session_link::remove_link_environment(&mut Command::new("git"))
             .args(["log", "-n", "1", "--pretty=format:%s"])
             .current_dir(ws_path)
             .output()

@@ -12,6 +12,9 @@ use agent_otel_core::link_id::{
 use agent_otel_core::model::AgentHookInput;
 use agent_otel_core::otlp::kv_string;
 use opentelemetry_proto::tonic::trace::v1::Span;
+use std::io::Read;
+use std::path::PathBuf;
+use std::process::Command;
 use zeroize::Zeroizing;
 
 /// Immutable startup snapshot. Secret buffers are zeroized on drop and never cloned.
@@ -52,7 +55,7 @@ impl SessionLinkConfig {
                 return Err("invalid session-link provisioning slug");
             }
         }
-        let key = match get("AGENT_OTEL_LINK_KEY_HEX").map(Zeroizing::new) {
+        let key = match provisioned_key(get)? {
             None => None,
             Some(raw) => {
                 if raw.len() != 64 || team.is_none() || epoch.is_none() {
@@ -79,6 +82,49 @@ impl SessionLinkConfig {
             key,
         })
     }
+}
+
+/// Load only explicitly provisioned keys. A configured file must be valid;
+/// only an absent default file falls through to the process environment.
+fn provisioned_key(
+    get: &dyn Fn(&str) -> Option<String>,
+) -> Result<Option<Zeroizing<String>>, &'static str> {
+    let explicit = get("AGENT_OTEL_LINK_KEY_FILE");
+    let path = explicit.as_ref().map(PathBuf::from).or_else(|| {
+        crate::pseudonym_key::runtime_home_from_vars(get).map(|home| home.join("link.key"))
+    });
+    if let Some(path) = path {
+        match crate::pseudonym_key::open_private_key_file(&path, 64, false) {
+            Ok(mut file) => {
+                let mut bytes = Zeroizing::new([0u8; 64]);
+                file.read_exact(&mut bytes[..])
+                    .map_err(|_| "unable to read session-link key file")?;
+                let raw = std::str::from_utf8(&bytes[..])
+                    .map_err(|_| "invalid session-link key encoding")?;
+                return Ok(Some(Zeroizing::new(raw.to_owned())));
+            }
+            Err(error) if explicit.is_none() && error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err("invalid or non-private session-link key file"),
+        }
+    }
+    Ok(get("AGENT_OTEL_LINK_KEY_HEX").map(Zeroizing::new))
+}
+
+/// Keep provisioning out of every daemon child, including future LINK_* names.
+/// Apply after any caller-supplied environment overrides and before spawning.
+pub(crate) fn remove_link_environment(command: &mut Command) -> &mut Command {
+    let explicit: Vec<_> = command.get_envs().map(|(key, _)| key.to_owned()).collect();
+    for name in std::env::vars_os().map(|(name, _)| name).chain(explicit) {
+        if name
+            .to_string_lossy()
+            .to_ascii_uppercase()
+            .starts_with("AGENT_OTEL_LINK_")
+        {
+            command.env_remove(name);
+        }
+    }
+    // Also clear the separately named, forbidden organization root key.
+    command.env_remove("AGENT_OTEL_K_ORG_HEX")
 }
 
 /// Contains only exportable values and an optional keyed fallback trace ID.
@@ -146,22 +192,182 @@ pub(crate) fn resolve(
             // Even an unidentifiable harness must not expose a dictionary-matchable
             // conversation hash when a valid endpoint key exists. Distinct domain
             // prevents this fallback from becoming a contract link ID.
-            let fallback_trace_id = input.conversation_id.as_deref().and_then(|session| {
-                let message = Zeroizing::new(
-                    lp_encode_str(&[
-                        "agent.session.trace-fallback/v1",
-                        config.org.as_deref().unwrap_or(""),
-                        config.endpoint_scope.as_deref().unwrap_or(""),
-                        session,
-                    ])
-                    .ok()?,
-                );
-                Some(trace_prefix(&hmac_sha256(&key[..], &message)))
-            });
+            // Origin governs whether a link may be exported, not trace identity.
+            // Reuse the link domain for a known native session across origins.
+            let native_trace = derive_session_link_with_key(
+                key,
+                &LinkIdInput {
+                    origin: None,
+                    ..link_input
+                },
+            );
+            let fallback_trace_id = if let LinkIdOutcome::Linked { tag, .. } = native_trace {
+                Some(trace_prefix(&tag))
+            } else {
+                let nonce;
+                let session = match input.conversation_id.as_deref() {
+                    Some(session) if !session.trim().is_empty() => session,
+                    _ => {
+                        nonce = agent_otel_core::link_id::hex_encode(
+                            &agent_otel_core::trace_id::derive_trace_id(None),
+                        );
+                        &nonce
+                    }
+                };
+                lp_encode_str(&[
+                    "agent.session.trace-fallback/v1",
+                    config.org.as_deref().unwrap_or(""),
+                    config.endpoint_scope.as_deref().unwrap_or(""),
+                    session,
+                ])
+                .ok()
+                .map(|message| {
+                    let message = Zeroizing::new(message);
+                    trace_prefix(&hmac_sha256(&key[..], &message))
+                })
+            };
             SessionLink {
                 link_id: AGENT_SESSION_LINK_UNLINKED.into(),
                 reason: Some(reason),
                 fallback_trace_id,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod provisioning_tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
+
+    fn source(home: &std::path::Path) -> HashMap<String, String> {
+        HashMap::from([
+            ("AGENT_OTEL_HOME".into(), home.to_str().unwrap().into()),
+            ("AGENT_OTEL_LINK_TEAM".into(), "team".into()),
+            ("AGENT_OTEL_LINK_EPOCH".into(), "epoch".into()),
+            ("AGENT_OTEL_LINK_KEY_HEX".into(), "11".repeat(32)),
+        ])
+    }
+
+    fn load(vars: &HashMap<String, String>) -> Result<SessionLinkConfig, &'static str> {
+        SessionLinkConfig::from_vars(&|name| vars.get(name).cloned())
+    }
+
+    fn private_file(path: &std::path::Path, contents: &[u8]) {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::{FILE_GENERIC_WRITE, WRITE_DAC};
+            options.access_mode(FILE_GENERIC_WRITE | WRITE_DAC);
+        }
+        let mut file = options.open(path).unwrap();
+        #[cfg(windows)]
+        crate::pseudonym_key::restrict_key_file(&file).unwrap();
+        file.write_all(contents).unwrap();
+    }
+
+    #[test]
+    fn provisioned_files_precede_env_and_missing_default_never_creates_key() {
+        let home = std::env::temp_dir().join(format!("aob-link-files-{}", std::process::id()));
+        assert!(!home.exists());
+        let mut vars = source(&home);
+        assert_eq!(load(&vars).unwrap().key.unwrap().as_ref(), &[0x11; 32]);
+        assert!(
+            !home.exists(),
+            "provisioning must not create runtime or key files"
+        );
+        fs::create_dir(&home).unwrap();
+        let default = home.join("link.key");
+        private_file(&default, "22".repeat(32).as_bytes());
+        vars.insert(
+            "AGENT_OTEL_LINK_KEY_HEX".into(),
+            "invalid-env-ignored".into(),
+        );
+        assert_eq!(load(&vars).unwrap().key.unwrap().as_ref(), &[0x22; 32]);
+        let custom = home.join("custom.key");
+        private_file(&custom, "33".repeat(32).as_bytes());
+        vars.insert(
+            "AGENT_OTEL_LINK_KEY_FILE".into(),
+            custom.to_str().unwrap().into(),
+        );
+        assert_eq!(load(&vars).unwrap().key.unwrap().as_ref(), &[0x33; 32]);
+        for contents in ["bad".to_owned(), "g".repeat(64), "44".repeat(32) + "\n"] {
+            fs::write(&custom, contents).unwrap();
+            assert!(
+                load(&vars).is_err(),
+                "bad file must not fall through to env/default"
+            );
+        }
+        fs::remove_file(&custom).unwrap();
+        assert!(
+            load(&vars).is_err(),
+            "explicit missing file must fail closed"
+        );
+        vars.remove("AGENT_OTEL_LINK_KEY_FILE");
+        vars.remove("AGENT_OTEL_LINK_KEY_HEX");
+        fs::remove_file(default).unwrap();
+        assert!(load(&vars).unwrap().key.is_none());
+        assert!(!home.join("link.key").exists());
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn wider_key_permissions_are_rejected_without_repair() {
+        let home = std::env::temp_dir().join(format!("aob-link-perms-{}", std::process::id()));
+        fs::create_dir(&home).unwrap();
+        let path = home.join("link.key");
+        // Inherited Windows ACLs are deliberately not the protected owner-only DACL.
+        fs::write(&path, "44".repeat(32)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let before = fs::metadata(&path).unwrap().permissions();
+        assert!(load(&source(&home)).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "44".repeat(32));
+        assert_eq!(before, fs::metadata(&path).unwrap().permissions());
+        #[cfg(windows)]
+        {
+            // Still rejected a second time: the first attempt did not repair it.
+            assert!(crate::pseudonym_key::open_private_key_file(&path, 64, false).is_err());
+        }
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn child_environment_removes_current_and_future_link_names() {
+        let mut command = Command::new("unused-test-program");
+        for key in [
+            "AGENT_OTEL_LINK_KEY_HEX",
+            "AGENT_OTEL_LINK_KEY_FILE",
+            "AGENT_OTEL_LINK_FUTURE",
+            "agent_otel_link_lower",
+            "AGENT_OTEL_K_ORG_HEX",
+        ] {
+            command.env(key, "sentinel");
+        }
+        command.env("UNRELATED_SENTINEL", "preserved");
+        remove_link_environment(&mut command);
+        for (key, value) in command.get_envs() {
+            if key
+                .to_string_lossy()
+                .to_ascii_uppercase()
+                .starts_with("AGENT_OTEL_LINK_")
+                || key == "AGENT_OTEL_K_ORG_HEX"
+            {
+                assert!(value.is_none());
+            } else if key == "UNRELATED_SENTINEL" {
+                assert_eq!(value.unwrap(), "preserved");
             }
         }
     }

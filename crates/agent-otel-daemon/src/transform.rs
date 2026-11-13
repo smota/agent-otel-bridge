@@ -39,6 +39,8 @@ pub struct ParsedEventMeta {
 
 #[derive(Debug, Clone)]
 pub struct ProductionTransformOutcome {
+    /// True only when neither key supplied a fallback and no W3C ingress won.
+    pub trace_fallback_unkeyed: bool,
     pub span: Span,
     pub meta: ParsedEventMeta,
     pub context_state: &'static str,
@@ -184,9 +186,14 @@ pub fn production_transform_with_session_link(
     );
     // A valid inherited context always has a parent. Only replace the fallback;
     // explicit payload context still precedes transported source-process context.
+    let mut trace_fallback_unkeyed = false;
     if context.parent_span_id.is_none() {
-        if let Some(trace_id) = link.fallback_trace_id {
+        if let Some(trace_id) = link.fallback_trace_id.or_else(|| {
+            pseudonym_key.map(|key| key.trace_fallback(input.conversation_id.as_deref()))
+        }) {
             context.trace_id = trace_id;
+        } else {
+            trace_fallback_unkeyed = true;
         }
     }
     let lookup = contexts.lookup(&input, now_instant);
@@ -265,6 +272,7 @@ pub fn production_transform_with_session_link(
     project_span(&mut span, capture_mode);
 
     Ok(ProductionTransformOutcome {
+        trace_fallback_unkeyed,
         span,
         meta,
         context_state: state,

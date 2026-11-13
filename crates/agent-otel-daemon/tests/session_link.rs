@@ -551,3 +551,221 @@ fn provisioning_snapshot_is_immutable_and_rotated_keys_change_links() {
     source.insert("AGENT_OTEL_LINK_KEY_HEX".into(), "f".repeat(63) + "g");
     assert!(config(&source).is_err());
 }
+
+#[test]
+fn fallback_key_priority_stability_and_unkeyed_counter() {
+    use agent_otel_daemon::diagnostics::Diagnostics;
+    use agent_otel_daemon::pseudonym_key::PseudonymKey;
+    let home = std::env::temp_dir().join(format!("aob-fallback-{}", std::process::id()));
+    let key = PseudonymKey::load_or_create(&home).unwrap();
+    let cfg = config(&vars()).unwrap();
+    let diagnostics = Diagnostics::default();
+    let inherited = "00-11111111111111111111111111111111-2222222222222222-00";
+    let explicit = "00-33333333333333333333333333333333-4444444444444444-01";
+    let mut keyed = Vec::new();
+    for session in [Some("native-session"), None, Some("")] {
+        for pseudonym in [None, Some(&key)] {
+            for link in [None, Some(&cfg)] {
+                for (payload, env) in [
+                    (None, None),
+                    (None, Some(inherited)),
+                    (Some(explicit), Some(inherited)),
+                    (Some("invalid"), Some(inherited)),
+                ] {
+                    let body = json!({"session_id":session, "traceparent":payload});
+                    let frame = encode_context_payload(
+                        WireHeader::new(2, HookEvent::Stop.to_wire()),
+                        env,
+                        &serde_json::to_vec(&body).unwrap(),
+                    );
+                    let outcome = production_transform_with_session_link(
+                        MsgType::HookPayloadWithContext,
+                        &frame,
+                        &ContextCache::new(),
+                        1,
+                        ExecutionMode::Interactive,
+                        false,
+                        false,
+                        ResolvedSpanMetadata::default(),
+                        Instant::now(),
+                        1,
+                        WorkspacePathMode::Hash,
+                        CaptureMode::Minimal,
+                        pseudonym,
+                        link,
+                    )
+                    .unwrap();
+                    let unkeyed =
+                        payload.is_none() && env.is_none() && pseudonym.is_none() && link.is_none();
+                    assert_eq!(outcome.trace_fallback_unkeyed, unkeyed);
+                    let before = diagnostics.snapshot().trace_fallback_unkeyed;
+                    diagnostics.record_trace_fallback(outcome.trace_fallback_unkeyed);
+                    assert_eq!(
+                        diagnostics.snapshot().trace_fallback_unkeyed,
+                        before + u64::from(unkeyed)
+                    );
+                    let span = outcome.span;
+                    if let Some(parent) = payload.filter(|s| *s != "invalid").or(env) {
+                        let expected = parse_w3c_traceparent_with_flags(parent).unwrap();
+                        assert_eq!(span.trace_id, expected.trace_id);
+                        assert_eq!(span.parent_span_id, expected.parent_span_id.unwrap());
+                        assert_eq!(span.flags & 1, u32::from(expected.trace_flags & 1));
+                    } else if session == Some("native-session") {
+                        if link.is_some() {
+                            assert_eq!(
+                                span.trace_id,
+                                hex_decode(&attr(&span, "agent.session.link_id").unwrap()[..32])
+                                    .unwrap()
+                            );
+                        } else if pseudonym.is_some() {
+                            assert_ne!(span.trace_id, derive_trace_id(session));
+                            keyed.push(span.trace_id);
+                        } else {
+                            assert_eq!(span.trace_id, derive_trace_id(session));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // A fresh load of the same per-install key gives the same native-session trace.
+    let again = PseudonymKey::load_or_create(&home).unwrap();
+    for pseudonym in [&key, &again] {
+        let frame = encode_context_payload(
+            WireHeader::new(2, HookEvent::Stop.to_wire()),
+            None,
+            br#"{"session_id":"native-session"}"#,
+        );
+        let span = production_transform_with_session_link(
+            MsgType::HookPayloadWithContext,
+            &frame,
+            &ContextCache::new(),
+            2,
+            ExecutionMode::Interactive,
+            false,
+            false,
+            ResolvedSpanMetadata::default(),
+            Instant::now(),
+            2,
+            WorkspacePathMode::Hash,
+            CaptureMode::Minimal,
+            Some(pseudonym),
+            None,
+        )
+        .unwrap()
+        .span;
+        assert_eq!(span.trace_id, keyed[0]);
+    }
+    assert_eq!(diagnostics.snapshot().trace_fallback_unkeyed, 3);
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+#[test]
+fn native_session_trace_is_stable_across_origins_while_links_fail_closed() {
+    let cfg = config(&vars()).unwrap();
+    for client in 1..=5 {
+        let mut traces = Vec::new();
+        for origin in [None, Some("harness"), Some("synthetic"), Some("Harness")] {
+            let span = run(
+                Some(&cfg),
+                client,
+                HookEvent::Stop,
+                &json!({"session_id":"same-native-session", "origin":origin}),
+                None,
+                CaptureMode::Minimal,
+            );
+            if origin.is_none() || origin == Some("harness") {
+                assert_ne!(attr(&span, "agent.session.link_id"), Some("unlinked"));
+            } else {
+                assert_eq!(attr(&span, "agent.session.link_id"), Some("unlinked"));
+                assert_eq!(
+                    attr(&span, "agent.session.unlinked_reason"),
+                    Some("non_harness_origin")
+                );
+            }
+            traces.push(span.trace_id);
+        }
+        assert!(traces.windows(2).all(|pair| pair[0] == pair[1]));
+    }
+}
+
+#[test]
+fn g0a_native_claude_hook_and_codex_session_payloads_stay_linked() {
+    let cfg = config(&vars()).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/contracts/fact-export-v1/captures/g0a-20261112");
+    let mut counts = [0; 2];
+    for (index, (client, path)) in [
+        (2, "claude-2.1.322/S1/hook-sanitized.jsonl"),
+        (3, "codex-0.167.0/S1/session-log-sanitized.jsonl"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        for line in std::fs::read_to_string(root.join(path)).unwrap().lines() {
+            let record: Value = serde_json::from_str(line).unwrap();
+            let body = if client == 2 {
+                if record["origin"] != "harness" {
+                    continue;
+                }
+                &record["stdin"]
+            } else {
+                // G0a has no real Codex hook frames. Replay the real native
+                // session payload; do not relabel its synthetic collision frames.
+                if record["type"] != "session_meta" {
+                    continue;
+                }
+                &record["payload"]
+            };
+            assert!(
+                body.get("origin").is_none(),
+                "wrapper origin is not a native payload field"
+            );
+            let span = run(
+                Some(&cfg),
+                client,
+                HookEvent::PostToolUse,
+                body,
+                None,
+                CaptureMode::Minimal,
+            );
+            let expected = run(
+                Some(&cfg),
+                client,
+                HookEvent::PostToolUse,
+                &json!({"session_id":body["session_id"]}),
+                None,
+                CaptureMode::Minimal,
+            );
+            assert_ne!(attr(&span, "agent.session.link_id"), Some("unlinked"));
+            assert_eq!(
+                attr(&span, "agent.session.link_id"),
+                attr(&expected, "agent.session.link_id")
+            );
+            counts[index] += 1;
+        }
+    }
+    assert!(counts.into_iter().all(|count| count > 0));
+}
+
+#[test]
+fn native_codex_hook_schema_fixture_stays_linked() {
+    // Official native input schema, not a newly captured live hook. Provenance:
+    // docs/evidence/a2-origin-compatibility.md.
+    let body: Value =
+        serde_json::from_str(include_str!("fixtures/codex-native-hook.json")).unwrap();
+    let cfg = config(&vars()).unwrap();
+    assert!(body.get("origin").is_none());
+    let span = run(
+        Some(&cfg),
+        3,
+        HookEvent::PreToolUse,
+        &body,
+        None,
+        CaptureMode::Minimal,
+    );
+    assert_eq!(attr(&span, "agent.session.unlinked_reason"), None);
+    let link = attr(&span, "agent.session.link_id").unwrap();
+    assert_eq!(link.len(), 64);
+    assert_eq!(span.trace_id, hex_decode(&link[..32]).unwrap());
+}
