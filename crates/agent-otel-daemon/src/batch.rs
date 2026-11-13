@@ -8,6 +8,7 @@ use opentelemetry_proto::tonic::resource::v1::Resource;
 use opentelemetry_proto::tonic::trace::v1::Span;
 
 use crate::exporter::OtlpExporter;
+use crate::privacy::{project_span, CaptureMode};
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
 use prost::Message;
 use std::time::{Duration, Instant};
@@ -21,6 +22,7 @@ pub struct ExportBatch {
 
 pub struct SpanBatcher {
     resource: Resource,
+    capture_mode: CaptureMode,
     schema_url: String,
     batch_size: usize,
     spans: Vec<Span>,
@@ -37,11 +39,24 @@ impl SpanBatcher {
     }
 
     pub fn with_schema(resource: Resource, batch_size: usize, schema_url: &str) -> Self {
+        // The resource is stamped from daemon configuration; absence fails closed.
+        let capture_mode = CaptureMode::parse(resource.attributes.iter().find_map(|kv| {
+            if kv.key != "agent.capture.mode" {
+                return None;
+            }
+            match kv.value.as_ref()?.value.as_ref()? {
+                opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s) => {
+                    Some(s.as_str())
+                }
+                _ => None,
+            }
+        }));
         let resource_bytes = field_bytes(resource.encoded_len());
         let scope_bytes = field_bytes(agent_otel_core::otlp::instrumentation_scope().encoded_len());
         let schema_url = schema_url.to_string();
         Self {
             resource,
+            capture_mode,
             schema_field_bytes: string_field_bytes(&schema_url),
             schema_url,
             batch_size: batch_size.clamp(1, 4096),
@@ -53,7 +68,8 @@ impl SpanBatcher {
         }
     }
 
-    pub fn push(&mut self, span: Span) -> bool {
+    pub fn push(&mut self, mut span: Span) -> bool {
+        project_span(&mut span, self.capture_mode);
         self.oldest.get_or_insert_with(Instant::now);
         self.wire_bytes += field_bytes(span.encoded_len());
         self.spans.push(span);
@@ -78,9 +94,11 @@ impl SpanBatcher {
     /// Bounded synchronous path. A returned batch precedes the newly buffered span.
     pub fn try_push(
         &mut self,
-        span: Span,
+        mut span: Span,
         now: Instant,
     ) -> Result<Option<ExportBatch>, &'static str> {
+        // Final projection after context enrichment/pairing, before byte accounting.
+        project_span(&mut span, self.capture_mode);
         let bytes = field_bytes(span.encoded_len());
         if self.request_bytes(bytes) > crate::exporter::MAX_REQUEST_BYTES {
             return Err("span_size");
@@ -169,6 +187,56 @@ fn field_bytes(len: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_otel_core::otlp::{kv_bool, kv_int, kv_string};
+
+    #[test]
+    fn export_boundary_filters_attributes_added_after_projection() {
+        for mode in [
+            CaptureMode::Minimal,
+            CaptureMode::MetadataOnly,
+            CaptureMode::Full,
+        ] {
+            for legacy_push in [false, true] {
+                let resource = Resource {
+                    attributes: vec![kv_string("agent.capture.mode", mode.as_str())],
+                    ..Default::default()
+                };
+                let mut batch = SpanBatcher::new(resource, 1);
+                let mut span = Span::default();
+                project_span(&mut span, mode);
+                let reviewed = vec![
+                    kv_string("agent.context.state", "fresh"),
+                    kv_string("agent.context.source", "workspace_cache"),
+                    kv_int("agent.context.age_ms", 1),
+                    kv_bool("agent.span.paired", true),
+                    kv_string("agent.span.duration_source", "hook_interval"),
+                    kv_string("agent.span.incomplete_reason", "none"),
+                ];
+                span.attributes.extend(reviewed.clone());
+                span.attributes
+                    .push(kv_string("agent.context.future_secret", "SENTINEL"));
+                span.attributes
+                    .push(kv_string("agent.span.future_secret", "SENTINEL"));
+                if legacy_push {
+                    assert!(batch.push(span));
+                } else {
+                    batch.try_push(span, Instant::now()).unwrap();
+                }
+                let ready = batch.take().unwrap();
+                let attributes =
+                    &ready.request.resource_spans[0].scope_spans[0].spans[0].attributes;
+                if mode == CaptureMode::Minimal {
+                    assert_eq!(attributes, &reviewed);
+                    assert!(!String::from_utf8_lossy(&ready.request.encode_to_vec())
+                        .contains("SENTINEL"));
+                } else {
+                    assert_eq!(attributes.len(), reviewed.len() + 2);
+                }
+                assert_eq!(ready.encoded_bytes, ready.request.encoded_len());
+            }
+        }
+    }
+
     #[test]
     fn full_request_accounting_and_oldest_age() {
         let mut batch = SpanBatcher::new(Resource::default(), 50);

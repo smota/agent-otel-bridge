@@ -672,7 +672,7 @@ fn extract_clean_repo_name(raw: &str) -> String {
 }
 
 fn is_valid_commit_sha(s: &str) -> bool {
-    (7..=64).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_hexdigit())
+    matches!(s.len(), 40 | 64) && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 fn is_safe_opaque_id(s: &str) -> bool {
@@ -923,7 +923,8 @@ pub fn project_input_and_metadata(
             if let Some(commit) = input.vcs_commit.take() {
                 let trimmed = commit.trim();
                 if is_valid_commit_sha(trimmed) {
-                    input.vcs_commit = Some(trimmed.to_ascii_lowercase());
+                    input.vcs_commit =
+                        Some(pseudonym(key, "commit", &trimmed.to_ascii_lowercase()));
                 }
             }
 
@@ -1063,6 +1064,7 @@ pub fn project_input_and_metadata(
             for field in [
                 &mut input.project_name,
                 &mut input.vcs_repository,
+                &mut input.vcs_commit,
                 &mut input.tool_name,
                 &mut input.capability_namespace,
                 &mut input.capability_name,
@@ -1333,6 +1335,7 @@ const MINIMAL_SPAN_KEYS: &[&str] = &[
     "agent.lineage.parent_name",
     "agent.lineage.root_id",
     "agent.lineage.is_root",
+    // Static context diagnostics and assembler outcomes added after input projection.
     "agent.context.state",
     "agent.context.source",
     "agent.context.age_ms",
@@ -1363,6 +1366,46 @@ const MINIMAL_SPAN_KEYS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimal_commit_pseudonyms_require_full_sha_and_key() {
+        let dir = std::env::temp_dir().join(format!("aob-commit-key-{}", std::process::id()));
+        let key = PseudonymKey::load_or_create(&dir).unwrap();
+        for raw in ["ABCDEF0123456789ABCDEF0123456789ABCDEF01", &"AB".repeat(32)] {
+            for available_key in [Some(&key), None] {
+                let mut input = AgentHookInput {
+                    vcs_commit: Some(raw.into()),
+                    ..Default::default()
+                };
+                project_input_and_metadata(
+                    &mut input,
+                    &mut ResolvedSpanMetadata::default(),
+                    CaptureMode::Minimal,
+                    WorkspacePathMode::Hash,
+                    available_key,
+                );
+                assert_eq!(
+                    input.vcs_commit,
+                    available_key.map(|key| key.pseudonym("commit", &raw.to_ascii_lowercase()))
+                );
+            }
+        }
+        for raw in ["abcdef0", &"a".repeat(41), &"z".repeat(40)] {
+            let mut input = AgentHookInput {
+                vcs_commit: Some(raw.into()),
+                ..Default::default()
+            };
+            project_input_and_metadata(
+                &mut input,
+                &mut ResolvedSpanMetadata::default(),
+                CaptureMode::Minimal,
+                WorkspacePathMode::Hash,
+                Some(&key),
+            );
+            assert_eq!(input.vcs_commit, None);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn resource_projection_is_default_deny_and_fixes_bridge_identity() {

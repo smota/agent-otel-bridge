@@ -66,7 +66,7 @@ impl QuotaEngine {
             (base.bucket, p.burn_per_token(), base.group)
         } else {
             (
-                agent_name.to_string(),
+                agent_name.to_ascii_lowercase(),
                 1.0 / 500_000.0,
                 "ai-agent".to_string(),
             )
@@ -261,4 +261,43 @@ pub fn current_unix_nano() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_activity_buckets_are_ascii_case_insensitive_in_opt_in_modes() {
+        use crate::config::WorkspacePathMode;
+        use crate::privacy::{project_input_and_metadata, CaptureMode};
+        use agent_otel_core::{model::AgentHookInput, otlp::ResolvedSpanMetadata};
+
+        for mode in [CaptureMode::MetadataOnly, CaptureMode::Full] {
+            let engine = QuotaEngine {
+                state_file: None,
+                quotas: RwLock::new(HashMap::new()),
+                boot_time_ns: 0,
+            };
+            for name in ["CuStOm-Ägent", "custom-Ägent"] {
+                let mut input = AgentHookInput {
+                    agent_name: Some(name.into()),
+                    ..Default::default()
+                };
+                project_input_and_metadata(
+                    &mut input,
+                    &mut ResolvedSpanMetadata::default(),
+                    mode,
+                    WorkspacePathMode::Hash,
+                    None,
+                );
+                engine.record_activity(input.agent_name.as_deref().unwrap(), None);
+            }
+            let quotas = engine.quotas.read().unwrap();
+            assert_eq!(quotas.len(), 1);
+            let snapshot = &quotas["custom-Ägent"];
+            assert_eq!(snapshot.bucket, "custom-Ägent");
+            assert!((snapshot.remaining_fraction - 0.94).abs() < 1e-10);
+        }
+    }
 }

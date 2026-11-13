@@ -29,6 +29,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const SENTINELS: &[&str] = &[
+    "abcdef0123456789abcdef0123456789abcdef01",
     "sentinel.user.f5@secret-corp.example",
     "secret-corp.example",
     "SENTINEL_HOME_PATH_11",
@@ -62,6 +63,83 @@ const G0A_SENTINELS: &[&str] = &[
     "EMAIL_a59b02022923c70d",
     "HOST_644f019937e80a7b",
 ];
+
+#[test]
+fn commit_aliases_are_keyed_in_minimal_and_raw_only_in_opt_in_modes() {
+    let base = create_sentinel_workspace();
+    let key = PseudonymKey::load_or_create(&base.join("privacy-home")).unwrap();
+    let raw = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";
+    let payload = serde_json::to_vec(&serde_json::json!({"vcsCommit": raw})).unwrap();
+    let frame = encode_context_payload(
+        WireHeader::new(
+            ClientKind::Antigravity.to_wire(),
+            HookEvent::PreToolUse.to_wire(),
+        ),
+        None,
+        &payload,
+    );
+    let cache = ContextCache::new();
+    for latest in [false, true] {
+        for mode in [
+            CaptureMode::Minimal,
+            CaptureMode::MetadataOnly,
+            CaptureMode::Full,
+        ] {
+            for available_key in [Some(&key), None] {
+                let outcome = production_transform_with_capture_mode(
+                    MsgType::HookPayloadWithContext,
+                    &frame,
+                    &cache,
+                    1,
+                    ExecutionMode::Interactive,
+                    false,
+                    latest,
+                    ResolvedSpanMetadata::default(),
+                    Instant::now(),
+                    1,
+                    WorkspacePathMode::Hash,
+                    mode,
+                    available_key,
+                )
+                .unwrap();
+                let (name, absent_alias) = if latest {
+                    ("vcs.ref.head.revision", "vcs.commit.sha")
+                } else {
+                    ("vcs.commit.sha", "vcs.ref.head.revision")
+                };
+                let value = outcome
+                    .span
+                    .attributes
+                    .iter()
+                    .find(|kv| kv.key == name)
+                    .and_then(|kv| match kv.value.as_ref()?.value.as_ref()? {
+                        any_value::Value::StringValue(s) => Some(s.as_str()),
+                        _ => None,
+                    });
+                assert!(!outcome
+                    .span
+                    .attributes
+                    .iter()
+                    .any(|kv| kv.key == absent_alias));
+                if mode == CaptureMode::Minimal {
+                    if available_key.is_some() {
+                        let value = value.expect("keyed commit must be exported");
+                        assert!(value.starts_with("commit_"));
+                        assert_eq!(value.len(), 39);
+                    } else {
+                        assert_eq!(value, None);
+                    }
+                    let bytes =
+                        String::from_utf8_lossy(&outcome.span.encode_to_vec()).to_ascii_lowercase();
+                    assert!(!bytes.contains(&raw.to_ascii_lowercase()));
+                } else {
+                    assert_eq!(value, Some(raw));
+                }
+            }
+        }
+    }
+    fs::remove_dir_all(base).unwrap();
+}
 
 fn create_sentinel_workspace() -> PathBuf {
     let nonce = SystemTime::now()
