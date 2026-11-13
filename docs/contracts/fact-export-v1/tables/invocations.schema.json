@@ -209,7 +209,7 @@
           "EN3c",
           "EN6a"
         ],
-        "missingness_semantics": "Non-null iff model_status == 'observed'; null iff model_status == 'unknown' (accompanied by model_unknown_reason). Never defaults to 'google' or 'unknown' string (#29).",
+        "missingness_semantics": "Non-null iff model_status in ['observed', 'inferred_from_session']; null iff model_status == 'unknown' (accompanied by model_unknown_reason).",
         "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Carries per-invocation model attribution, which may be refined by replacement snapshots within a generation.",
         "zero_content": "Restricted public model token of 1..128 ASCII characters."
@@ -225,6 +225,7 @@
       "description": "Explicit observability status for model attribution.",
       "enum": [
         "observed",
+        "inferred_from_session",
         "unknown"
       ],
       "type": "string",
@@ -234,8 +235,8 @@
           "EN3c",
           "EN6a"
         ],
-        "missingness_semantics": "Governs whether model is non-null or model_unknown_reason is non-null.",
-        "pseudonymization": "Closed 2-value enum.",
+        "missingness_semantics": "Governs whether model is non-null ('observed', 'inferred_from_session') or null ('unknown').",
+        "pseudonymization": "Closed 3-value enum.",
         "why_present": "Tracks model attribution completeness for coverage denominators.",
         "zero_content": "Closed enum literal (DE-004)."
       },
@@ -247,11 +248,14 @@
       }
     },
     "model_unknown_reason": {
-      "description": "Explicit reason code when model_status == 'unknown'; null when model_status == 'observed'.",
+      "description": "Shared explicit reason code when model_status == 'unknown'; null when model is observed or inferred_from_session.",
       "enum": [
         "not_reported_in_event",
+        "not_reported_by_harness",
         "pending_turn_attribution",
+        "awaiting_turn_completion",
         "redacted_unallowlisted",
+        "redacted_unrecognized_format",
         null
       ],
       "type": [
@@ -264,8 +268,8 @@
           "EN3c",
           "EN6a"
         ],
-        "missingness_semantics": "Non-null iff model_status == 'unknown'; null iff model_status == 'observed'.",
-        "pseudonymization": "Closed 3-value reason enum.",
+        "missingness_semantics": "Non-null iff model_status == 'unknown'; null otherwise.",
+        "pseudonymization": "Closed shared 6-reason vocabulary.",
         "why_present": "Distinguishes in-flight turns awaiting model attribution from events that omit model names.",
         "zero_content": "Closed enum literal or null (DE-004)."
       },
@@ -495,7 +499,7 @@
     "invocation_grain == 'call' <=> (message_key != null && call_id_missing_reason == null)",
     "invocation_grain == 'usage_only' <=> (message_key == null && call_id_missing_reason != null)",
     "occurred_at_status == 'observed' <=> occurred_at_us != null",
-    "model_status == 'observed' <=> (model != null && model_unknown_reason == null)",
+    "model_status in ['observed', 'inferred_from_session'] <=> (model != null && model_unknown_reason == null)",
     "model_status == 'unknown' <=> (model == null && model_unknown_reason != null)"
   ],
   "x_primary_key": "invocation_key",

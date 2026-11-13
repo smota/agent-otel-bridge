@@ -566,7 +566,7 @@
     ]
   },
   "expected_producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
-  "expected_schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+  "expected_schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
   "expected_stream": "station-facts-default",
   "expected_tenant_placeholder": "tn_acme_prod",
   "steps": [
@@ -632,7 +632,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "9a98229d05e140f2ca92d960e9399d76830045225eaa0e765067d6112a9b9e93",
+        "manifest_digest": "cc48a13917bf3e3c2f326817528b63364ab009aa2513bd45168d077ee6ddf0bb",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -648,7 +648,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 1,
         "stream": "station-facts-default",
@@ -676,7 +676,7 @@
         "high_water_sequence": 1,
         "import_coverage": [
           {
-            "manifest_digest": "9a98229d05e140f2ca92d960e9399d76830045225eaa0e765067d6112a9b9e93",
+            "manifest_digest": "cc48a13917bf3e3c2f326817528b63364ab009aa2513bd45168d077ee6ddf0bb",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -1422,7 +1422,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "6eea218c1350d619340af7874db575cc5bb0d54d8d39ddfa046fa254fa8e90b1",
+        "manifest_digest": "facdfdda4170c8478d9a8915ef419d04d8023a3e907acaa3ba25a85ba097577d",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -1438,7 +1438,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 2,
         "stream": "station-facts-default",
@@ -1466,7 +1466,7 @@
         "high_water_sequence": 2,
         "import_coverage": [
           {
-            "manifest_digest": "9a98229d05e140f2ca92d960e9399d76830045225eaa0e765067d6112a9b9e93",
+            "manifest_digest": "cc48a13917bf3e3c2f326817528b63364ab009aa2513bd45168d077ee6ddf0bb",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -1475,7 +1475,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6eea218c1350d619340af7874db575cc5bb0d54d8d39ddfa046fa254fa8e90b1",
+            "manifest_digest": "facdfdda4170c8478d9a8915ef419d04d8023a3e907acaa3ba25a85ba097577d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 2,
@@ -2221,7 +2221,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "f96c8e8087e9f9bc010250c50b69fd35c8e636cab645422ff4c4347db7df4dcf",
+        "manifest_digest": "ba11d02cab400d0cf6c5470b520e7234d69c4ff342de8d49c8c9224262f183b4",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -2239,7 +2239,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 3,
         "stream": "station-facts-default",
@@ -2267,7 +2267,7 @@
         "high_water_sequence": 3,
         "import_coverage": [
           {
-            "manifest_digest": "9a98229d05e140f2ca92d960e9399d76830045225eaa0e765067d6112a9b9e93",
+            "manifest_digest": "cc48a13917bf3e3c2f326817528b63364ab009aa2513bd45168d077ee6ddf0bb",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -2276,7 +2276,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6eea218c1350d619340af7874db575cc5bb0d54d8d39ddfa046fa254fa8e90b1",
+            "manifest_digest": "facdfdda4170c8478d9a8915ef419d04d8023a3e907acaa3ba25a85ba097577d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 2,
@@ -2285,7 +2285,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "f96c8e8087e9f9bc010250c50b69fd35c8e636cab645422ff4c4347db7df4dcf",
+            "manifest_digest": "ba11d02cab400d0cf6c5470b520e7234d69c4ff342de8d49c8c9224262f183b4",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 3,
@@ -2369,7 +2369,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "3c2d954d17e88605ed06992bfa80c20c868d22bf016cc443401d0299102eb941",
+        "manifest_digest": "fc54b2a78efef284ff6a2f5be88e6613f18110bd3e4322a9a53c45a9a99d2f0d",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -2387,7 +2387,7 @@
           "source_generation": 2,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 4,
         "stream": "station-facts-default",
@@ -2415,7 +2415,7 @@
         "high_water_sequence": 4,
         "import_coverage": [
           {
-            "manifest_digest": "9a98229d05e140f2ca92d960e9399d76830045225eaa0e765067d6112a9b9e93",
+            "manifest_digest": "cc48a13917bf3e3c2f326817528b63364ab009aa2513bd45168d077ee6ddf0bb",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -2424,7 +2424,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6eea218c1350d619340af7874db575cc5bb0d54d8d39ddfa046fa254fa8e90b1",
+            "manifest_digest": "facdfdda4170c8478d9a8915ef419d04d8023a3e907acaa3ba25a85ba097577d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 2,
@@ -2433,7 +2433,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "f96c8e8087e9f9bc010250c50b69fd35c8e636cab645422ff4c4347db7df4dcf",
+            "manifest_digest": "ba11d02cab400d0cf6c5470b520e7234d69c4ff342de8d49c8c9224262f183b4",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 3,
@@ -2442,7 +2442,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "3c2d954d17e88605ed06992bfa80c20c868d22bf016cc443401d0299102eb941",
+            "manifest_digest": "fc54b2a78efef284ff6a2f5be88e6613f18110bd3e4322a9a53c45a9a99d2f0d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_STALE_GENERATION_OR_TOMBSTONE",
             "snapshot_sequence": 4,
@@ -2526,7 +2526,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "2ebb23c059ded368fd51cf35f705d822c098959b28de653d1b72ca4093d51b61",
+        "manifest_digest": "d2c57b0a16fe0664cbf79f0dda4a98ae557c236cb8d2c3f6080bfbc063ff01dd",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -2542,7 +2542,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 5,
         "stream": "station-facts-default",
@@ -2570,7 +2570,7 @@
         "high_water_sequence": 5,
         "import_coverage": [
           {
-            "manifest_digest": "9a98229d05e140f2ca92d960e9399d76830045225eaa0e765067d6112a9b9e93",
+            "manifest_digest": "cc48a13917bf3e3c2f326817528b63364ab009aa2513bd45168d077ee6ddf0bb",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -2579,7 +2579,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6eea218c1350d619340af7874db575cc5bb0d54d8d39ddfa046fa254fa8e90b1",
+            "manifest_digest": "facdfdda4170c8478d9a8915ef419d04d8023a3e907acaa3ba25a85ba097577d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 2,
@@ -2588,7 +2588,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "f96c8e8087e9f9bc010250c50b69fd35c8e636cab645422ff4c4347db7df4dcf",
+            "manifest_digest": "ba11d02cab400d0cf6c5470b520e7234d69c4ff342de8d49c8c9224262f183b4",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 3,
@@ -2597,7 +2597,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "3c2d954d17e88605ed06992bfa80c20c868d22bf016cc443401d0299102eb941",
+            "manifest_digest": "fc54b2a78efef284ff6a2f5be88e6613f18110bd3e4322a9a53c45a9a99d2f0d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_STALE_GENERATION_OR_TOMBSTONE",
             "snapshot_sequence": 4,
@@ -2606,7 +2606,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "2ebb23c059ded368fd51cf35f705d822c098959b28de653d1b72ca4093d51b61",
+            "manifest_digest": "d2c57b0a16fe0664cbf79f0dda4a98ae557c236cb8d2c3f6080bfbc063ff01dd",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 5,

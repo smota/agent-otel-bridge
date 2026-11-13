@@ -200,10 +200,13 @@ class Scenario:
                 else: self.keys[source]=m["producer"]["pseudonym_key_id"]
         if consume:
             self.cursor=m["snapshot_sequence"]
-            self.consumed[self.cursor]=m["manifest_digest"]
+            declared=m.get("manifest_digest")
+            raw=e.get("raw_manifest_utf8",canonical(m))
+            digest=declared if isinstance(declared,str) and len(declared)==64 and all(x in "0123456789abcdef" for x in declared) else sha(raw.encode("utf-8"))
+            self.consumed[self.cursor]=digest
             kind="accepted" if status=="APPLIED" else "skipped" if status=="SKIPPED" else "rejected"
             self.coverage.append(dict(tenant_placeholder=TENANT,producer_id=PRODUCER,stream=STREAM,snapshot_sequence=self.cursor,
-                manifest_digest=m["manifest_digest"],status=kind,reason=None if kind=="accepted" else m["skip_reason"] if kind=="skipped" else status))
+                manifest_digest=digest,status=kind,reason=None if kind=="accepted" else m["skip_reason"] if kind=="skipped" else status))
         ordered={t:[self.tables[t][k] for k in sorted(self.tables[t])] for t in TABLES}
         e.update(step_id=label or f"step-{len(self.steps)+1}",expected_step_result=dict(status=status,high_water_sequence=self.cursor,
             active_row_counts={t:len(self.tables[t]) for t in TABLES},import_coverage=copy.deepcopy(self.coverage),
@@ -254,6 +257,8 @@ def main():
     s.add(first).add(second).add(first,"DUPLICATE_IDEMPOTENT",False)
     conflict=copy.deepcopy(first); conflict["committed_manifest"]["published_at_us"]+=1; resign(conflict["committed_manifest"])
     s.add(conflict,"CONFLICTING_DUPLICATE",False)
+    changed_digest=copy.deepcopy(first); changed_digest["committed_manifest"]["manifest_digest"]="f"*64
+    s.add(changed_digest,"CONFLICTING_DUPLICATE",False,label="declared-digest-differs-before-equality-check")
     bad=copy.deepcopy(good); bad["tool_calls"][0]["tool_name"]="PrivateTool"
     rejected=event(3,bad)
     s.add(rejected,"REJECTED_ROW_SCHEMA_VIOLATION").add(event(4,snapshot(generation=2),generation=2))
@@ -316,7 +321,7 @@ def main():
     bad=event(5,good); bad["committed_manifest"]["schema_digest"]="1"*64; resign(bad["committed_manifest"])
     s.add(bad,"REJECTED_SCHEMA_MISMATCH").add(event(6,good))
 
-    s=case("key_rotation","Key change requires purging ALL old-key source rows then full re-export at a higher generation.")
+    s=case("key_rotation","Key change requires purging ALL old-key source rows then full re-export at a higher generation. Informative limitation: tombstones use the key in force; after rotation the importer cannot detect re-insertion of a purged native session under a new pseudonym. The producer MUST exclude it using a native-identity purge ledger, verified by EN5c; no stable cross-rotation session identifier is exported because it would defeat unlinkability on every session row.")
     rotated=snapshot(generation=2,key=K2)
     s.add(event(1,good)).add(event(2,rotated,generation=2,key=K2),"REJECTED_STALE_GENERATION_OR_TOMBSTONE")
     s.add(event(3,operation="purge_delete")).add(event(4,good),"REJECTED_STALE_GENERATION_OR_TOMBSTONE")
@@ -378,7 +383,7 @@ def main():
     s.add(event(5,bad),"REJECTED_ROW_SCHEMA_VIOLATION")
 
     s=case("attribution_status","C1a 1024-byte ASCII slug grammar, pseudonymized endpoint, explicit null reason statuses.")
-    long=copy.deepcopy(good); long["sessions"][0]["org"]="A"*1024; long["sessions"][0]["team"]=None; long["sessions"][0]["team_status"]="missing_org"
+    long=copy.deepcopy(good); long["sessions"][0]["org"]="A"*1024; long["sessions"][0]["team"]=None; long["sessions"][0]["team_status"]="missing_team"
     s.add(event(1,long))
     missing=copy.deepcopy(good); missing["sessions"][0].update(org=None,org_status="missing_org",unlinked_reason="missing_org")
     s.add(event(2,recoverage(missing)))
@@ -387,6 +392,8 @@ def main():
     for q,value in enumerate(("has space","nonascii-\u00e9","a"*1025),4):
         bad=copy.deepcopy(good); bad["sessions"][0]["org"]=value
         s.add(event(q,bad),"REJECTED_ROW_SCHEMA_VIOLATION")
+    bad=copy.deepcopy(long); bad["sessions"][0]["team_status"]="missing_org"
+    s.add(event(7,bad),"REJECTED_ROW_SCHEMA_VIOLATION")
 
     s=case("tenant_stream_auth","Tenant, producer and stream are authenticated before any state mutation.")
     s.add(event(1,good))
@@ -457,17 +464,57 @@ def main():
     s=case("removed_scope_modes","Removed full_stream is a structural manifest error and cannot bypass session tombstones.")
     s.add(event(1,good))
     bad=event(2,good); bad["committed_manifest"]["replacement_scope"]["scope_mode"]="full_stream"; resign(bad["committed_manifest"])
-    s.add(bad,"REJECTED_INVALID_MANIFEST",False)
+    s.add(bad,"REJECTED_INVALID_MANIFEST").add(event(3,good))
 
     s=case("removed_supersedes","supersedes_generations is not a v1 manifest field.")
     s.add(event(1,good))
     bad=event(2,good); bad["committed_manifest"]["replacement_scope"]["supersedes_generations"]=[]; resign(bad["committed_manifest"])
-    s.add(bad,"REJECTED_INVALID_MANIFEST",False)
+    s.add(bad,"REJECTED_INVALID_MANIFEST").add(event(3,good))
+
+    s=case("invalid_manifest_shape","Shape failures consume the next slot, preserve facts and record declared digest or exact raw-byte SHA256. Gaps and duplicates take priority.")
+    s.add(event(1,good))
+    pending=event(3,good); pending["committed_manifest"].pop("files"); resign(pending["committed_manifest"])
+    s.add(pending,"GAP_PENDING",False)
+    invalid=event(2,good); invalid["committed_manifest"]["published_at_us"]=0; resign(invalid["committed_manifest"])
+    s.add(invalid,"REJECTED_INVALID_MANIFEST").add(invalid,"DUPLICATE_IDEMPOTENT",False)
+    conflict=copy.deepcopy(invalid); conflict["committed_manifest"]["manifest_digest"]="a"*64
+    s.add(conflict,"CONFLICTING_DUPLICATE",False)
+    s.add(pending,"REJECTED_INVALID_MANIFEST").add(event(4,good))
+    invalid=event(5,good); invalid["committed_manifest"]["manifest_digest"]="INVALID"
+    invalid["raw_manifest_utf8"]=" \n"+json.dumps(invalid["committed_manifest"],indent=1)+"\n "
+    s.add(invalid,"REJECTED_INVALID_MANIFEST").add(event(6,good))
+    s.add(invalid,"CONFLICTING_DUPLICATE",False)
+    invalid=event(7,good); invalid["committed_manifest"].pop("manifest_digest")
+    s.add(invalid,"REJECTED_INVALID_MANIFEST").add(event(8,good))
+    s.add(invalid,"CONFLICTING_DUPLICATE",False)
+    invalid=event(9,good); invalid["committed_manifest"]["manifest_digest"]=42
+    s.add(invalid,"REJECTED_INVALID_MANIFEST").add(event(10,good))
+
+    s=case("unparseable_manifest_identity","Unparseable stream keys and non-positive/non-INT64 sequences are ignored without coverage or consumption.")
+    for field,value in (("snapshot_sequence",0),("snapshot_sequence",True),("snapshot_sequence",2**63),("snapshot_sequence","1"),("tenant_placeholder",None),("stream","INVALID"),("producer",{})):
+        invalid=event(1,good); invalid["committed_manifest"][field]=value
+        s.add(invalid,"IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE",False)
+    invalid=event(1,good); invalid["raw_manifest_utf8"]="{broken JSON"
+    s.add(invalid,"IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE",False)
+    s.add(event(1,good))
+
+    s=case("model_vocabulary","Invocation and usage share observed/inferred/unknown statuses and all six unknown reasons.")
+    inferred=copy.deepcopy(good)
+    for t in ("invocations","usage"): inferred[t][0]["model_status"]="inferred_from_session"
+    s.add(event(1,recoverage(inferred)))
+    for q,reason in enumerate(("not_reported_in_event","not_reported_by_harness","pending_turn_attribution","awaiting_turn_completion","redacted_unallowlisted","redacted_unrecognized_format"),2):
+        unknown=copy.deepcopy(good)
+        for t in ("invocations","usage"): unknown[t][0].update(model=None,model_status="unknown",model_unknown_reason=reason)
+        s.add(event(q,recoverage(unknown)))
+    for q,t in enumerate(("invocations","usage"),8):
+        bad=copy.deepcopy(inferred); bad[t][0]["model_unknown_reason"]="pending_turn_attribution"
+        s.add(event(q,bad),"REJECTED_ROW_SCHEMA_VIOLATION")
+    s.add(event(10,good))
 
     for s in scenarios: s.save()
     vector_paths=sorted((BASE/"vectors").glob("*.json"))
     (BASE/"vectors/SHA256SUMS").write_text("".join(f"{sha(p.read_bytes())}  {p.name}\n" for p in vector_paths),encoding="utf-8",newline="\n")
-    paths=sorted(["SNAPSHOT.md","tables/README.md"]+[f"tables/{t}.schema.json" for t in TABLES]+[p.relative_to(BASE).as_posix() for p in vector_paths])
+    paths=sorted(["SNAPSHOT.md","tables/README.md","vectors/SHA256SUMS"]+[f"tables/{t}.schema.json" for t in TABLES]+[p.relative_to(BASE).as_posix() for p in vector_paths])
     sums="".join(f"{sha((BASE/p).read_bytes())}  {p}\n" for p in paths).encode()
     (BASE/"SHA256SUMS").write_bytes(sums)
     (BASE/"CONTRACT-DIGEST").write_text(sha(sums)+"\n",encoding="utf-8",newline="\n")

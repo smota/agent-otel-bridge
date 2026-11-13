@@ -68,6 +68,14 @@ before the next sequence. A visible rejected manifest MUST NOT be repaired or
 republished: publish the next sequence. Producers SHOULD run the same checker
 before publishing.
 
+Once the authenticated stream key matches and snapshot_sequence is a valid
+positive INT64, an invalid manifest shape consumes the next sequence slot as
+REJECTED_INVALID_MANIFEST, with import coverage, subject to duplicate and gap
+handling in section 3. If the stream key or sequence cannot be parsed, ignore
+the manifest without consuming a slot. Record a syntactically valid declared
+manifest_digest even for a rejection; otherwise record SHA-256 of the exact raw
+manifest bytes (including their whitespace), not a normalized serialization.
+
 An explicit skip has zero files, non-null skip_reason, and source_generation /
 upsert_replace scope with empty session_keys. The scope is descriptive only.
 A valid skip consumes its sequence without changing tables, keys, generations
@@ -81,18 +89,27 @@ last key ID by source, purged-generation watermarks, permanent session tombstone
 active tables, and import coverage rows. A checker instance is bound to one K;
 separate instances MUST NOT share state.
 
-Evaluate in this exact order. Steps 1-5 never consume or mutate state.
+Evaluate in this exact order. Only steps 3 (after steps 4-5) and 6-9 consume.
 
 1. Absent/null committed manifest: IGNORED_UNCOMMITTED_NO_MANIFEST.
-2. Require tenant_placeholder, producer.producer_id AND stream to equal the
-   authenticated expected K; otherwise REJECTED_TENANT_OR_PRODUCER_MISMATCH.
+2. Parse the stream key using section 2's field grammars and snapshot_sequence as
+   a positive INT64. Unparseable JSON, key or sequence:
+   IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE, without consumption. Require
+   tenant_placeholder, producer.producer_id AND stream to equal authenticated
+   expected K; otherwise REJECTED_TENANT_OR_PRODUCER_MISMATCH, without consumption.
 3. Validate section 2 shape, types, enums, bounds, paths and format mode, including
-   digest syntax but NOT digest equality. Failure: REJECTED_INVALID_MANIFEST.
-4. For any consumed sequence, same declared digest -> DUPLICATE_IDEMPOTENT;
-   different declared digest -> CONFLICTING_DUPLICATE. This includes ALL old,
-   rejected and skipped sequences. Do not revalidate payloads or schema pins.
+   digest syntax but NOT digest equality. Retain any shape failure until after
+   steps 4-5; it MUST consume the next slot as REJECTED_INVALID_MANIFEST and
+   append import coverage using the recorded digest rule in section 2.
+4. For any consumed sequence, FIRST compare the incoming declared digest with
+   the recorded digest. A mismatch (including absent/invalid declared digest)
+   is CONFLICTING_DUPLICATE; only equality is DUPLICATE_IDEMPOTENT. This includes
+   ALL old, rejected and skipped sequences, including shape rejections. Do not
+   revalidate payloads, manifest digest equality or schema pins on republication.
 5. Sequence >cursor+1 -> GAP_PENDING. Retry after the missing slot arrives or
-   the producer publishes an explicit skip there. No implicit skips.
+   the producer publishes an explicit skip there. No implicit skips. A pending
+   shape failure also waits for its slot; after gap/duplicate checks, consume a
+   retained step-3 failure before continuing to step 6.
 6. Verify manifest digest equality (REJECTED_INVALID_MANIFEST), then schema digest
    (REJECTED_SCHEMA_MISMATCH), then payload existence/byte_length/SHA256/row_count
    (REJECTED_FILE_INTEGRITY), in this priority order.
@@ -106,14 +123,25 @@ Evaluate in this exact order. Steps 1-5 never consume or mutate state.
 9. Atomically commit, store digest/outcome, cursor=sequence: APPLIED (SKIPPED for
    explicit skip). Step-6-valid skips bypass steps 7-8.
 
-ANY rejection in steps 6-8 is consumed: preserve tables, keys, generations and
+ANY rejection in step 3 or steps 6-8 is consumed (after duplicate/gap handling):
+preserve tables, keys, generations and
 tombstones, atomically record REJECTED(sequence,reason), digest and cursor=sequence,
-append import coverage. The next sequence proceeds. Earlier rejections do not
-consume. Import coverage is importer-owned and separate from producer coverage.
+append import coverage. The next sequence proceeds. Step-1/2 ignores/rejections,
+gaps and duplicate results do not consume. Import coverage is importer-owned and separate from producer coverage.
 Exactly one row per consumed sequence contains tenant_placeholder, producer_id,
 stream, snapshot_sequence, manifest_digest, status (accepted, rejected, skipped),
 reason (null for accepted, rejection code or skip_reason otherwise). Gaps and
 duplicate retries append no rows.
+
+### 3.1 Tombstone identity boundary
+
+Session tombstones are keyed under the pseudonym key in force when the purge is
+issued. After key rotation, the importer cannot detect re-insertion of a
+previously purged session under its new pseudonym. The PRODUCER MUST keep a purge
+ledger keyed by native identity and MUST exclude purged sessions from any
+post-rotation re-export. EN5c owns verification of this producer obligation.
+No stable cross-rotation session identifier is used: it would defeat rotation's
+unlinkability on every session row. See section 5 for rotation ordering.
 
 ## 4. Row rules
 
@@ -139,8 +167,8 @@ Additional invariants (schema x_invariants are descriptive mirrors):
   reason present and epoch null. Non-harness origin or unknown harness cannot link.
   org/team are operator-provided C1a printable ASCII slugs (0x21-0x7e, 1..1024), or
   null. endpoint_scope is HMAC of a raw slug satisfying the same grammar. For each,
-  status observed iff value present; null status is missing_org (org/team: missing
-  org-provided attribution), missing_endpoint_scope (endpoint), or
+  status observed iff value present; null status is missing_org (org),
+  missing_team (team), missing_endpoint_scope (endpoint), or
   invalid_field_characters (grammar/denylist failure). Missing org/endpoint requires
   unlinked with its reason; invalid org/endpoint requires unlinked with
   invalid_field_characters (invalid has priority, then missing_org, then missing_endpoint_scope). harness_version_status observed
@@ -148,9 +176,16 @@ Additional invariants (schema x_invariants are descriptive mirrors):
   start_only means start only; not_observable means both null. is_root implies
   relation=status=root and parent null. evidenced means nonroot, nonself parent,
   nonroot relation. Other lineage statuses require parent null.
+* invocations and usage share model_status: observed, inferred_from_session,
+  unknown. Both observed and inferred_from_session require model present and
+  model_unknown_reason null; unknown requires model null and a reason from the
+  same vocabulary in both tables: not_reported_in_event, not_reported_by_harness,
+  pending_turn_attribution, awaiting_turn_completion, redacted_unallowlisted,
+  redacted_unrecognized_format.
+  inferred_from_session means attribution from session evidence rather than a
+  model explicitly recorded in that invocation or usage event.
 * invocations: call grain has message_key and null call_id_missing_reason;
-  usage_only has null message and non-null reason. model_status observed requires
-  model present/reason null; unknown requires model null/reason present.
+  usage_only has null message and non-null reason. Model rules are shared above.
   occurred_at_status observed iff timestamp present.
 * tool_calls: linked iff invocation_key present; call_id_status observed iff
   call_id_hmac present; fingerprint_status observed iff input_fingerprint_hmac
@@ -160,8 +195,8 @@ Additional invariants (schema x_invariants are descriptive mirrors):
 * usage: linked iff invocation_key present. usage_grain=session_aggregate iff
   counter_semantics=session_aggregate and invocation_link_status=session_level_summary;
   per_turn forbids both aggregate indicators. At most one aggregate per session;
-  aggregate and per-turn rows are mutually exclusive per session. Observed or
-  inferred model requires model present/reason null; unknown is the reverse.
+  aggregate and per-turn rows are mutually exclusive per session. Model rules
+  are shared above.
   occurred_at_status observed iff timestamp present. predecessor_usage_key present
   iff cumulative_delta or cumulative_monotonic_skip. total_tokens equals checked
   sum of input_uncached_tokens, output_tokens, cache_read_tokens, cache_write_tokens.
@@ -220,6 +255,9 @@ source_generation and ALL coverage rows. No generation bump or coverage swap.
 Tombstone selected keys permanently within K even if absent. Skip coverage
 reconciliation for this deletion: preserved coverage describes the pre-purge export.
 Subsequent full source upserts require accurate complete coverage again.
+Informative: after a targeted session purge, preserved producer coverage
+overcounts the surviving population until the next full upsert. EN6a should
+treat that coverage as historical, not as current population counts.
 Deletion authority in v1 is producer-issued purge manifests only; an
 Enterprise-to-producer retention channel is deferred to EN5c. A session purge
 may also record permanent tombstones after a source-generation purge, when
@@ -229,8 +267,13 @@ Changing pseudonym_key_id requires source-generation purge of ALL old-key rows,
 then COMPLETE re-export at a strictly greater generation under the new key.
 Without that purge, reject at step 8. source_id and producer_id are stable
 provisioned routing pseudonyms, computed once and retained through fact-key
-rotation; other keyed pseudonyms are recalculated. Producers must retain their
-purge ledger and exclude purged logical sessions when rotating pseudonyms.
+rotation; other keyed pseudonyms are recalculated. Tombstones are keyed under
+the pseudonym key in force; after rotation the importer cannot detect re-insertion
+of a previously purged session. The PRODUCER MUST keep a purge ledger keyed by
+native identity and MUST exclude purged sessions from any post-rotation re-export.
+EN5c owns verification of this obligation. A stable cross-rotation identifier
+is deliberately absent because it would defeat rotation's unlinkability on every
+session row (section 3.1).
 No raw SHA, translation table or key material is sent to Enterprise.
 
 ## 6. Snapshot references and coverage
@@ -266,8 +309,10 @@ remains historical as section 5 states. Importer rejection coverage is separate.
 
 ## 7. Evidence
 
-SHA256SUMS hashes exact bytes of SNAPSHOT.md, tables/README.md, seven schemas and
-vectors in lexicographic relative-path order. CONTRACT-DIGEST is SHA256 of exact
+SHA256SUMS hashes exact bytes of SNAPSHOT.md, tables/README.md, seven schemas,
+all vectors/*.json and vectors/SHA256SUMS in lexicographic relative-path order.
+vectors/SHA256SUMS hashes the exact bytes of all vectors/*.json in lexicographic
+filename order. CONTRACT-DIGEST is SHA256 of exact
 SHA256SUMS bytes. Checkers, generator, reports, captures and link-id-v1 are excluded.
 Both independent checkers verify digests, replay vectors and compare statuses,
 cursors, import coverage, per-step active-table digests and final active tables. Passing is informative evidence,

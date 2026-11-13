@@ -807,7 +807,7 @@
     "tombstoned_session_keys": []
   },
   "expected_producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
-  "expected_schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+  "expected_schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
   "expected_stream": "station-facts-default",
   "expected_tenant_placeholder": "tn_acme_prod",
   "steps": [
@@ -873,7 +873,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "5789c093d8f65622944da163ede2dca57610c7475aacd6fa775f58c95cf0ceac",
+        "manifest_digest": "6c192ba82863cb8a606a24d395b27c9b3ea53869d6440de558255724f864d479",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -889,7 +889,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 1,
         "stream": "station-facts-default",
@@ -917,7 +917,7 @@
         "high_water_sequence": 1,
         "import_coverage": [
           {
-            "manifest_digest": "5789c093d8f65622944da163ede2dca57610c7475aacd6fa775f58c95cf0ceac",
+            "manifest_digest": "6c192ba82863cb8a606a24d395b27c9b3ea53869d6440de558255724f864d479",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -1779,7 +1779,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "6ca1127c1bb1d9cd985b238b230287eb60c474aa64d3d0f8c7fa9b3827e6aa81",
+        "manifest_digest": "80d727e42425c48b0dd2537cc2507bcf28dcf23a4c5ed719416a51ba3af2a42d",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -1795,7 +1795,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 2,
         "stream": "station-facts-default",
@@ -1823,7 +1823,7 @@
         "high_water_sequence": 2,
         "import_coverage": [
           {
-            "manifest_digest": "5789c093d8f65622944da163ede2dca57610c7475aacd6fa775f58c95cf0ceac",
+            "manifest_digest": "6c192ba82863cb8a606a24d395b27c9b3ea53869d6440de558255724f864d479",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -1832,7 +1832,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6ca1127c1bb1d9cd985b238b230287eb60c474aa64d3d0f8c7fa9b3827e6aa81",
+            "manifest_digest": "80d727e42425c48b0dd2537cc2507bcf28dcf23a4c5ed719416a51ba3af2a42d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_ROW_SCHEMA_VIOLATION",
             "snapshot_sequence": 2,
@@ -2694,7 +2694,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "8cd540087b92af8e4587b358fea60df3b8bf68f587a60e38264f9100992f9e75",
+        "manifest_digest": "ebac686a88cf9c34520f592b52ed97beb9113ccee4bfcf1d27b3b99d08e02063",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -2710,7 +2710,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 3,
         "stream": "station-facts-default",
@@ -2738,7 +2738,7 @@
         "high_water_sequence": 3,
         "import_coverage": [
           {
-            "manifest_digest": "5789c093d8f65622944da163ede2dca57610c7475aacd6fa775f58c95cf0ceac",
+            "manifest_digest": "6c192ba82863cb8a606a24d395b27c9b3ea53869d6440de558255724f864d479",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -2747,7 +2747,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6ca1127c1bb1d9cd985b238b230287eb60c474aa64d3d0f8c7fa9b3827e6aa81",
+            "manifest_digest": "80d727e42425c48b0dd2537cc2507bcf28dcf23a4c5ed719416a51ba3af2a42d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_ROW_SCHEMA_VIOLATION",
             "snapshot_sequence": 2,
@@ -2756,7 +2756,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "8cd540087b92af8e4587b358fea60df3b8bf68f587a60e38264f9100992f9e75",
+            "manifest_digest": "ebac686a88cf9c34520f592b52ed97beb9113ccee4bfcf1d27b3b99d08e02063",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_ROW_SCHEMA_VIOLATION",
             "snapshot_sequence": 3,
@@ -3617,7 +3617,7 @@
             "table": "coverage"
           }
         ],
-        "manifest_digest": "fe7f644a31e11b4e3748d0d944584dc1b461827ee311883e3b4f4fd4fdba226e",
+        "manifest_digest": "e07f7ef0a873944b5575c6a3d932d67f792ea213ba07ac627cde65770138ea4b",
         "producer": {
           "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
           "producer_kind": "dendro_cli",
@@ -3633,7 +3633,7 @@
           "source_generation": 1,
           "source_id": "89c03e5ffaf28d96226951dca8fd2e9132c26041f1985f1507269d701171f192"
         },
-        "schema_digest": "f9a4fee7471a2d4e7d57b4336236e072ce6b262e9e71ebfd0a9da13a5a426ce7",
+        "schema_digest": "ff9f783d4f96d405ebc26977854a126c96f33f06cf6c06ab41415b11e9225a7d",
         "skip_reason": null,
         "snapshot_sequence": 4,
         "stream": "station-facts-default",
@@ -3661,7 +3661,7 @@
         "high_water_sequence": 4,
         "import_coverage": [
           {
-            "manifest_digest": "5789c093d8f65622944da163ede2dca57610c7475aacd6fa775f58c95cf0ceac",
+            "manifest_digest": "6c192ba82863cb8a606a24d395b27c9b3ea53869d6440de558255724f864d479",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": null,
             "snapshot_sequence": 1,
@@ -3670,7 +3670,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "6ca1127c1bb1d9cd985b238b230287eb60c474aa64d3d0f8c7fa9b3827e6aa81",
+            "manifest_digest": "80d727e42425c48b0dd2537cc2507bcf28dcf23a4c5ed719416a51ba3af2a42d",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_ROW_SCHEMA_VIOLATION",
             "snapshot_sequence": 2,
@@ -3679,7 +3679,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "8cd540087b92af8e4587b358fea60df3b8bf68f587a60e38264f9100992f9e75",
+            "manifest_digest": "ebac686a88cf9c34520f592b52ed97beb9113ccee4bfcf1d27b3b99d08e02063",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_ROW_SCHEMA_VIOLATION",
             "snapshot_sequence": 3,
@@ -3688,7 +3688,7 @@
             "tenant_placeholder": "tn_acme_prod"
           },
           {
-            "manifest_digest": "fe7f644a31e11b4e3748d0d944584dc1b461827ee311883e3b4f4fd4fdba226e",
+            "manifest_digest": "e07f7ef0a873944b5575c6a3d932d67f792ea213ba07ac627cde65770138ea4b",
             "producer_id": "05b9b35e42647eb5b2a63d989014f36379d459766c36a64c4eda7484e5614acf",
             "reason": "REJECTED_ROW_SCHEMA_VIOLATION",
             "snapshot_sequence": 4,

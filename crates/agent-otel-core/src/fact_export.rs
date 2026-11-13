@@ -69,6 +69,9 @@ pub enum StepStatus {
     /// SPEC result IGNORED_UNCOMMITTED_NO_MANIFEST.
     #[serde(rename = "IGNORED_UNCOMMITTED_NO_MANIFEST")]
     IgnoredUncommittedNoManifest,
+    /// The authenticated stream key or positive INT64 sequence cannot be parsed.
+    #[serde(rename = "IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE")]
+    IgnoredUnparseableManifestKeyOrSequence,
     /// SPEC result REJECTED_TENANT_OR_PRODUCER_MISMATCH.
     #[serde(rename = "REJECTED_TENANT_OR_PRODUCER_MISMATCH")]
     RejectedTenantOrProducerMismatch,
@@ -105,6 +108,9 @@ impl StepStatus {
             Self::Skipped => "SKIPPED",
             Self::DuplicateIdempotent => "DUPLICATE_IDEMPOTENT",
             Self::IgnoredUncommittedNoManifest => "IGNORED_UNCOMMITTED_NO_MANIFEST",
+            Self::IgnoredUnparseableManifestKeyOrSequence => {
+                "IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE"
+            }
             Self::RejectedTenantOrProducerMismatch => "REJECTED_TENANT_OR_PRODUCER_MISMATCH",
             Self::RejectedInvalidManifest => "REJECTED_INVALID_MANIFEST",
             Self::RejectedSchemaMismatch => "REJECTED_SCHEMA_MISMATCH",
@@ -696,7 +702,7 @@ fn validate_invocations_invariants(r: &Map<String, Value>) -> bool {
         return false;
     }
     match r["model_status"].as_str() {
-        Some("observed") => {
+        Some("observed" | "inferred_from_session") => {
             if r["model"].is_null() || !r["model_unknown_reason"].is_null() {
                 return false;
             }
@@ -1133,14 +1139,52 @@ impl ReplayStateMachine {
             .map(|(t, rows)| (t.clone(), rows.values().cloned().collect()))
             .collect()
     }
-    /// Evaluates SPEC steps 1-9 in order; only steps 6-9 consume a slot.
+    /// Evaluates SPEC steps 1-9; shape rejections consume after duplicate/gap checks.
     pub fn apply_step(&mut self, step: &Value) -> StepStatus {
-        let Some(value) = step.get("committed_manifest").filter(|v| !v.is_null()) else {
+        // Raw text is authoritative in replay; embedded objects otherwise stand
+        // for canonical JSON bytes. Never canonicalize an explicit raw digest.
+        let decoded;
+        let raw;
+        let value = if let Some(text) = step.get("raw_manifest_utf8").and_then(Value::as_str) {
+            decoded = match serde_json::from_str::<Value>(text) {
+                Ok(value) => value,
+                Err(_) => return StepStatus::IgnoredUnparseableManifestKeyOrSequence,
+            };
+            raw = text.to_string();
+            &decoded
+        } else if let Some(value) = step.get("committed_manifest").filter(|v| !v.is_null()) {
+            raw = canonical_json_string(value);
+            value
+        } else {
             return StepStatus::IgnoredUncommittedNoManifest;
         };
         let Some(m) = value.as_object() else {
-            return StepStatus::RejectedInvalidManifest;
+            return StepStatus::IgnoredUnparseableManifestKeyOrSequence;
         };
+        let Some(sequence) = m
+            .get("snapshot_sequence")
+            .and_then(Value::as_i64)
+            .filter(|q| *q > 0)
+        else {
+            return StepStatus::IgnoredUnparseableManifestKeyOrSequence;
+        };
+        let sequence = sequence as u64;
+        if !m
+            .get("tenant_placeholder")
+            .and_then(Value::as_str)
+            .is_some_and(is_tenant_placeholder)
+            || !m
+                .get("producer")
+                .and_then(|p| p.get("producer_id"))
+                .and_then(Value::as_str)
+                .is_some_and(is_hex64)
+            || !m
+                .get("stream")
+                .and_then(Value::as_str)
+                .is_some_and(is_stream_slug)
+        {
+            return StepStatus::IgnoredUnparseableManifestKeyOrSequence;
+        }
         if m.get("tenant_placeholder").and_then(Value::as_str)
             != Some(self.expected_tenant.as_str())
             || m.get("producer")
@@ -1151,13 +1195,10 @@ impl ReplayStateMachine {
         {
             return StepStatus::RejectedTenantOrProducerMismatch;
         }
-        if !manifest_shape(value, true) {
-            return StepStatus::RejectedInvalidManifest;
-        }
-        let sequence = m["snapshot_sequence"].as_u64().unwrap();
-        let digest = m["manifest_digest"].as_str().unwrap();
+        let shape_valid = manifest_shape(value, true);
+        let declared = m.get("manifest_digest").and_then(Value::as_str);
         if let Some(prior) = self.committed_manifests.get(&sequence) {
-            return if prior == digest {
+            return if Some(prior.as_str()) == declared {
                 StepStatus::DuplicateIdempotent
             } else {
                 StepStatus::ConflictingDuplicate
@@ -1166,7 +1207,15 @@ impl ReplayStateMachine {
         if sequence > self.high_water_sequence + 1 {
             return StepStatus::GapPending;
         }
-        let status = self.evaluate_next(m, step);
+        let digest = declared
+            .filter(|d| is_hex64(d))
+            .map(String::from)
+            .unwrap_or_else(|| sha256_hex(raw.as_bytes()));
+        let status = if shape_valid {
+            self.evaluate_next(m, step)
+        } else {
+            StepStatus::RejectedInvalidManifest
+        };
         self.high_water_sequence = sequence;
         self.committed_manifests
             .insert(sequence, digest.to_string());
@@ -1656,7 +1705,11 @@ mod tests {
             }
         }
         assert!(steps > 0);
-        let mut inventory = vec!["SNAPSHOT.md".to_string(), "tables/README.md".to_string()];
+        let mut inventory = vec![
+            "SNAPSHOT.md".to_string(),
+            "tables/README.md".to_string(),
+            "vectors/SHA256SUMS".to_string(),
+        ];
         inventory.extend(
             CANONICAL_TABLES
                 .iter()

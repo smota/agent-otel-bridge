@@ -71,7 +71,7 @@ including canonical_harness=unknown when applicable.
 org and team are operator-provided slugs, never inferred user names. Raw org,
 endpoint_scope and team follow C1a printable ASCII 0x21..0x7e, 1..1024, plus the
 zero-content denylist. Endpoint exports only its HMAC. Nulls require the status
-in SNAPSHOT.md; optional team's missing_org denotes absent org-provided
+in SNAPSHOT.md; optional team's missing_team denotes absent org-provided
 attribution and does not itself prevent linking. agent.session.link_id and
 link_epoch follow the unchanged link-id-v1/SPEC.md.
 

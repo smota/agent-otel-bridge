@@ -615,7 +615,7 @@
       "description": "C1a-compatible attribution status.",
       "enum": [
         "observed",
-        "missing_org",
+        "missing_team",
         "invalid_field_characters"
       ],
       "type": "string",

@@ -288,7 +288,7 @@
           "EN6a",
           "A4"
         ],
-        "missingness_semantics": "Non-null iff model_status in ['observed', 'inferred_from_session']; null iff model_status == 'unknown'.",
+        "missingness_semantics": "Non-null iff model_status in ['observed', 'inferred_from_session']; null iff model_status == 'unknown' (accompanied by model_unknown_reason).",
         "pseudonymization": "See incorporated tables/README.md and SNAPSHOT.md; no alternate derivation.",
         "why_present": "Required for model attribution, replaceable within a generation when late turn metadata resolves an unknown model, and used by EN6a rate cards.",
         "zero_content": "Restricted public model token of 1..128 ASCII characters."
@@ -327,11 +327,14 @@
       }
     },
     "model_unknown_reason": {
-      "description": "Explicit reason code when model_status == 'unknown'. Null when model is known.",
+      "description": "Shared explicit reason code when model_status == 'unknown'; null when model is observed or inferred_from_session.",
       "enum": [
+        "not_reported_in_event",
         "not_reported_by_harness",
-        "redacted_unrecognized_format",
+        "pending_turn_attribution",
         "awaiting_turn_completion",
+        "redacted_unallowlisted",
+        "redacted_unrecognized_format",
         null
       ],
       "type": [
@@ -345,7 +348,7 @@
           "EN6a"
         ],
         "missingness_semantics": "Non-null iff model_status == 'unknown'; null otherwise.",
-        "pseudonymization": "Closed 3-reason vocabulary.",
+        "pseudonymization": "Closed shared 6-reason vocabulary.",
         "why_present": "Explains why a usage record lacks model attribution and whether a subsequent snapshot within the generation may replace it.",
         "zero_content": "Closed enum literal or null (DE-004)."
       },

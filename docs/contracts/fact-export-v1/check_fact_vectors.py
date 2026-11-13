@@ -256,7 +256,7 @@ def _validate_invocations_invariants(r: dict[str, Any]) -> bool:
         return False
 
     ms = r["model_status"]
-    if ms == "observed":
+    if ms in ("observed", "inferred_from_session"):
         if r["model"] is None or r["model_unknown_reason"] is not None:
             return False
     elif ms == "unknown":
@@ -542,28 +542,45 @@ class ReplayStateMachine:
     def export_sorted_tables(self):
         return {t:[self.tables[t][k] for k in sorted(self.tables[t])] for t in CANONICAL_TABLES}
 
-    def _consume(self,m,status):
+    def _consume(self,m,status,recorded_digest=None):
         q=m["snapshot_sequence"]
+        digest=recorded_digest if recorded_digest is not None else m["manifest_digest"]
         self.high_water_sequence=q
-        self.committed_manifests[q]=m["manifest_digest"]
+        self.committed_manifests[q]=digest
         kind="accepted" if status=="APPLIED" else "skipped" if status=="SKIPPED" else "rejected"
         self.import_coverage.append(dict(tenant_placeholder=self.key[0],producer_id=self.key[1],stream=self.key[2],
-            snapshot_sequence=q,manifest_digest=m["manifest_digest"],status=kind,
+            snapshot_sequence=q,manifest_digest=digest,status=kind,
             reason=None if kind=="accepted" else m["skip_reason"] if kind=="skipped" else status))
         return status
 
     def apply_step(self,step):
         m=step.get("committed_manifest")
-        if m is None: return "IGNORED_UNCOMMITTED_NO_MANIFEST"
-        if not isinstance(m,dict): return "REJECTED_INVALID_MANIFEST"
+        # Replay transport: explicit UTF-8 text is authoritative when supplied;
+        # otherwise the embedded object's canonical JSON represents the raw bytes.
+        raw=step.get("raw_manifest_utf8")
+        if raw is not None:
+            try: m=json.loads(raw)
+            except (ValueError,TypeError): return "IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE"
+        elif m is None: return "IGNORED_UNCOMMITTED_NO_MANIFEST"
+        else: raw=canonical_json(m)
+        if not isinstance(m,dict): return "IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE"
         p=m.get("producer")
         p=p if isinstance(p,dict) else {}
+        q=m.get("snapshot_sequence")
+        if not (isinstance(m.get("tenant_placeholder"),str) and TENANT_RE.fullmatch(m["tenant_placeholder"])
+                and isinstance(p.get("producer_id"),str) and HEX64_RE.fullmatch(p["producer_id"])
+                and isinstance(m.get("stream"),str) and STREAM_RE.fullmatch(m["stream"])
+                and is_int(q) and 1<=q<=2**63-1):
+            return "IGNORED_UNPARSEABLE_MANIFEST_KEY_OR_SEQUENCE"
         if (m.get("tenant_placeholder"),p.get("producer_id"),m.get("stream"))!=self.key: return "REJECTED_TENANT_OR_PRODUCER_MISMATCH"
-        if not validate_manifest_structure(m,vector_mode=True): return "REJECTED_INVALID_MANIFEST"
-        q=m["snapshot_sequence"]
+        shape_valid=validate_manifest_structure(m,vector_mode=True)
+        declared=m.get("manifest_digest")
         if q in self.committed_manifests:
-            return "DUPLICATE_IDEMPOTENT" if self.committed_manifests[q]==m["manifest_digest"] else "CONFLICTING_DUPLICATE"
+            return "DUPLICATE_IDEMPOTENT" if self.committed_manifests[q]==declared else "CONFLICTING_DUPLICATE"
         if q>self.high_water_sequence+1: return "GAP_PENDING"
+        if not shape_valid:
+            digest=declared if isinstance(declared,str) and HEX64_RE.fullmatch(declared) else sha256_hex(raw.encode("utf-8"))
+            return self._consume(m,"REJECTED_INVALID_MANIFEST",digest)
         def reject(reason): return self._consume(m,reason)
         if compute_manifest_digest(m)!=m["manifest_digest"]: return reject("REJECTED_INVALID_MANIFEST")
         if m["schema_digest"]!=self.expected_schema_digest: return reject("REJECTED_SCHEMA_MISMATCH")
@@ -653,7 +670,7 @@ def verify_vector_files(base,schemas,schema_digest):
             assert round_usd_micros(value)==case["expected_micros"],case
         for step in doc["steps"]:
             manifest=step.get("committed_manifest")
-            if manifest and manifest["skip_reason"] is None and validate_manifest_structure(manifest,vector_mode=True):
+            if isinstance(manifest,dict) and manifest.get("skip_reason") is None and validate_manifest_structure(manifest,vector_mode=True):
                 assert not validate_manifest_structure(manifest),"Production must reject vector transport"
     # Verify actual separate states for tenant in K, not merely authorization.
     doc=json.loads((base/"vectors/clean_sequence.json").read_text())
@@ -669,7 +686,7 @@ def verify_vector_files(base,schemas,schema_digest):
     return len(files),count
 
 def verify_digests(base):
-    paths=sorted(["SNAPSHOT.md","tables/README.md"]+[f"tables/{t}.schema.json" for t in CANONICAL_TABLES]+
+    paths=sorted(["SNAPSHOT.md","tables/README.md","vectors/SHA256SUMS"]+[f"tables/{t}.schema.json" for t in CANONICAL_TABLES]+
                  [p.relative_to(base).as_posix() for p in (base/"vectors").glob("*.json")])
     raw=(base/"SHA256SUMS").read_bytes()
     lines=raw.decode("utf-8").splitlines()
