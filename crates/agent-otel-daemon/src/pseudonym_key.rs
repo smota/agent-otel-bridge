@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-//! Startup-only per-install pseudonym key. A2 will use a customer K_link-derived key.
+//! Startup-only per-install pseudonym key, separate from the shared A2 link key.
 
 use agent_otel_core::link_id::{hex_encode, hmac_sha256};
 use std::fmt;
@@ -12,6 +12,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
 use std::path::Path;
+use zeroize::Zeroizing;
 
 /// Resolve the same runtime home as CLI local installation, without touching it.
 /// An explicit test home always wins; unresolved homes fail closed.
@@ -41,7 +42,7 @@ pub(crate) fn runtime_home() -> Option<std::path::PathBuf> {
 }
 
 /// Secret key material never participates in derived Debug output.
-pub struct PseudonymKey([u8; 32]);
+pub struct PseudonymKey(Zeroizing<[u8; 32]>);
 
 impl fmt::Debug for PseudonymKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -62,8 +63,8 @@ impl PseudonymKey {
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             Err(e) => return Err(e),
         }
-        let mut bytes = [0u8; 32];
-        getrandom::getrandom(&mut bytes)
+        let mut bytes = Zeroizing::new([0u8; 32]);
+        getrandom::getrandom(&mut bytes[..])
             .map_err(|_| io::Error::other("pseudonym key entropy unavailable"))?;
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -83,7 +84,7 @@ impl PseudonymKey {
                 // Restrict the empty file before any key material is written.
                 #[cfg(windows)]
                 restrict_key_file(&file)?;
-                file.write_all(&bytes)?;
+                file.write_all(&bytes[..])?;
                 file.sync_all()?;
                 Ok(Self(bytes))
             }
@@ -122,14 +123,14 @@ impl PseudonymKey {
                 ));
             }
         }
-        let mut bytes = [0u8; 32];
-        file.read_exact(&mut bytes)?;
+        let mut bytes = Zeroizing::new([0u8; 32]);
+        file.read_exact(&mut bytes[..])?;
         Ok(Self(bytes))
     }
 
     pub(crate) fn pseudonym(&self, domain: &str, raw: &str) -> String {
         let message = format!("aob.pseudonym.v1/{domain}\0{raw}");
-        let digest = hmac_sha256(&self.0, message.as_bytes());
+        let digest = hmac_sha256(&self.0[..], message.as_bytes());
         format!("{domain}_{}", hex_encode(&digest[..16]))
     }
 }
@@ -292,7 +293,7 @@ mod tests {
         );
         assert_ne!(
             key.pseudonym("proj", "sentinel"),
-            PseudonymKey([42; 32]).pseudonym("proj", "sentinel")
+            PseudonymKey(Zeroizing::new([42; 32])).pseudonym("proj", "sentinel")
         );
         assert_eq!(format!("{key:?}"), "PseudonymKey(<redacted>)");
         #[cfg(unix)]

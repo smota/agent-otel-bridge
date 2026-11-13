@@ -54,6 +54,8 @@ impl Daemon {
         stats: Arc<Diagnostics>,
         ingress: Arc<IngressStats>,
     ) -> std::io::Result<()> {
+        let session_link = crate::session_link::SessionLinkConfig::from_env()
+            .map_err(|reason| std::io::Error::new(std::io::ErrorKind::InvalidInput, reason))?;
         if self.config.batch_size == 0
             || self.config.batch_size > 4096
             || self.config.batch_timeout.is_zero()
@@ -226,7 +228,7 @@ impl Daemon {
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break; };
                     last_activity = Instant::now();
-                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, self.config.capture_mode, self.pseudonym_key.as_ref(), &mut span_assembler);
+                    process_frame(frame, &contexts, &quotas, &mut batch, &queue, &stats, &mut salt, execution_mode, self.config.emit_legacy_aliases, self.config.gen_ai_latest_experimental, metadata, self.config.workspace_path_mode, self.config.capture_mode, self.pseudonym_key.as_ref(), &session_link, &mut span_assembler);
                     processed += 1;
                 }
                 _ = tick.tick() => {
@@ -269,6 +271,7 @@ impl Daemon {
                     self.config.workspace_path_mode,
                     self.config.capture_mode,
                     self.pseudonym_key.as_ref(),
+                    &session_link,
                     &mut span_assembler,
                 );
             }
@@ -349,6 +352,7 @@ fn process_frame(
     workspace_path_mode: WorkspacePathMode,
     capture_mode: CaptureMode,
     pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
+    session_link: &crate::session_link::SessionLinkConfig,
     assembler: &mut SpanAssembler,
 ) {
     transform(
@@ -366,6 +370,7 @@ fn process_frame(
         workspace_path_mode,
         capture_mode,
         pseudonym_key,
+        session_link,
         assembler,
     );
 }
@@ -384,6 +389,7 @@ fn process_frame_without_quota(
     workspace_path_mode: WorkspacePathMode,
     capture_mode: CaptureMode,
     pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
+    session_link: &crate::session_link::SessionLinkConfig,
     assembler: &mut SpanAssembler,
 ) {
     transform(
@@ -401,6 +407,7 @@ fn process_frame_without_quota(
         workspace_path_mode,
         capture_mode,
         pseudonym_key,
+        session_link,
         assembler,
     );
 }
@@ -420,6 +427,7 @@ fn transform(
     workspace_path_mode: WorkspacePathMode,
     capture_mode: CaptureMode,
     pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
+    session_link: &crate::session_link::SessionLinkConfig,
     assembler: &mut SpanAssembler,
 ) {
     let now_instant = Instant::now();
@@ -429,7 +437,7 @@ fn transform(
         .as_nanos() as u64;
     let next_salt = salt.wrapping_add(1);
 
-    let outcome = match crate::transform::production_transform_with_capture_mode(
+    let outcome = match crate::transform::production_transform_with_session_link(
         frame.msg_type,
         &frame.payload,
         contexts,
@@ -443,6 +451,7 @@ fn transform(
         workspace_path_mode,
         capture_mode,
         pseudonym_key,
+        Some(session_link),
     ) {
         Ok(res) => {
             *salt = next_salt;

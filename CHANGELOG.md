@@ -9,11 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- A2 keyed session links (`agent.session.link_id`) and explicit unlinked reasons on every daemon span using startup-provisioned K_link and the frozen `link-id-v1` vocabulary/vectors; inherited W3C traces, parents and flags are preserved. Endpoints refuse raw organization keys.
+
 - Explicit daemon-side ingress privacy projection (`AGENT_OTEL_CAPTURE_MODE`: `minimal` default, `metadata_only` / `metadata-only`, `full`) stamped as `agent.capture.mode` on every exported trace and metric `Resource` (`AOB#17` / `F5`).
 
 ### Changed
 
-- **Minimal capture uses per-install keyed pseudonyms, not reversible path hashes:** `workspace.path` and `workspace.project_root` are omitted. Project/repository and custom tool, capability and agent names use domain-separated HMAC-SHA256, truncated to 16 bytes (32 hex characters). Pseudonyms are stable only within an install; this is not an anonymity guarantee. A key failure omits pseudonymized fields while spans still export, and increments a static-label counter. A2 will replace the install key with a customer K_link-derived key.
+- With K_link, fallback trace IDs derive from the link tag or a separate keyed hash; without it, the historical unkeyed trace fallback remains. Minimal now pseudonymizes or omits all conversation/root session IDs, including opaque IDs. Daemon key storage uses `Zeroizing`; `LinkIdInput` Debug redacts every field.
+
+- **Minimal capture uses per-install keyed pseudonyms, not reversible path hashes:** `workspace.path` and `workspace.project_root` are omitted. Project/repository and custom tool, capability and agent names use domain-separated HMAC-SHA256, truncated to 16 bytes (32 hex characters). Pseudonyms are stable only within an install; this is not an anonymity guarantee. A key failure omits pseudonymized fields while spans still export, and increments a static-label counter. A2 keeps the install pseudonym key separate from the jointly provisioned session-link key.
 - Minimal spans and resources now use explicit key allowlists. Minimal `service.name` is fixed to `agent-otel-bridge`, versions and telemetry identity are bridge-owned, and deployment values use a closed vocabulary. Collector examples no longer run the system resource detector, which could reintroduce `host.name`.
 - Tool archetype and capability kind use closed enums in every mode; unknown values become `other`. Opt-in credential scrubbing covers common JSON/YAML assignments, CLI token flags, API-key headers and named AWS keys, but remains best-effort. Opt-in `hash` workspace projection also uses the install HMAC key and omits paths if unavailable.
 - **Upgrade note (`local install` staging vs activation):** `agent-otel-bridge local install` now stages candidate binaries and `manifest.json` under `versions/<version_id>/` by default without activating; pass `--activate` (`agent-otel-bridge local install --activate`) to promote the staged version into `bin/`, `current`, `active.json`, and `previous/`.

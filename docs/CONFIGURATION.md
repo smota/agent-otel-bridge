@@ -42,11 +42,30 @@ All environment variables follow standard OpenTelemetry conventions with project
 
 ### Exported content under current defaults
 
-The default `minimal` mode omits workspace paths, hostnames, email, content and raw errors. It projects custom names into per-install keyed pseudonyms, maps categories to closed vocabularies, and applies exact-key span/resource allowlists, including a final span check at the export batch boundary. Both `vcs.commit.sha` and experimental `vcs.ref.head.revision` contain `commit_<32hex>` pseudonyms (domain `commit`, canonical input: lowercase full hexadecimal SHA); without a key they are omitted. Raw commit SHAs can identify a public or forge-hosted repository through global search, so Minimal never exports them. Pseudonymization is not anonymity; permitted opaque session IDs still allow linkage. See [privacy projection](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour).
+The default `minimal` mode omits workspace paths, hostnames, email, content and raw errors. It projects custom names into per-install keyed pseudonyms, maps categories to closed vocabularies, and applies exact-key span/resource allowlists, including a final span check at the export batch boundary. Both `vcs.commit.sha` and experimental `vcs.ref.head.revision` contain `commit_<32hex>` pseudonyms (domain `commit`, canonical input: lowercase full hexadecimal SHA); without a key they are omitted. Raw commit SHAs can identify a public or forge-hosted repository through global search, so Minimal never exports them. Pseudonymization is not anonymity. Conversation and root session IDs, including opaque UUIDs, are always keyed pseudonyms or omitted in Minimal. See [privacy projection](TELEMETRY_DICTIONARY.md#511-current-path-email-and-error-export-behaviour).
 
-A2 follow-up: a non-opaque conversation ID is currently hashed **without a key** into `trace_id` before privacy projection. This can allow dictionary matching of predictable IDs; A2 must revisit that derivation. A1 leaves trace ID behavior unchanged.
+A2 uses the first 16 bytes of the session-link HMAC tag as the fallback `trace_id` when linked (an all-zero prefix becomes `01` followed by 15 zero bytes). With valid K_link but an unlinked session, a separate keyed fallback domain protects the conversation ID. Without K_link, the historical unkeyed conversation hash remains; predictable IDs can still be dictionary-matched through that trace ID. Minimal never exports the raw conversation ID. Valid payload `traceparent`, then transported hook-process `TRACEPARENT`, always precede fallback and preserve trace ID, parent and flags.
 
-The daemon loads `pseudonym.key` once at startup in its runtime home (`AGENT_OTEL_HOME` overrides; Windows `%LOCALAPPDATA%/agent-otel-bridge`; Unix `$XDG_DATA_HOME/agent-otel-bridge` or `$HOME/.local/share/agent-otel-bridge`). A missing key is generated with the OS CSPRNG and created exclusively (Unix 0600; Windows protected owner-only DACL, applied before writing key bytes and also on existing keys before reading). On Windows, a home outside the current user's profile triggers one static startup warning without paths or key material. The runtime directory still inherits its parent's ACL; protect that directory against access/replacement by other users even though the key file itself has a restricted DACL. Failure omits fields needing pseudonyms and still exports spans, recording `agent.bridge.privacy.key_unavailable.total{reason="key_unavailable"}`. Keys never appear in Debug, logs or exports. Pseudonyms use field-domain-separated HMAC-SHA256 truncated to 16 bytes and are stable only per install; A2 will replace this key with a customer K_link-derived key.
+The daemon loads `pseudonym.key` once at startup in its runtime home (`AGENT_OTEL_HOME` overrides; Windows `%LOCALAPPDATA%/agent-otel-bridge`; Unix `$XDG_DATA_HOME/agent-otel-bridge` or `$HOME/.local/share/agent-otel-bridge`). A missing key is generated with the OS CSPRNG and created exclusively (Unix 0600; Windows protected owner-only DACL, applied before writing key bytes and also on existing keys before reading). On Windows, a home outside the current user's profile triggers one static startup warning without paths or key material. The runtime directory still inherits its parent's ACL; protect that directory against access/replacement by other users even though the key file itself has a restricted DACL. Failure omits fields needing pseudonyms and still exports spans, recording `agent.bridge.privacy.key_unavailable.total{reason="key_unavailable"}`. Keys never appear in Debug, logs or exports. Pseudonyms use field-domain-separated HMAC-SHA256 truncated to 16 bytes and are stable only per install. This key stays separate from the jointly provisioned A2 session-link key; both retained daemon keys use `zeroize::Zeroizing`.
+
+### Keyed session links (A2 / `link-id-v1`)
+
+Provision these variables in the **daemon process environment**. They are read once before event admission; changing scope or epoch requires a daemon restart. The client performs no additional work and reads no configuration. No session-link filesystem or environment lookup occurs on the event path.
+
+| Variable | Meaning |
+| --- | --- |
+| `AGENT_OTEL_LINK_KEY_HEX` | Secret pre-derived 32-byte K_link encoded as exactly 64 hexadecimal characters; no whitespace or prefix. Absent means every span exports `link_id=unlinked`, `unlinked_reason=invalid_key_material`. Malformed configured values refuse daemon startup. |
+| `AGENT_OTEL_LINK_ORG` | Provisioned, case-sensitive organization namespace. Absent produces `missing_org` when a valid key exists. |
+| `AGENT_OTEL_LINK_ENDPOINT_SCOPE` | Persistent endpoint namespace jointly provisioned with dendro; never a daemon, boot or process ID. Absent produces `missing_endpoint_scope` when a valid key exists. |
+| `AGENT_OTEL_LINK_TEAM` | Required with K_link; the team for which the provisioning authority derived that key. |
+| `AGENT_OTEL_LINK_EPOCH` | Required with K_link; active rotation epoch for that pre-derived key. |
+
+All four administrative fields must match printable ASCII `[\x21-\x7E]{1,1024}` when configured. Invalid slugs refuse startup; no trimming or normalization occurs. Team/epoch label the provisioned scope: endpoints cannot verify that a supplied K_link was derived for those labels. The provisioning authority must bind them correctly and deliver the same tuple/key to both consumers. Do not deploy public vector keys.
+
+The daemon accepts **only pre-derived K_link**, never K_org or PRK. `AGENT_OTEL_LINK_K_ORG_HEX` and `AGENT_OTEL_K_ORG_HEX` are explicitly refused even when K_link is present. There is no daemon admin/provisioning mode: perform HKDF in an external, explicitly authorized administrative provisioning context within the customer trust boundary, following [SPEC section 3](contracts/fact-export-v1/link-id-v1/SPEC.md#3-hkdf-sha256-key-derivation-k_link). Deliver only the assigned `(team, epoch)` K_link to endpoints. Neither keys nor provisioning values are logged or exported; secret strings, decode buffers and retained keys use `Zeroizing` in the daemon, without adding dependencies to core/client. Environment secrets remain subject to OS process-environment access controls.
+
+Every transformed span carries `agent.session.link_id` (64 lowercase hex characters or `unlinked`); unlinked spans also carry `agent.session.unlinked_reason` from the frozen SPEC. Both attributes survive Minimal's ingress and batch allowlists. Wire client identity is authoritative; only wire ID zero falls back to payload `agent_name` through the closed harness vocabulary. Provider/system/model values never determine identity. `session_id` / conversation aliases supply the byte-exact native session before privacy projection; absent `origin` means `harness`, every other origin is unlinked. Plaintext org, endpoint, team and native session are not exported in Minimal. Legacy spans without the attribute remain `legacy_unlinked` on the consumer side. Rotation emits one active epoch; dual-epoch matching belongs to the join consumer.
+
 
 ### OTLP/HTTP export
 
@@ -111,6 +130,7 @@ export TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 ```
 
 ---
+
 
 ## 3. OpenTelemetry Collector Recipe
 

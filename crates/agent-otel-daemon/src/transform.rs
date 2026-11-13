@@ -109,12 +109,49 @@ pub fn production_transform_with_capture_mode(
     mode: ExecutionMode,
     aliases: bool,
     gen_ai_latest_experimental: bool,
+    metadata: ResolvedSpanMetadata<'_>,
+    now_instant: Instant,
+    now_unix_nanos: u64,
+    workspace_path_mode: WorkspacePathMode,
+    capture_mode: CaptureMode,
+    pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
+) -> Result<ProductionTransformOutcome, TransformError> {
+    production_transform_with_session_link(
+        msg_type,
+        payload,
+        contexts,
+        salt,
+        mode,
+        aliases,
+        gen_ai_latest_experimental,
+        metadata,
+        now_instant,
+        now_unix_nanos,
+        workspace_path_mode,
+        capture_mode,
+        pseudonym_key,
+        None,
+    )
+}
+
+/// Production transform with an immutable, startup-provisioned session-link snapshot.
+/// Compatibility wrappers explicitly omit provisioning and emit `unlinked`.
+#[allow(clippy::too_many_arguments)]
+pub fn production_transform_with_session_link(
+    msg_type: MsgType,
+    payload: &[u8],
+    contexts: &ContextCache,
+    salt: u32,
+    mode: ExecutionMode,
+    aliases: bool,
+    gen_ai_latest_experimental: bool,
     mut metadata: ResolvedSpanMetadata<'_>,
     now_instant: Instant,
     now_unix_nanos: u64,
     workspace_path_mode: WorkspacePathMode,
     capture_mode: CaptureMode,
     pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
+    session_link: Option<&crate::session_link::SessionLinkConfig>,
 ) -> Result<ProductionTransformOutcome, TransformError> {
     let (header, traceparent, bytes) =
         decode_wire_payload(msg_type, payload).ok_or(TransformError::InvalidEnvelope)?;
@@ -139,11 +176,19 @@ pub fn production_transform_with_capture_mode(
         (a, b) => Some(a.unwrap_or(0).saturating_add(b.unwrap_or(0)).max(0) as u64),
     };
 
-    let context = resolve_trace_context(
+    let link = crate::session_link::resolve(session_link, header.client_id, &input);
+    let mut context = resolve_trace_context(
         input.traceparent.as_deref(),
         traceparent,
         input.conversation_id.as_deref(),
     );
+    // A valid inherited context always has a parent. Only replace the fallback;
+    // explicit payload context still precedes transported source-process context.
+    if context.parent_span_id.is_none() {
+        if let Some(trace_id) = link.fallback_trace_id {
+            context.trace_id = trace_id;
+        }
+    }
     let lookup = contexts.lookup(&input, now_instant);
     input.normalize_with_context(lookup.context.as_ref());
 
@@ -216,6 +261,7 @@ pub fn production_transform_with_capture_mode(
         // projection must omit the identity attribute rather than export a substitute.
         span.attributes.retain(|kv| kv.key != "gen_ai.agent.name");
     }
+    link.stamp(&mut span);
     project_span(&mut span, capture_mode);
 
     Ok(ProductionTransformOutcome {
@@ -233,6 +279,37 @@ mod tests {
     use crate::privacy::apply_workspace_path_mode;
     use agent_otel_ipc::frame::{encode_context_payload, WireHeader};
     use opentelemetry_proto::tonic::common::v1::any_value;
+
+    #[test]
+    fn a2_missing_link_key_is_explicitly_unlinked() {
+        let frame = encode_context_payload(
+            WireHeader::new(2, HookEvent::PostToolUse.to_wire()),
+            None,
+            br#"{"session_id":"non-opaque session sentinel"}"#,
+        );
+        let result = production_transform(
+            MsgType::HookPayloadWithContext,
+            &frame,
+            &ContextCache::new(),
+            1,
+            ExecutionMode::Interactive,
+            false,
+            false,
+            ResolvedSpanMetadata::default(),
+            Instant::now(),
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            string_attr(&result.span, "agent.session.link_id"),
+            Some("unlinked")
+        );
+        assert_eq!(
+            string_attr(&result.span, "agent.session.unlinked_reason"),
+            Some("invalid_key_material")
+        );
+        assert!(!format!("{:?}", result.span).contains("non-opaque session sentinel"));
+    }
 
     fn string_attr<'a>(
         span: &'a opentelemetry_proto::tonic::trace::v1::Span,

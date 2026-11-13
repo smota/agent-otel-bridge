@@ -1015,18 +1015,11 @@ pub fn project_input_and_metadata(
                 ));
             }
             if let Some(root_id) = input.agent_root_id.take() {
-                input.agent_root_id = Some(if is_safe_opaque_id(&root_id) {
-                    root_id
-                } else {
-                    pseudonym(key, "root", &root_id)
-                });
+                input.agent_root_id = key.map(|key| key.pseudonym("root", &root_id));
             }
             if let Some(conv_id) = input.conversation_id.take() {
-                input.conversation_id = Some(if is_safe_opaque_id(&conv_id) {
-                    conv_id
-                } else {
-                    pseudonym(key, "conv", &conv_id)
-                });
+                // A2: the harness-native session is private even when it is opaque.
+                input.conversation_id = key.map(|key| key.pseudonym("conv", &conv_id));
             }
 
             // Model name
@@ -1284,6 +1277,8 @@ pub fn project_span(span: &mut Span, mode: CaptureMode) {
 
 /// Reviewed Minimal span vocabulary. New attributes require an explicit privacy decision.
 const MINIMAL_SPAN_KEYS: &[&str] = &[
+    "agent.session.link_id",
+    "agent.session.unlinked_reason",
     "gen_ai.operation.name",
     "gen_ai.system",
     "gen_ai.provider.name",
