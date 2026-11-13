@@ -9,24 +9,20 @@
 //! across spans, span events, resources, and quota metrics.
 
 use crate::config::WorkspacePathMode;
+use crate::pseudonym_key::PseudonymKey;
 use agent_otel_core::model::AgentHookInput;
 use agent_otel_core::otlp::{kv_string, ResolvedSpanMetadata};
-use agent_otel_core::semconv::{
-    AGENT_CAPTURE_MODE, AGENT_ERROR_CATEGORY, ERROR_TYPE, HOST_NAME, USER_EMAIL, VCS_BRANCH_NAME,
-    VCS_REF_HEAD_NAME, VCS_REPOSITORY_NAME, WORKSPACE_PATH, WORKSPACE_PROJECT_NAME,
-    WORKSPACE_PROJECT_ROOT,
-};
+use agent_otel_core::semconv::{AGENT_CAPTURE_MODE, AGENT_ERROR_CATEGORY, ERROR_TYPE};
 use opentelemetry_proto::tonic::common::v1::any_value;
 use opentelemetry_proto::tonic::resource::v1::Resource;
 use opentelemetry_proto::tonic::trace::v1::{status::StatusCode, Span};
-use sha2::{Digest, Sha256};
 
 /// Explicit daemon-side privacy capture mode (`AGENT_OTEL_CAPTURE_MODE`).
 ///
 /// Unset and unrecognized values fail closed to [`CaptureMode::Minimal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CaptureMode {
-    /// Content-free and identifier-safe default mode.
+    /// Content-free default with per-install keyed pseudonyms (not anonymity).
     /// Drops content and replaces raw identifiers with pseudonyms or closed categories.
     #[default]
     Minimal,
@@ -289,21 +285,10 @@ const SAFE_PROJECT_TYPES: &[&str] = &[
     "polyglot", "python", "ruby", "rust", "scala", "swift", "unknown", "zig",
 ];
 
-/// Computes lowercase hex SHA-256 of `value`.
-pub fn sha256_hex(value: &str) -> String {
-    let digest = Sha256::digest(value.as_bytes());
-    let mut hex = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        hex.push(char::from(b"0123456789abcdef"[usize::from(byte >> 4)]));
-        hex.push(char::from(b"0123456789abcdef"[usize::from(byte & 0x0f)]));
-    }
-    hex
-}
-
-fn pseudonym(prefix: &str, raw: &str, hex_chars: usize) -> String {
-    let digest = sha256_hex(raw);
-    let len = hex_chars.min(digest.len());
-    format!("{prefix}_{}", &digest[..len])
+fn pseudonym(key: Option<&PseudonymKey>, prefix: &str, raw: &str) -> String {
+    // Empty projections are removed below. Never fall back to an unkeyed hash.
+    key.map(|key| key.pseudonym(prefix, raw))
+        .unwrap_or_default()
 }
 
 /// Maps arbitrary Git branch names to a closed category set in [`CaptureMode::Minimal`].
@@ -429,6 +414,9 @@ pub fn classify_closed_error_category(
 
 /// Scrubs credentials, bearer tokens, URL userinfo, and secret query parameters from text.
 pub fn scrub_credentials(raw: &str) -> String {
+    let authorization = redact_auth_scheme(raw);
+    let named = scrub_named_secrets(&authorization);
+    let raw = named.as_str();
     let mut out = String::with_capacity(raw.len());
     for (idx, token) in raw.split_whitespace().enumerate() {
         if idx > 0 {
@@ -438,6 +426,90 @@ pub fn scrub_credentials(raw: &str) -> String {
     }
     // Redact Bearer / Basic authorization values if present across whitespace
     redact_auth_scheme(&out)
+}
+
+// Best-effort text scrubbing for common assignments, JSON/YAML and CLI flags.
+// This cannot recognize arbitrary unlabeled secrets; opt-in modes still expose metadata.
+fn scrub_named_secrets(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut out = String::with_capacity(raw.len());
+    let mut copied = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if !(bytes[i].is_ascii_alphabetic() || bytes[i] == b'-') {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < bytes.len()
+            && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'_' | b'-'))
+        {
+            i += 1;
+        }
+        let name = raw[start..i].trim_start_matches('-').to_ascii_lowercase();
+        if !matches!(
+            name.as_str(),
+            "password"
+                | "passwd"
+                | "pwd"
+                | "token"
+                | "access_token"
+                | "api_key"
+                | "api-key"
+                | "apikey"
+                | "x-api-key"
+                | "secret"
+                | "auth"
+                | "authorization"
+                | "client_secret"
+                | "private_key"
+                | "aws_secret_access_key"
+                | "aws_session_token"
+                | "aws_access_key_id"
+                | "secretaccesskey"
+                | "sessiontoken"
+        ) {
+            continue;
+        }
+        let mut j = i;
+        if j < bytes.len() && matches!(bytes[j], b'"' | b'\'') {
+            j += 1;
+        }
+        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        if j < bytes.len() && matches!(bytes[j], b':' | b'=') {
+            j += 1;
+        } else if !raw[start..i].starts_with("--") || j == i {
+            continue;
+        }
+        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        let quote = bytes.get(j).copied().filter(|b| matches!(b, b'"' | b'\''));
+        if quote.is_some() {
+            j += 1;
+        }
+        let value_start = j;
+        while j < bytes.len() {
+            if quote == Some(bytes[j])
+                || (quote.is_none()
+                    && (bytes[j].is_ascii_whitespace()
+                        || matches!(bytes[j], b',' | b';' | b'}' | b'&')))
+            {
+                break;
+            }
+            j += 1;
+        }
+        if j > value_start {
+            out.push_str(&raw[copied..value_start]);
+            out.push_str("[REDACTED]");
+            copied = j;
+            i = j;
+        }
+    }
+    out.push_str(&raw[copied..]);
+    out
 }
 
 fn redact_auth_scheme(input: &str) -> String {
@@ -580,7 +652,7 @@ fn is_secret_token_literal(s: &str) -> bool {
         || lower.starts_with("xoxa-")
         || lower.starts_with("xoxr-")
         || lower.starts_with("xoxs-")
-        || (s.starts_with("AKIA") && s.len() >= 16)
+        || ((s.starts_with("AKIA") || s.starts_with("ASIA")) && s.len() >= 16)
         || (s.starts_with("AIza") && s.len() >= 20)
         || (s.starts_with("eyJ") && s.matches('.').count() >= 2 && s.len() >= 24)
 }
@@ -666,7 +738,7 @@ fn normalize_tool_binary_opt_in(raw: &str) -> Option<String> {
     Some(scrub_credentials(&stem))
 }
 
-fn project_tool_name_minimal(raw: &str) -> String {
+fn project_tool_name_minimal(raw: &str, key: Option<&PseudonymKey>) -> String {
     let trimmed = raw.trim();
     if SAFE_BUILTIN_TOOLS.contains(&trimmed) {
         return trimmed.to_string();
@@ -676,11 +748,16 @@ fn project_tool_name_minimal(raw: &str) -> String {
             return trimmed.to_string();
         }
     }
-    pseudonym("tool", trimmed, 12)
+    pseudonym(key, "tool", trimmed)
 }
 
 /// Projects an agent name according to `mode`.
-pub fn project_agent_name(raw: &str, mode: CaptureMode) -> String {
+fn project_agent_name(
+    raw: &str,
+    mode: CaptureMode,
+    key: Option<&PseudonymKey>,
+    domain: &str,
+) -> String {
     let trimmed = raw.trim();
     match mode {
         CaptureMode::Minimal => {
@@ -689,7 +766,7 @@ pub fn project_agent_name(raw: &str, mode: CaptureMode) -> String {
                     return known.to_string();
                 }
             }
-            pseudonym("agent", trimmed, 12)
+            pseudonym(key, domain, trimmed)
         }
         CaptureMode::MetadataOnly | CaptureMode::Full => scrub_credentials(trimmed),
     }
@@ -699,21 +776,34 @@ pub fn project_agent_name(raw: &str, mode: CaptureMode) -> String {
 /// mode-appropriate attribute redaction.
 pub fn project_resource(resource: &mut Resource, mode: CaptureMode) {
     if mode == CaptureMode::Minimal {
+        // Exact keys only: no future OTEL_RESOURCE_ATTRIBUTES key is implicitly trusted.
         resource.attributes.retain(|kv| {
-            !matches!(
+            matches!(
                 kv.key.as_str(),
-                HOST_NAME
-                    | USER_EMAIL
-                    | "user.name"
-                    | "process.owner"
-                    | WORKSPACE_PATH
-                    | WORKSPACE_PROJECT_ROOT
-                    | WORKSPACE_PROJECT_NAME
-                    | VCS_REPOSITORY_NAME
-                    | "vcs.repository.url"
-                    | "vcs.repository.url.full"
-                    | VCS_BRANCH_NAME
-                    | VCS_REF_HEAD_NAME
+                "service.name"
+                    | "service.version"
+                    | "service.namespace"
+                    | "deployment.environment"
+                    | "deployment.environment.name"
+                    | "telemetry.sdk.name"
+                    | "telemetry.sdk.language"
+                    | "telemetry.sdk.version"
+                    | "telemetry.distro.name"
+                    | "telemetry.distro.version"
+                    | "os.type"
+                    | AGENT_CAPTURE_MODE
+            )
+        });
+        resource.attributes.retain(|kv| {
+            kv.key != "service.namespace"
+                || matches!(kv.value.as_ref().and_then(|v| v.value.as_ref()),
+                Some(any_value::Value::StringValue(s)) if s == "agent-otel-bridge")
+        });
+        // Reject malformed/non-string resource overrides as well.
+        resource.attributes.retain(|kv| {
+            matches!(
+                kv.value.as_ref().and_then(|v| v.value.as_ref()),
+                Some(any_value::Value::StringValue(_))
             )
         });
     }
@@ -742,45 +832,27 @@ pub fn project_resource(resource: &mut Resource, mode: CaptureMode) {
 }
 
 fn scrub_minimal_resource_value(key: &str, value: &str) -> String {
-    let scrubbed = scrub_credentials(value);
-    if matches!(
-        key,
-        "service.name"
-            | "service.version"
-            | "service.instance.id"
-            | "deployment.environment"
-            | "deployment.environment.name"
-            | "os.type"
-            | "telemetry.sdk.name"
-            | "telemetry.sdk.language"
-            | "telemetry.sdk.version"
-            | "telemetry.distro.name"
-            | "telemetry.distro.version"
-            | AGENT_CAPTURE_MODE
-    ) {
-        if scrubbed.contains('@')
-            || scrubbed.contains("://")
-            || looks_like_filesystem_path(&scrubbed)
-        {
-            return pseudonym("res", &scrubbed, 12);
+    match key {
+        "service.name" | "telemetry.sdk.name" | "telemetry.distro.name" | "service.namespace" => {
+            "agent-otel-bridge".to_string()
         }
-        return scrubbed;
+        "service.version" | "telemetry.sdk.version" | "telemetry.distro.version" => {
+            env!("CARGO_PKG_VERSION").to_string()
+        }
+        "telemetry.sdk.language" => "rust".to_string(),
+        "deployment.environment" | "deployment.environment.name" => match value {
+            "development" | "dev" | "test" | "staging" | "production" | "prod" | "local" => {
+                value.to_string()
+            }
+            _ => "other".to_string(),
+        },
+        "os.type" => match value {
+            "windows" | "linux" | "darwin" | "freebsd" | "openbsd" | "netbsd" | "dragonfly"
+            | "solaris" | "illumos" | "android" => value.to_string(),
+            _ => "other".to_string(),
+        },
+        _ => "other".to_string(),
     }
-    if scrubbed.contains('@') || scrubbed.contains("://") || looks_like_filesystem_path(&scrubbed) {
-        pseudonym("res", &scrubbed, 12)
-    } else {
-        scrubbed
-    }
-}
-
-fn looks_like_filesystem_path(s: &str) -> bool {
-    s.starts_with('/')
-        || s.starts_with('\\')
-        || s.starts_with("~/")
-        || (s.len() >= 3
-            && s.as_bytes()[0].is_ascii_alphabetic()
-            && s.as_bytes()[1] == b':'
-            && matches!(s.as_bytes()[2], b'\\' | b'/'))
 }
 
 /// Projects normalized [`AgentHookInput`] and [`ResolvedSpanMetadata`] at daemon ingress
@@ -790,7 +862,16 @@ pub fn project_input_and_metadata(
     metadata: &mut ResolvedSpanMetadata<'_>,
     mode: CaptureMode,
     workspace_path_mode: WorkspacePathMode,
+    key: Option<&PseudonymKey>,
 ) {
+    input.tool_archetype = input
+        .tool_archetype
+        .as_deref()
+        .map(|s| agent_otel_core::archetype::ToolArchetype::normalize_str_name(s).to_string());
+    input.capability_kind = input
+        .capability_kind
+        .as_deref()
+        .map(|s| agent_otel_core::capability::CapabilityKind::normalize_str_name(s).to_string());
     // 1. Closed error category enforcement (all modes)
     if input.error.is_some() || input.error_category.is_some() {
         let closed_cat =
@@ -819,15 +900,11 @@ pub fn project_input_and_metadata(
                 .map(|t| normalize_terminal_type_minimal(t).to_string());
             metadata.terminal_type = metadata.terminal_type.map(normalize_terminal_type_minimal);
 
-            // Workspace paths are always hashed SHA-256 pseudonyms in Minimal mode
-            if let Some(path) = input.workspace_path.take() {
-                input.workspace_path = Some(sha256_hex(&path));
-            }
-            if let Some(root) = input.project_root.take() {
-                input.project_root = Some(sha256_hex(&root));
-            }
+            // Paths are omitted, not dictionary-guessable hashes.
+            input.workspace_path = None;
+            input.project_root = None;
             if let Some(name) = input.project_name.take() {
-                input.project_name = Some(pseudonym("proj", &name, 16));
+                input.project_name = Some(pseudonym(key, "proj", &name));
             }
             if let Some(ptype) = input.project_type.take() {
                 input.project_type = Some(normalize_project_type_minimal(&ptype).to_string());
@@ -838,7 +915,7 @@ pub fn project_input_and_metadata(
                 input.vcs_system = Some(normalize_vcs_system_minimal(&sys).to_string());
             }
             if let Some(repo) = input.vcs_repository.take() {
-                input.vcs_repository = Some(pseudonym("repo", &repo, 16));
+                input.vcs_repository = Some(pseudonym(key, "repo", &repo));
             }
             if let Some(branch) = input.vcs_branch.take() {
                 input.vcs_branch = Some(categorize_branch(&branch).to_string());
@@ -863,7 +940,7 @@ pub fn project_input_and_metadata(
             // Tool name & capabilities
             let raw_tool = input.resolved_tool_name().map(str::to_owned);
             if let Some(t) = raw_tool {
-                let projected_tool = project_tool_name_minimal(&t);
+                let projected_tool = project_tool_name_minimal(&t, key);
                 let is_safe_builtin = projected_tool == t.trim();
                 input.tool_name = Some(projected_tool.clone());
                 if let Some(tc) = &mut input.tool_call {
@@ -873,7 +950,7 @@ pub fn project_input_and_metadata(
                         tc.id = Some(if is_safe_opaque_id(&id) {
                             id
                         } else {
-                            pseudonym("call", &id, 16)
+                            pseudonym(key, "call", &id)
                         });
                     }
                 }
@@ -890,11 +967,11 @@ pub fn project_input_and_metadata(
                             Some(if matches!(ns.as_str(), "core" | "agent") {
                                 ns
                             } else {
-                                pseudonym("ns", &ns, 12)
+                                pseudonym(key, "ns", &ns)
                             });
                     }
                     if let Some(cap) = input.capability_name.take() {
-                        input.capability_name = Some(pseudonym("cap", &cap, 12));
+                        input.capability_name = Some(pseudonym(key, "cap", &cap));
                     }
                 }
             } else {
@@ -902,14 +979,14 @@ pub fn project_input_and_metadata(
                     input.capability_namespace = Some(if matches!(ns.as_str(), "core" | "agent") {
                         ns
                     } else {
-                        pseudonym("ns", &ns, 12)
+                        pseudonym(key, "ns", &ns)
                     });
                 }
                 if let Some(cap) = input.capability_name.take() {
                     input.capability_name = Some(if SAFE_BUILTIN_TOOLS.contains(&cap.as_str()) {
                         cap
                     } else {
-                        pseudonym("cap", &cap, 12)
+                        pseudonym(key, "cap", &cap)
                     });
                 }
             }
@@ -921,23 +998,33 @@ pub fn project_input_and_metadata(
 
             // Agent & lineage identifiers
             if let Some(agent) = input.agent_name.take() {
-                input.agent_name = Some(project_agent_name(&agent, CaptureMode::Minimal));
+                input.agent_name = Some(project_agent_name(
+                    &agent,
+                    CaptureMode::Minimal,
+                    key,
+                    "agent",
+                ));
             }
             if let Some(parent) = input.agent_parent_name.take() {
-                input.agent_parent_name = Some(project_agent_name(&parent, CaptureMode::Minimal));
+                input.agent_parent_name = Some(project_agent_name(
+                    &parent,
+                    CaptureMode::Minimal,
+                    key,
+                    "parent_agent",
+                ));
             }
             if let Some(root_id) = input.agent_root_id.take() {
                 input.agent_root_id = Some(if is_safe_opaque_id(&root_id) {
                     root_id
                 } else {
-                    pseudonym("root", &root_id, 16)
+                    pseudonym(key, "root", &root_id)
                 });
             }
             if let Some(conv_id) = input.conversation_id.take() {
                 input.conversation_id = Some(if is_safe_opaque_id(&conv_id) {
                     conv_id
                 } else {
-                    pseudonym("conv", &conv_id, 16)
+                    pseudonym(key, "conv", &conv_id)
                 });
             }
 
@@ -950,7 +1037,7 @@ pub fn project_input_and_metadata(
                     || trimmed.contains(char::is_whitespace)
                     || is_secret_token_literal(trimmed)
                 {
-                    input.model = Some(pseudonym("model", trimmed, 12));
+                    input.model = Some(pseudonym(key, "model", trimmed));
                 } else {
                     input.model = Some(scrub_credentials(trimmed));
                 }
@@ -972,9 +1059,34 @@ pub fn project_input_and_metadata(
                     .unwrap_or_else(|| "tool_verification_failed".to_string());
                 input.error = Some(closed);
             }
+            // Missing key: omit each field requiring a pseudonym and still build the span.
+            for field in [
+                &mut input.project_name,
+                &mut input.vcs_repository,
+                &mut input.tool_name,
+                &mut input.capability_namespace,
+                &mut input.capability_name,
+                &mut input.agent_name,
+                &mut input.agent_parent_name,
+                &mut input.agent_root_id,
+                &mut input.conversation_id,
+                &mut input.model,
+            ] {
+                if field.as_deref() == Some("") {
+                    *field = None;
+                }
+            }
+            if let Some(tc) = &mut input.tool_call {
+                if tc.name.as_deref() == Some("") {
+                    tc.name = None;
+                }
+                if tc.id.as_deref() == Some("") {
+                    tc.id = None;
+                }
+            }
         }
         CaptureMode::MetadataOnly => {
-            apply_workspace_path_mode(input, workspace_path_mode);
+            apply_workspace_path_mode(input, workspace_path_mode, key);
             input.tool_input = None;
             input.transcript_path = None;
             input.workspace_paths = None;
@@ -1000,7 +1112,7 @@ pub fn project_input_and_metadata(
             scrub_all_input_strings(input);
         }
         CaptureMode::Full => {
-            apply_workspace_path_mode(input, workspace_path_mode);
+            apply_workspace_path_mode(input, workspace_path_mode, key);
             input.tool_input = None;
             input.transcript_path = None;
             input.workspace_paths = None;
@@ -1062,16 +1174,20 @@ fn scrub_all_input_strings(input: &mut AgentHookInput) {
 }
 
 /// Applies [`WorkspacePathMode`] to `workspace_path` and `project_root`.
-pub fn apply_workspace_path_mode(input: &mut AgentHookInput, mode: WorkspacePathMode) {
+pub fn apply_workspace_path_mode(
+    input: &mut AgentHookInput,
+    mode: WorkspacePathMode,
+    key: Option<&PseudonymKey>,
+) {
     match mode {
         WorkspacePathMode::Absolute => {}
         WorkspacePathMode::Relative => apply_relative_workspace(input),
         WorkspacePathMode::Hash => {
             if let Some(path) = input.workspace_path.clone() {
-                input.workspace_path = Some(sha256_hex(&path));
+                input.workspace_path = key.map(|key| key.pseudonym("path", &path));
             }
             if let Some(root) = input.project_root.clone() {
-                input.project_root = Some(sha256_hex(&root));
+                input.project_root = key.map(|key| key.pseudonym("root_path", &root));
             }
         }
     }
@@ -1156,6 +1272,196 @@ pub fn project_span(span: &mut Span, mode: CaptureMode) {
                     }
                 }
             }
+        }
+    }
+    if mode == CaptureMode::Minimal {
+        span.attributes
+            .retain(|kv| MINIMAL_SPAN_KEYS.contains(&kv.key.as_str()));
+    }
+}
+
+/// Reviewed Minimal span vocabulary. New attributes require an explicit privacy decision.
+const MINIMAL_SPAN_KEYS: &[&str] = &[
+    "gen_ai.operation.name",
+    "gen_ai.system",
+    "gen_ai.provider.name",
+    "gen_ai.request.model",
+    "gen_ai.conversation.id",
+    "gen_ai.tool.name",
+    "gen_ai.tool.call.id",
+    "gen_ai.agent.name",
+    "gen_ai.agent.depth",
+    "gen_ai.agent.parent_name",
+    "gen_ai.agent.root_id",
+    "gen_ai.agent.is_root",
+    "gen_ai.agent.step_index",
+    "gen_ai.usage.input_tokens",
+    "gen_ai.usage.output_tokens",
+    "gen_ai.usage.cache_read.input_tokens",
+    "gen_ai.usage.cache_creation.input_tokens",
+    "gen_ai.response.finish_reasons",
+    "agent.hook.event",
+    "agent.step.index",
+    "agent.execution.mode",
+    "agent.termination_reason",
+    "agent.decision",
+    "agent.error.category",
+    "error.type",
+    "terminal.type",
+    "workspace.project_name",
+    "workspace.project_type",
+    "vcs.system",
+    "vcs.repository.name",
+    "vcs.branch.name",
+    "vcs.ref.head.name",
+    "vcs.commit.sha",
+    "vcs.ref.head.revision",
+    "vcs.worktree",
+    "agent.tool.archetype",
+    "agent.tool.binary",
+    "agent.tool.pipeline_depth",
+    "agent.tool.wrapped_binary",
+    "agent.tool.exit_code",
+    "agent.tool.raw_bytes",
+    "agent.tool.compressed_bytes",
+    "agent.tool.tokens_saved",
+    "capability.kind",
+    "capability.namespace",
+    "capability.name",
+    "capability.schema_tokens",
+    "agent.lineage.depth",
+    "agent.lineage.parent_name",
+    "agent.lineage.root_id",
+    "agent.lineage.is_root",
+    "agent.context.state",
+    "agent.context.source",
+    "agent.context.age_ms",
+    "agent.span.paired",
+    "agent.span.duration_source",
+    "agent.span.incomplete_reason",
+    "gen_ai.usage.cache_read_tokens",
+    "agent.success",
+    "agent.git.lines_added",
+    "agent.git.lines_deleted",
+    "agent.git.files_changed",
+    "agent.git.self_revert",
+    "vcs.worktree.active",
+    "agent.tool.compression_ratio",
+    "capability.response_bytes",
+    "capability.response_tokens",
+    "capability.consecutive_retries",
+    "capability.is_waste",
+    "agent.execution.num",
+    "agent.fully_idle",
+    "agy.hook.event",
+    "agy.termination_reason",
+    "agy.execution.num",
+    "agy.fully_idle",
+    "agy.step.index",
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_projection_is_default_deny_and_fixes_bridge_identity() {
+        let mut resource = Resource {
+            attributes: [
+                "enduser.id",
+                "team",
+                "host.id",
+                "k8s.pod.name",
+                "os.description",
+                "host.name",
+                "service.instance.id",
+                "future.secret",
+                "telemetry.future.secret",
+            ]
+            .into_iter()
+            .map(|key| kv_string(key, "SENTINEL"))
+            .collect(),
+            ..Default::default()
+        };
+        resource.attributes.extend([
+            kv_string("service.name", "SENTINEL"),
+            kv_string("service.namespace", "SENTINEL"),
+            kv_string("service.version", "SENTINEL"),
+            kv_string("deployment.environment.name", "SENTINEL"),
+            kv_string("telemetry.sdk.name", "SENTINEL"),
+            kv_string("os.type", "linux"),
+        ]);
+        project_resource(&mut resource, CaptureMode::Minimal);
+        assert_eq!(resource.attributes.len(), 6);
+        assert!(!format!("{resource:?}").contains("SENTINEL"));
+        assert!(resource
+            .attributes
+            .iter()
+            .any(|kv| kv == &kv_string("service.name", "agent-otel-bridge")));
+        assert!(resource
+            .attributes
+            .iter()
+            .any(|kv| kv == &kv_string("deployment.environment.name", "other")));
+    }
+
+    #[test]
+    fn span_projection_drops_future_attributes() {
+        let mut span = Span {
+            attributes: vec![
+                kv_string("future.secret", "SENTINEL"),
+                kv_string("agent.hook.event", "PreToolUse"),
+            ],
+            ..Default::default()
+        };
+        project_span(&mut span, CaptureMode::Minimal);
+        assert_eq!(
+            span.attributes,
+            vec![kv_string("agent.hook.event", "PreToolUse")]
+        );
+    }
+
+    #[test]
+    fn scrubber_covers_assignments_json_headers_cli_and_aws_secrets() {
+        for raw in [
+            "password: SIMPLE_SENTINEL",
+            r#"{"token":"SIMPLE_SENTINEL","other":"visible"}"#,
+            "--token SIMPLE_SENTINEL",
+            "x-api-key: aabbccddSIMPLE_SENTINEL",
+            "AWS_SECRET_ACCESS_KEY=SIMPLE_SENTINEL",
+            "aws_secret_access_key: SIMPLE_SENTINEL",
+            r#"{"SecretAccessKey": "SIMPLE_SENTINEL"}"#,
+            "AWS_SESSION_TOKEN=SIMPLE_SENTINEL",
+            "--api-key SIMPLE_SENTINEL",
+            "Authorization: Bearer SIMPLE_SENTINEL",
+        ] {
+            let scrubbed = scrub_credentials(raw);
+            assert!(!scrubbed.contains("SIMPLE_SENTINEL"), "{scrubbed}");
+            assert!(scrubbed.contains("REDACTED"));
+        }
+        assert_eq!(scrub_credentials("harmless text"), "harmless text");
+    }
+
+    #[test]
+    fn enums_are_closed_in_all_modes_even_for_constructed_inputs() {
+        for mode in [
+            CaptureMode::Minimal,
+            CaptureMode::MetadataOnly,
+            CaptureMode::Full,
+        ] {
+            let mut input = AgentHookInput {
+                tool_archetype: Some("SENTINEL".into()),
+                capability_kind: Some("SENTINEL".into()),
+                ..Default::default()
+            };
+            project_input_and_metadata(
+                &mut input,
+                &mut ResolvedSpanMetadata::default(),
+                mode,
+                WorkspacePathMode::Hash,
+                None,
+            );
+            assert_eq!(input.tool_archetype.as_deref(), Some("other"));
+            assert_eq!(input.capability_kind.as_deref(), Some("other"));
         }
     }
 }

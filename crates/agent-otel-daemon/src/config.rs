@@ -37,14 +37,14 @@ impl SignalExportConfig {
 ///
 /// Parsed from `AGENT_OTEL_WORKSPACE_PATH`. Unset and unrecognized values default
 /// to [`WorkspacePathMode::Hash`]. In [`CaptureMode::Minimal`], workspace paths
-/// are always hashed regardless of this setting.
+/// are always omitted regardless of this setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WorkspacePathMode {
     /// Emit `workspace.path` and `workspace.project_root` unchanged (only in opt-in capture modes).
     Absolute,
     /// Emit a path relative to the project root, and only the root's directory name (only in opt-in capture modes).
     Relative,
-    /// Emit lowercase hex SHA-256 digests of the absolute path strings.
+    /// Emit per-install keyed HMAC-SHA256 pseudonyms, or omit when no key is available.
     #[default]
     Hash,
 }
@@ -596,6 +596,7 @@ mod tests {
     #[test]
     fn resource_uses_service_name_and_attribute_merge() {
         let config = DaemonConfig::from_vars(&var_map(&[
+            ("AGENT_OTEL_CAPTURE_MODE", "metadata_only"),
             ("OTEL_SERVICE_NAME", "explicit"),
             ("OTEL_SERVICE_VERSION", "1.2.3"),
             (

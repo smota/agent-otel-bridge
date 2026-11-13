@@ -179,7 +179,7 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 
 ### 5.1.1 Current path, email, and error export behaviour
 
-**The current defaults are not zero-content or privacy-safe.** [Backlog fact F5](BACKLOG.md#verified-aob-facts) records the following code evidence, pinned to the planning baseline `96f9fdb`:
+**Historical F5 baseline before A1:** [Backlog fact F5](BACKLOG.md#verified-aob-facts) records the following code evidence, pinned to the planning baseline `96f9fdb`:
 
 | Exported data | Current behaviour | Code evidence |
 |---|---|---|
@@ -190,15 +190,18 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 
 [Work package A1](BACKLOG.md#aob-work-packages) (`AOB#17`) enforces an explicit daemon-side ingress privacy projection before OTLP export, controlled by `AGENT_OTEL_CAPTURE_MODE` and stamped on every exported `Resource` as `agent.capture.mode`:
 
-- **`minimal` (default — content-free and identifier-safe):**
+- **`minimal` (default — content-free with per-install keyed pseudonyms):**
   - `agent.capture.mode` = `"minimal"` on every trace and metric `Resource`.
   - `host.name` and `user.email` are omitted on resources and spans (`ambient_user_email` is not harvested).
-  - `workspace.path` and `workspace.project_root` are always emitted as 64-character lowercase SHA-256 hex digests.
-  - `workspace.project_name` and `vcs.repository.name` are replaced with deterministic pseudonyms (`proj_<16hex>` and `repo_<16hex>`).
+  - `workspace.path` and `workspace.project_root` are omitted entirely.
+  - `workspace.project_name` and `vcs.repository.name` are replaced with per-install HMAC-SHA256 pseudonyms (`proj_<32hex>` and `repo_<32hex>`).
   - `vcs.branch.name` (and `vcs.ref.head.name` under `gen_ai_latest_experimental`) is mapped to a closed category set: `main`, `develop`, `feature`, `fix`, `release`, `docs`, `chore`, `detached`, or `other`.
   - `span.status.message` on error spans is set to the closed `agent.error.category` (`provider_quota_exhausted`, `user_interrupted`, `schema_validation_error`, or `tool_verification_failed`); raw error text and span events are never exported.
   - `agent.tool.binary` and `agent.tool.wrapped_binary` are restricted to a closed allowlist of standard developer binaries; unrecognized or custom script names are omitted.
-  - Unrecognized custom `gen_ai.tool.name`, `capability.namespace`, `capability.name`, `gen_ai.agent.name`, and `gen_ai.agent.parent_name` values are pseudonymized (`tool_<12hex>`, `ns_<12hex>`, `cap_<12hex>`, `agent_<12hex>`), and `agent.termination_reason` / `agent.decision` / `terminal.type` are mapped to closed vocabularies.
+  - Unrecognized custom `gen_ai.tool.name`, `capability.namespace`, `capability.name`, `gen_ai.agent.name`, and `gen_ai.agent.parent_name` values are pseudonymized (`tool_<32hex>`, `ns_<32hex>`, `cap_<32hex>`, `agent_<32hex>`, `parent_agent_<32hex>`), and `agent.termination_reason` / `agent.decision` / `terminal.type` are mapped to closed vocabularies.
+  - All pseudonyms use the existing core HMAC-SHA256 implementation with a field-specific `aob.pseudonym.v1/<field>` domain, a NUL separator, and 16-byte truncation. They are stable only per install and do not guarantee anonymity. A2 will replace the install key with a customer K_link-derived key.
+  - The daemon loads `pseudonym.key` once at startup under its runtime home (`AGENT_OTEL_HOME` overrides for tests; Windows `%LOCALAPPDATA%/agent-otel-bridge`; Unix `$XDG_DATA_HOME/agent-otel-bridge` or `$HOME/.local/share/agent-otel-bridge`). Missing keys are generated using the OS CSPRNG and created exclusively, with Unix mode 0600; Windows inherits the per-user runtime directory ACL. No key reads or creation occur on the event path. Malformed/unreadable/uncreatable keys fail closed: omit pseudonymized fields, continue span export, and count failed startups in `agent.bridge.privacy.key_unavailable.total` with the sole static label `reason=key_unavailable`. Key bytes never appear in Debug, logs or exports.
+  - A final exact-key span allowlist drops future attributes until reviewed. The resource allowlist permits only bridge-owned `service.name=agent-otel-bridge`, `service.version`, telemetry SDK/distro identity, closed `service.namespace=agent-otel-bridge`, `os.type`, `agent.capture.mode`, and `deployment.environment` / `deployment.environment.name` (closed values `development`, `dev`, `test`, `staging`, `production`, `prod`, `local`, otherwise `other`). `OTEL_SERVICE_NAME` and version overrides are replaced with bridge identity/version. Other resource keys, including host/instance/enduser/team/Kubernetes identifiers and `os.description`, are dropped. Collector examples omit system resource detection so it cannot add `host.name` back.
 - **`metadata_only` (`AGENT_OTEL_CAPTURE_MODE=metadata_only` or `metadata-only`):**
   - `agent.capture.mode` = `"metadata_only"`.
   - Exports operational metadata (`workspace.project_name`, credential-sanitized `vcs.repository.name`, `vcs.branch.name`, `host.name`, and `user.email` from payload/`$USER_EMAIL` or git config when `AGENT_OTEL_ENRICH_EMAIL=true|1`).
@@ -207,6 +210,8 @@ Extracted synchronously in $< 150\mu\text{s}$ via zero-subprocess direct file in
 - **`full` (`AGENT_OTEL_CAPTURE_MODE=full`):**
   - `agent.capture.mode` = `"full"`.
   - Exports operational metadata plus bounded `span.status.message` (truncated to 160 UTF-8 bytes), while still scrubbing credentials (URL userinfo, secret query parameters, bearer tokens, and `ghp_`/`github_pat_`/`glpat-`/`sk-`/`xox`/`AKIA`/`AIza`/JWT tokens) across all exported signals.
+
+Tool archetype and capability kind are normalized to their closed enums in **all modes**; unrecognized values become `other`. Opt-in credential scrubbing is **best-effort**, including common colon/equal assignments, JSON token fields, `--token` arguments, `x-api-key` headers, and named AWS secret/session keys. Arbitrary unlabeled secrets and operational metadata can still be exposed in opt-in modes. The `hash` workspace mode uses the install key (and omits fields without it), rather than an unkeyed path digest.
 
 ### 5.2 Behavioral Tool Execution Archetypes
 Decouples observability from specific CLI tools (`rtk`, `jq`, `bat`, `delta`) by modeling functional intent:

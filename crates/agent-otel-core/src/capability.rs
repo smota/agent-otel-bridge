@@ -25,11 +25,28 @@ impl CapabilityKind {
     }
 
     pub fn from_str_name(s: &str) -> Self {
+        match Self::try_from_str_name(s) {
+            Some(kind) => kind,
+            None => CapabilityKind::Native,
+        }
+    }
+
+    pub fn try_from_str_name(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "mcp" | "model_context_protocol" => CapabilityKind::Mcp,
-            "skill" | "skillz" | "skills" => CapabilityKind::Skill,
-            "subagent" | "agent" | "delegation" => CapabilityKind::Subagent,
-            _ => CapabilityKind::Native,
+            "native" | "builtin" | "built_in" => Some(CapabilityKind::Native),
+            "mcp" | "model_context_protocol" => Some(CapabilityKind::Mcp),
+            "skill" | "skillz" | "skills" => Some(CapabilityKind::Skill),
+            "subagent" | "agent" | "delegation" => Some(CapabilityKind::Subagent),
+            _ => None,
+        }
+    }
+
+    /// Maps an input string to the closed `capability.kind` vocabulary,
+    /// returning `"other"` for any unrecognized value.
+    pub fn normalize_str_name(s: &str) -> &'static str {
+        match Self::try_from_str_name(s) {
+            Some(kind) => kind.as_str(),
+            None => "other",
         }
     }
 }

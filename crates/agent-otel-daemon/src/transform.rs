@@ -95,6 +95,7 @@ pub fn production_transform(
         now_unix_nanos,
         WorkspacePathMode::Hash,
         CaptureMode::Minimal,
+        None,
     )
 }
 
@@ -113,6 +114,7 @@ pub fn production_transform_with_capture_mode(
     now_unix_nanos: u64,
     workspace_path_mode: WorkspacePathMode,
     capture_mode: CaptureMode,
+    pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
 ) -> Result<ProductionTransformOutcome, TransformError> {
     let (header, traceparent, bytes) =
         decode_wire_payload(msg_type, payload).ok_or(TransformError::InvalidEnvelope)?;
@@ -151,7 +153,13 @@ pub fn production_transform_with_capture_mode(
             .as_ref()
             .is_some_and(|p| std::path::Path::new(p).is_absolute());
 
-    project_input_and_metadata(&mut input, &mut metadata, capture_mode, workspace_path_mode);
+    project_input_and_metadata(
+        &mut input,
+        &mut metadata,
+        capture_mode,
+        workspace_path_mode,
+        pseudonym_key,
+    );
 
     let meta = ParsedEventMeta {
         agent_name: input.agent_name.clone(),
@@ -169,7 +177,6 @@ pub fn production_transform_with_capture_mode(
         aliases,
         gen_ai_latest_experimental,
     );
-    project_span(&mut span, capture_mode);
 
     let state = if provided {
         "provided"
@@ -204,6 +211,13 @@ pub fn production_transform_with_capture_mode(
             .push(kv_int("agent.context.age_ms", age_val));
     }
 
+    if capture_mode == CaptureMode::Minimal && input.agent_name.is_none() {
+        // Span construction has a display-name fallback; a failed custom-name
+        // projection must omit the identity attribute rather than export a substitute.
+        span.attributes.retain(|kv| kv.key != "gen_ai.agent.name");
+    }
+    project_span(&mut span, capture_mode);
+
     Ok(ProductionTransformOutcome {
         span,
         meta,
@@ -216,7 +230,7 @@ pub fn production_transform_with_capture_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::privacy::{apply_workspace_path_mode, sha256_hex};
+    use crate::privacy::apply_workspace_path_mode;
     use agent_otel_ipc::frame::{encode_context_payload, WireHeader};
     use opentelemetry_proto::tonic::common::v1::any_value;
 
@@ -243,7 +257,7 @@ mod tests {
             project_name: Some("repo".to_string()),
             ..Default::default()
         };
-        apply_workspace_path_mode(&mut input, WorkspacePathMode::Relative);
+        apply_workspace_path_mode(&mut input, WorkspacePathMode::Relative, None);
         assert_eq!(input.workspace_path.as_deref(), Some("src"));
         assert_eq!(input.project_root.as_deref(), Some("repo"));
         assert_eq!(input.project_name.as_deref(), Some("repo"));
@@ -254,7 +268,7 @@ mod tests {
             project_name: Some("repo".to_string()),
             ..Default::default()
         };
-        apply_workspace_path_mode(&mut outside, WorkspacePathMode::Relative);
+        apply_workspace_path_mode(&mut outside, WorkspacePathMode::Relative, None);
         assert_eq!(outside.workspace_path, None);
         assert_eq!(outside.project_root.as_deref(), Some("repo"));
         assert_eq!(outside.project_name.as_deref(), Some("repo"));
@@ -264,47 +278,25 @@ mod tests {
             project_root: Some("/work/repo".to_string()),
             ..Default::default()
         };
-        apply_workspace_path_mode(&mut same, WorkspacePathMode::Relative);
+        apply_workspace_path_mode(&mut same, WorkspacePathMode::Relative, None);
         assert_eq!(same.workspace_path.as_deref(), Some("."));
         assert_eq!(same.project_root.as_deref(), Some("repo"));
     }
 
     #[test]
-    fn workspace_hash_is_stable_sha256_and_not_the_raw_path() {
-        const PATH: &str = "/work/repo/src";
-        const ROOT: &str = "/work/repo";
-        const PATH_HASH: &str = "cc324a191f87ae3da5bbdb78642ab3bc058214e6341c6480b674884778ebe947";
-        const ROOT_HASH: &str = "ddc5e473a09bd156b4eb7c426367aa59c37909a35241b49fbfa0631b9b532a39";
-
+    fn hash_workspace_paths_fail_closed_without_key() {
         let mut input = AgentHookInput {
-            workspace_path: Some(PATH.to_string()),
-            project_root: Some(ROOT.to_string()),
-            project_name: Some("repo".to_string()),
+            workspace_path: Some("/work/repo/src".to_string()),
+            project_root: Some("/work/repo".to_string()),
             ..Default::default()
         };
-        apply_workspace_path_mode(&mut input, WorkspacePathMode::Hash);
-        assert_eq!(input.workspace_path.as_deref(), Some(PATH_HASH));
-        assert_eq!(input.project_root.as_deref(), Some(ROOT_HASH));
-        assert_ne!(input.workspace_path.as_deref(), Some(PATH));
-        assert_eq!(input.project_name.as_deref(), Some("repo"));
-        assert_eq!(sha256_hex(PATH), sha256_hex(PATH));
-        assert!(PATH_HASH
-            .chars()
-            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        assert_eq!(PATH_HASH.len(), 64);
-
-        let mut absolute = AgentHookInput {
-            workspace_path: Some(PATH.to_string()),
-            project_root: Some(ROOT.to_string()),
-            ..Default::default()
-        };
-        apply_workspace_path_mode(&mut absolute, WorkspacePathMode::Absolute);
-        assert_eq!(absolute.workspace_path.as_deref(), Some(PATH));
-        assert_eq!(absolute.project_root.as_deref(), Some(ROOT));
+        apply_workspace_path_mode(&mut input, WorkspacePathMode::Hash, None);
+        assert_eq!(input.workspace_path, None);
+        assert_eq!(input.project_root, None);
     }
 
     #[test]
-    fn production_transform_hashes_workspace_paths_in_default_minimal_and_respects_opt_in_modes() {
+    fn production_transform_omits_workspace_paths_in_default_minimal_and_respects_opt_in_modes() {
         let contexts = ContextCache::new();
         let header = WireHeader::new(1, HookEvent::PostToolUse.to_wire());
         let json = br#"{"conversationId":"privacy","workspacePath":"/work/repo/src","projectRoot":"/work/repo","projectName":"repo"}"#;
@@ -323,17 +315,14 @@ mod tests {
             1,
         )
         .expect("default minimal transform");
-        assert_eq!(
-            string_attr(&default_minimal.span, "workspace.path"),
-            Some("cc324a191f87ae3da5bbdb78642ab3bc058214e6341c6480b674884778ebe947")
-        );
+        assert_eq!(string_attr(&default_minimal.span, "workspace.path"), None);
         assert_eq!(
             string_attr(&default_minimal.span, "workspace.project_root"),
-            Some("ddc5e473a09bd156b4eb7c426367aa59c37909a35241b49fbfa0631b9b532a39")
+            None
         );
         assert_eq!(
             string_attr(&default_minimal.span, "workspace.project_name"),
-            Some("proj_071ca22277547058")
+            None
         );
 
         let metadata_hashed = production_transform_with_capture_mode(
@@ -349,15 +338,13 @@ mod tests {
             1,
             WorkspacePathMode::Hash,
             CaptureMode::MetadataOnly,
+            None,
         )
         .expect("metadata_only hash transform");
-        assert_eq!(
-            string_attr(&metadata_hashed.span, "workspace.path"),
-            Some("cc324a191f87ae3da5bbdb78642ab3bc058214e6341c6480b674884778ebe947")
-        );
+        assert_eq!(string_attr(&metadata_hashed.span, "workspace.path"), None);
         assert_eq!(
             string_attr(&metadata_hashed.span, "workspace.project_root"),
-            Some("ddc5e473a09bd156b4eb7c426367aa59c37909a35241b49fbfa0631b9b532a39")
+            None
         );
         assert_eq!(
             string_attr(&metadata_hashed.span, "workspace.project_name"),
@@ -377,6 +364,7 @@ mod tests {
             1,
             WorkspacePathMode::Absolute,
             CaptureMode::MetadataOnly,
+            None,
         )
         .expect("metadata_only absolute transform");
         assert_eq!(
@@ -465,5 +453,48 @@ mod tests {
             Some("anthropic")
         );
         assert_eq!(string_attr(&outcome.span, "gen_ai.request.model"), None);
+    }
+    #[test]
+    fn unavailable_key_omits_pseudonymized_fields_but_preserves_span() {
+        let json = br#"{"conversationId":"safe-session","agent_name":"private agent","toolName":"private tool","projectName":"private project","vcs.repository.name":"https://example.com/private-repo.git","capabilityNamespace":"private namespace","capabilityName":"private capability","workspacePath":"/private/path","projectRoot":"/private/root","toolArchetype":"private archetype","capabilityKind":"private kind"}"#;
+        let frame = encode_context_payload(
+            WireHeader::new(2, HookEvent::PreToolUse.to_wire()),
+            None,
+            json,
+        );
+        let result = production_transform_with_capture_mode(
+            MsgType::HookPayloadWithContext,
+            &frame,
+            &ContextCache::new(),
+            1,
+            ExecutionMode::Interactive,
+            false,
+            false,
+            ResolvedSpanMetadata::default(),
+            Instant::now(),
+            1,
+            WorkspacePathMode::Hash,
+            CaptureMode::Minimal,
+            None,
+        )
+        .unwrap();
+        for key in [
+            "gen_ai.agent.name",
+            "gen_ai.tool.name",
+            "workspace.project_name",
+            "vcs.repository.name",
+            "capability.namespace",
+            "capability.name",
+            "workspace.path",
+            "workspace.project_root",
+        ] {
+            assert_eq!(string_attr(&result.span, key), None, "{key}");
+        }
+        assert_eq!(
+            string_attr(&result.span, "agent.tool.archetype"),
+            Some("other")
+        );
+        assert_eq!(string_attr(&result.span, "capability.kind"), Some("other"));
+        assert!(!format!("{:?}", result.span).contains("private"));
     }
 }

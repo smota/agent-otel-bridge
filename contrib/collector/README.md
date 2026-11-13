@@ -34,3 +34,5 @@ otelcol-contrib --config contrib/collector/local.yaml
 The daemon points at the collector with `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` and `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`.
 
 The Grafana board is `contrib/dashboards/grafana/agent-otel-bridge.json`. It reads `agent.span.calls` and the existing quota gauges. It is not a SigNoz board and it has no duration percentile panel.
+
+The local and team recipes omit the system resource detector: adding it would reintroduce `host.name` after the daemon's Minimal privacy projection.

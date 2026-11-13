@@ -12,9 +12,10 @@ use agent_otel_daemon::config::{CaptureMode, WorkspacePathMode};
 use agent_otel_daemon::context_cache::{ContextCache, ContextCacheStats};
 use agent_otel_daemon::diagnostic_metrics::append_bridge_metrics;
 use agent_otel_daemon::diagnostics::Diagnostics;
+use agent_otel_daemon::pseudonym_key::PseudonymKey;
 use agent_otel_daemon::quota::QuotaEngine;
 use agent_otel_daemon::span_assembler::SpanAssembler;
-use agent_otel_daemon::transform::{production_transform, production_transform_with_capture_mode};
+use agent_otel_daemon::transform::production_transform_with_capture_mode;
 use agent_otel_ipc::frame::{encode_context_payload, MsgType, WireHeader};
 use agent_otel_ipc::server::IngressStats;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
@@ -53,6 +54,7 @@ const G0A_SENTINELS: &[&str] = &[
     "G0A_ARG_SENTINEL_S3",
     "G0A_SIDECHAIN_SENTINEL_S3",
     "G0A_RUN_",
+    "G0A_PROMPT_SENTINEL",
     "PATH_1bc2e6a412d846c2",
     "PATH_50e028c78d6e3f1b",
     "PATH_f7391ca0f3631869",
@@ -101,10 +103,12 @@ fn wait_for_cache_ready(cache: &ContextCache, workspace_path: &str) {
         ..Default::default()
     };
     let _ = cache.lookup(&probe, Instant::now());
-    let deadline = Instant::now() + Duration::from_secs(2);
+    // Fixture warm-up can encounter cold filesystem/AV latency on Windows.
+    // Wait for a real snapshot; this is setup, not an event-path latency gate.
+    let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
-        let stats = cache.stats(Instant::now());
-        if stats.completed >= 1 {
+        let lookup = cache.lookup(&probe, Instant::now());
+        if lookup.context.is_some() {
             return;
         }
         thread::sleep(Duration::from_millis(5));
@@ -213,6 +217,11 @@ fn collect_all_strings_from_metrics_request(req: &ExportMetricsServiceRequest) -
     out
 }
 
+fn unkeyed_sha256_hex(raw: &str) -> String {
+    use sha2::{Digest, Sha256};
+    agent_otel_core::link_id::hex_encode(&Sha256::digest(raw.as_bytes()))
+}
+
 fn assert_no_sentinels_in_bytes_or_strings(
     label: &str,
     proto_bytes: &[u8],
@@ -221,6 +230,17 @@ fn assert_no_sentinels_in_bytes_or_strings(
 ) {
     let lossy_proto = String::from_utf8_lossy(proto_bytes);
     for &sentinel in sentinels {
+        let old_digest = unkeyed_sha256_hex(sentinel);
+        for hex in [&old_digest[..12], &old_digest[..16], old_digest.as_str()] {
+            assert!(
+                !lossy_proto.contains(hex),
+                "[{label}] leaked old unkeyed digest"
+            );
+            assert!(
+                extracted_strings.iter().all(|s| !s.contains(hex)),
+                "[{label}] leaked old unkeyed digest"
+            );
+        }
         assert!(
             !lossy_proto.contains(sentinel),
             "[{label}] serialized OTLP protobuf bytes leaked sentinel substring {sentinel:?}"
@@ -246,9 +266,14 @@ fn default_mode_rejects_all_forbidden_field_sentinels_across_spans_events_resour
     let cache = ContextCache::new();
     wait_for_cache_ready(&cache, &repo_path_str);
 
-    // Default DaemonConfig with hostile ambient resource attributes and environment
-    let config = DaemonConfig::from_vars(&|key| {
-        match key {
+    let key = PseudonymKey::load_or_create(&base_dir.join("privacy-home")).unwrap();
+    let other_key = PseudonymKey::load_or_create(&base_dir.join("other-privacy-home")).unwrap();
+    for configured_mode in [None, Some("invalid-capture-mode"), Some("minimal")] {
+        // Default DaemonConfig with hostile ambient resource attributes and environment
+        let config = DaemonConfig::from_vars(&|key| {
+            match key {
+        "AGENT_OTEL_CAPTURE_MODE" => configured_mode.map(str::to_string),
+        "AGENT_OTEL_ENRICH_EMAIL" => Some("true".to_string()),
         "USER_EMAIL" => Some("sentinel.user.f5@secret-corp.example".to_string()),
         "GIT_AUTHOR_EMAIL" => Some("sentinel.user.f5@secret-corp.example".to_string()),
         "HOSTNAME" => Some("SENTINEL-HOST-F5.corp.internal".to_string()),
@@ -258,193 +283,279 @@ fn default_mode_rejects_all_forbidden_field_sentinels_across_spans_events_resour
         ),
         _ => None,
     }
-    });
+        });
 
-    let resource = config.resource();
+        assert_eq!(config.capture_mode, CaptureMode::Minimal);
+        assert_eq!(agent_otel_daemon::daemon::ambient_user_email(&config), None);
+        let resource = config.resource();
 
-    let metadata = ResolvedSpanMetadata {
-        user_email: Some("sentinel.user.f5@secret-corp.example"),
-        terminal_type: Some("/Users/SENTINEL_USER_77/SENTINEL-HOST-F5"),
-    };
+        let metadata = ResolvedSpanMetadata {
+            user_email: Some("sentinel.user.f5@secret-corp.example"),
+            terminal_type: Some("/Users/SENTINEL_USER_77/SENTINEL-HOST-F5"),
+        };
 
-    let payload_json = serde_json::json!({
-        "conversationId": "conv-sentinel-audit",
-        "stepIdx": 7,
-        "agent_name": "SENTINEL_USER_77_custom_agent",
-        "user_email": "sentinel.user.f5@secret-corp.example",
-        "workspacePath": repo_path_str,
-        "projectRoot": repo_path_str,
-        "projectName": "SENTINEL_REPO_99",
-        "vcs.repository.name": "https://SENTINEL_USER_77:ghp_SENTINEL_TOKEN_88@git.sentinel-host.internal/SENTINEL_USER_77/SENTINEL_REPO_99.git",
-        "vcs.branch.name": "feat/SENTINEL_BRANCH_SECRET_42",
-        "prompt": "SENTINEL_PROMPT_TEXT_TOP_SECRET",
-        "toolName": "run_command",
-        "toolCall": {
-            "id": "call-sentinel-1",
-            "name": "run_command",
-            "arguments": {
-                "CommandLine": "/Users/SENTINEL_USER_77/bin/SENTINEL_CMD_BINARY --token ghp_SENTINEL_TOKEN_88 SENTINEL_PROMPT_TEXT_TOP_SECRET",
+        let payload_json = serde_json::json!({
+            "conversationId": "conv-sentinel-audit",
+            "stepIdx": 7,
+            "agent_name": "SENTINEL_USER_77_custom_agent",
+            "user_email": "sentinel.user.f5@secret-corp.example",
+            "workspacePath": repo_path_str,
+            "projectRoot": repo_path_str,
+            "projectName": "SENTINEL_REPO_99",
+            "vcs.repository.name": "https://SENTINEL_USER_77:ghp_SENTINEL_TOKEN_88@git.sentinel-host.internal/SENTINEL_USER_77/SENTINEL_REPO_99.git",
+            "vcs.branch.name": "feat/SENTINEL_BRANCH_SECRET_42",
+            "prompt": "SENTINEL_PROMPT_TEXT_TOP_SECRET",
+            "toolArchetype": "SENTINEL_USER_77",
+            "capabilityKind": "SENTINEL_USER_77",
+            "toolName": "run_command",
+            "toolCall": {
+                "id": "call-sentinel-1",
+                "name": "run_command",
+                "arguments": {
+                    "CommandLine": "/Users/SENTINEL_USER_77/bin/SENTINEL_CMD_BINARY --token ghp_SENTINEL_TOKEN_88 SENTINEL_PROMPT_TEXT_TOP_SECRET",
+                    "prompt": "SENTINEL_PROMPT_TEXT_TOP_SECRET"
+                }
+            },
+            "tool_input": {
+                "command": "/Users/SENTINEL_USER_77/bin/SENTINEL_CMD_BINARY --token ghp_SENTINEL_TOKEN_88",
                 "prompt": "SENTINEL_PROMPT_TEXT_TOP_SECRET"
+            },
+            "tool_response": {
+                "stdout": "SENTINEL_TOOL_OUTPUT_STDOUT_DATA",
+                "stderr": "SENTINEL_TOOL_OUTPUT_STDERR_DATA"
+            },
+            "error": "Fatal error: SENTINEL_ERROR_RAW_MESSAGE_555 for SENTINEL_USER_77 at /Users/SENTINEL_USER_77/SENTINEL_HOME_PATH_11",
+            "terminationReason": "Fatal error: SENTINEL_ERROR_RAW_MESSAGE_555",
+            "transcript_path": "/Users/SENTINEL_USER_77/SENTINEL_HOME_PATH_11/transcript.jsonl",
+            "inputTokens": 120,
+            "outputTokens": 45
+        });
+        let payload_bytes = serde_json::to_vec(&payload_json).expect("serialize sentinel fixture");
+
+        let mut assembler = SpanAssembler::default();
+        let mut exported_spans: Vec<Span> = Vec::new();
+        let now = Instant::now();
+
+        for (idx, event) in [HookEvent::PreToolUse, HookEvent::PostToolUse]
+            .into_iter()
+            .enumerate()
+        {
+            let header = WireHeader::new(ClientKind::Antigravity.to_wire(), event.to_wire());
+            let frame = encode_context_payload(header, None, &payload_bytes);
+            let outcome = production_transform_with_capture_mode(
+                MsgType::HookPayloadWithContext,
+                &frame,
+                &cache,
+                (idx + 1) as u32,
+                ExecutionMode::Interactive,
+                true,
+                true,
+                metadata,
+                now + Duration::from_millis(idx as u64 * 10),
+                1_700_000_000_000_000_000 + (idx as u64 * 10_000_000),
+                config.workspace_path_mode,
+                config.capture_mode,
+                Some(&key),
+            )
+            .expect("transform sentinel frame");
+
+            assert_eq!(outcome.context_source, "workspace_cache");
+            let other = production_transform_with_capture_mode(
+                MsgType::HookPayloadWithContext,
+                &frame,
+                &cache,
+                (idx + 1) as u32,
+                ExecutionMode::Interactive,
+                true,
+                true,
+                metadata,
+                now,
+                1,
+                config.workspace_path_mode,
+                config.capture_mode,
+                Some(&other_key),
+            )
+            .unwrap();
+            let project = |span: &Span| {
+                span.attributes
+                    .iter()
+                    .find(|kv| kv.key == "workspace.project_name")
+                    .cloned()
+            };
+            assert!(project(&outcome.span).is_some());
+            assert_ne!(project(&outcome.span), project(&other.span));
+            for span in
+                assembler.observe(outcome.span, now + Duration::from_millis(idx as u64 * 10))
+            {
+                exported_spans.push(span);
             }
-        },
-        "tool_input": {
-            "command": "/Users/SENTINEL_USER_77/bin/SENTINEL_CMD_BINARY --token ghp_SENTINEL_TOKEN_88",
-            "prompt": "SENTINEL_PROMPT_TEXT_TOP_SECRET"
-        },
-        "tool_response": {
-            "stdout": "SENTINEL_TOOL_OUTPUT_STDOUT_DATA",
-            "stderr": "SENTINEL_TOOL_OUTPUT_STDERR_DATA"
-        },
-        "error": "Fatal error: SENTINEL_ERROR_RAW_MESSAGE_555 for SENTINEL_USER_77 at /Users/SENTINEL_USER_77/SENTINEL_HOME_PATH_11",
-        "terminationReason": "Fatal error: SENTINEL_ERROR_RAW_MESSAGE_555",
-        "transcript_path": "/Users/SENTINEL_USER_77/SENTINEL_HOME_PATH_11/transcript.jsonl",
-        "inputTokens": 120,
-        "outputTokens": 45
-    });
-    let payload_bytes = serde_json::to_vec(&payload_json).expect("serialize sentinel fixture");
-
-    let mut assembler = SpanAssembler::default();
-    let mut exported_spans: Vec<Span> = Vec::new();
-    let now = Instant::now();
-
-    for (idx, event) in [HookEvent::PreToolUse, HookEvent::PostToolUse]
-        .into_iter()
-        .enumerate()
-    {
-        let header = WireHeader::new(ClientKind::Antigravity.to_wire(), event.to_wire());
-        let frame = encode_context_payload(header, None, &payload_bytes);
-        let outcome = production_transform(
-            MsgType::HookPayloadWithContext,
-            &frame,
-            &cache,
-            (idx + 1) as u32,
-            ExecutionMode::Interactive,
-            true,
-            true,
-            metadata,
-            now + Duration::from_millis(idx as u64 * 10),
-            1_700_000_000_000_000_000 + (idx as u64 * 10_000_000),
-        )
-        .expect("transform sentinel frame");
-
-        for span in assembler.observe(outcome.span, now + Duration::from_millis(idx as u64 * 10)) {
-            exported_spans.push(span);
         }
-    }
-    assert_eq!(exported_spans.len(), 1, "expected paired tool span");
+        assert_eq!(exported_spans.len(), 1, "expected paired tool span");
 
-    let mut batcher = SpanBatcher::new(resource.clone(), 1);
-    batcher
-        .try_push(exported_spans.remove(0), Instant::now())
-        .expect("push span");
-    let trace_batch = batcher.take().expect("batch ready");
+        let mut batcher = SpanBatcher::new(resource.clone(), 1);
+        batcher
+            .try_push(exported_spans.remove(0), Instant::now())
+            .expect("push span");
+        let trace_batch = batcher.take().expect("batch ready");
 
-    let trace_bytes = trace_batch.request.encode_to_vec();
-    let trace_strings = collect_all_strings_from_trace_request(&trace_batch.request);
-    assert_no_sentinels_in_bytes_or_strings(
-        "synthetic_sentinel_traces",
-        &trace_bytes,
-        &trace_strings,
-        SENTINELS,
-    );
+        let trace_bytes = trace_batch.request.encode_to_vec();
+        let trace_strings = collect_all_strings_from_trace_request(&trace_batch.request);
+        assert_no_sentinels_in_bytes_or_strings(
+            "synthetic_sentinel_traces",
+            &trace_bytes,
+            &trace_strings,
+            SENTINELS,
+        );
 
-    // Also test metrics export path (QuotaEngine + bridge diagnostic metrics) with the same resource & activity
-    let quota_engine = QuotaEngine::new();
-    quota_engine.record_activity("SENTINEL_USER_77_custom_agent", Some(165));
-    let snapshots = quota_engine.snapshots();
-    let mut metrics_req = build_multi_quota_metrics_request_opts(
-        resource.clone(),
-        &snapshots,
-        config.emit_legacy_aliases,
-    );
-    append_bridge_metrics(
-        &mut metrics_req,
-        1_700_000_000_000_000_000,
-        &IngressStats::default(),
-        &Diagnostics::default().snapshot(),
-        &ContextCacheStats::default(),
-        config.gen_ai_latest_experimental,
-    );
-    let metrics_bytes = metrics_req.encode_to_vec();
-    let metrics_strings = collect_all_strings_from_metrics_request(&metrics_req);
-    assert_no_sentinels_in_bytes_or_strings(
-        "synthetic_sentinel_metrics",
-        &metrics_bytes,
-        &metrics_strings,
-        SENTINELS,
-    );
-
-    // Resource must carry agent.capture.mode = "minimal" in default mode
-    let capture_mode_attr = resource.attributes.iter().find_map(|kv| {
-        if kv.key == "agent.capture.mode" {
-            match kv.value.as_ref()?.value.as_ref()? {
+        // Also test metrics export path (QuotaEngine + bridge diagnostic metrics) with the same resource & activity
+        let quota_engine = QuotaEngine::new();
+        // Activity accepts the identity already projected by production transform.
+        let projected_agent = trace_batch.request.resource_spans[0].scope_spans[0].spans[0]
+            .attributes
+            .iter()
+            .find(|kv| kv.key == "gen_ai.agent.name")
+            .and_then(|kv| match kv.value.as_ref()?.value.as_ref()? {
                 any_value::Value::StringValue(s) => Some(s.as_str()),
                 _ => None,
-            }
-        } else {
-            None
-        }
-    });
-    assert_eq!(
-        capture_mode_attr,
-        Some("minimal"),
-        "default resource must stamp agent.capture.mode=minimal"
-    );
+            })
+            .unwrap();
+        quota_engine.record_activity(projected_agent, Some(165));
+        let snapshots = quota_engine.snapshots();
+        let mut metrics_req = build_multi_quota_metrics_request_opts(
+            resource.clone(),
+            &snapshots,
+            config.emit_legacy_aliases,
+        );
+        append_bridge_metrics(
+            &mut metrics_req,
+            1_700_000_000_000_000_000,
+            &IngressStats::default(),
+            &Diagnostics::default().snapshot(),
+            &ContextCacheStats::default(),
+            config.gen_ai_latest_experimental,
+        );
+        let metrics_bytes = metrics_req.encode_to_vec();
+        let metrics_strings = collect_all_strings_from_metrics_request(&metrics_req);
+        assert_no_sentinels_in_bytes_or_strings(
+            "synthetic_sentinel_metrics",
+            &metrics_bytes,
+            &metrics_strings,
+            SENTINELS,
+        );
 
+        // Resource must carry agent.capture.mode = "minimal" in default mode
+        let capture_mode_attr = resource.attributes.iter().find_map(|kv| {
+            if kv.key == "agent.capture.mode" {
+                match kv.value.as_ref()?.value.as_ref()? {
+                    any_value::Value::StringValue(s) => Some(s.as_str()),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        });
+        assert_eq!(
+            capture_mode_attr,
+            Some("minimal"),
+            "default resource must stamp agent.capture.mode=minimal"
+        );
+
+        assert_no_sentinels_in_bytes_or_strings(
+            "paths_and_names",
+            &trace_bytes,
+            &trace_strings,
+            &[
+                &repo_path_str,
+                "SENTINEL_REPO_99",
+                "SENTINEL_USER_77_custom_agent",
+            ],
+        );
+    }
     let _ = fs::remove_dir_all(base_dir);
 }
 
 #[test]
 fn g0a_captures_replay_in_default_mode_emits_zero_sentinels() {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let captures_root = manifest_dir
+    use std::collections::BTreeMap;
+    let captures_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("workspace root")
-        .join("docs/contracts/fact-export-v1/captures/g0a-20261112/claude-2.1.322");
-
+        .unwrap()
+        .join("docs/contracts/fact-export-v1/captures/g0a-20261112");
+    let matrix: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(captures_root.join("capture-matrix.json")).unwrap(),
+    )
+    .unwrap();
+    let mut sources = BTreeMap::new();
+    for row in matrix["rows"].as_array().unwrap() {
+        for relative in row["sanitized_derivative_sha256"]
+            .as_object()
+            .unwrap()
+            .keys()
+        {
+            if !relative.ends_with(".jsonl") {
+                continue;
+            }
+            let directory = Path::new(relative)
+                .parent()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            let client = match row["harness"].as_str().unwrap() {
+                "claude" | "claude-code" => ClientKind::ClaudeCode.to_wire(),
+                "codex" => ClientKind::Codex.to_wire(),
+                other => panic!("unhandled capture harness {other}"),
+            };
+            let entry = sources
+                .entry(directory)
+                .or_insert((client, relative.clone()));
+            if relative.ends_with("hook-sanitized.jsonl") {
+                *entry = (client, relative.clone());
+            }
+        }
+    }
+    assert!(sources.keys().any(|s| s.starts_with("codex-0.167.0/")));
+    let base = create_sentinel_workspace();
+    let workspace = base.join("SENTINEL_USER_77/SENTINEL_HOME_PATH_11/SENTINEL_REPO_99");
+    let path = workspace.to_string_lossy().to_string();
+    let key = PseudonymKey::load_or_create(&base.join("privacy-home")).unwrap();
     let cache = ContextCache::new();
+    wait_for_cache_ready(&cache, &path);
     let config = DaemonConfig::from_vars(&|_| None);
-    let resource = config.resource();
-    let metadata = ResolvedSpanMetadata::default();
-    let mut assembler = SpanAssembler::default();
-    let mut spans = Vec::new();
-    let now = Instant::now();
     let mut seq = 0u32;
-
-    for scenario in ["S1", "S2", "S3"] {
-        let jsonl_path = captures_root.join(scenario).join("hook-sanitized.jsonl");
-        let content = fs::read_to_string(&jsonl_path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", jsonl_path.display()));
+    for (directory, (client, relative)) in sources {
+        let content = fs::read_to_string(captures_root.join(relative)).unwrap();
+        let mut spans = Vec::new();
         for line in content.lines() {
-            let record: serde_json::Value =
-                serde_json::from_str(line).expect("parse G0a capture JSONL line");
-            let Some(stdin_obj) = record.get("stdin") else {
+            let record: serde_json::Value = serde_json::from_str(line).unwrap();
+            // Codex has no captured hooks: replay its session payload through the same
+            // production ingress as a synthetic envelope, without claiming native-hook conformance.
+            let mut input = record
+                .get("stdin")
+                .or_else(|| record.get("payload"))
+                .unwrap_or(&record)
+                .clone();
+            let Some(obj) = input.as_object_mut() else {
                 continue;
             };
-            let mut stdin_patched = stdin_obj.clone();
-            if let Some(obj) = stdin_patched.as_object_mut() {
-                if obj.contains_key("conversation_id") && obj.contains_key("session_id") {
-                    obj.remove("session_id");
-                }
-                if let Some(cwd) = obj.get("cwd").cloned() {
-                    obj.entry("workspacePath").or_insert(cwd);
-                }
+            if obj.contains_key("conversation_id") {
+                obj.remove("session_id");
             }
-            let header_obj = record.get("header");
-            let client_id = header_obj
-                .and_then(|h| h.get("client_id"))
-                .and_then(|v| v.as_u64())
-                .unwrap_or(2) as u16;
-            let event_id = header_obj
-                .and_then(|h| h.get("event_id"))
-                .and_then(|v| v.as_u64())
-                .unwrap_or(3) as u8;
-            let payload_bytes = serde_json::to_vec(&stdin_patched).expect("serialize G0a stdin");
-            let header = WireHeader::new(client_id, event_id);
-            let frame = encode_context_payload(header, None, &payload_bytes);
-            seq = seq.wrapping_add(1);
-            let Ok(outcome) = production_transform(
+            obj.insert("workspacePath".into(), path.clone().into());
+            let header = record.get("header");
+            let client_id = header
+                .and_then(|h| h["client_id"].as_u64())
+                .unwrap_or(client as u64) as u16;
+            let event_id = header
+                .and_then(|h| h["event_id"].as_u64())
+                .unwrap_or(HookEvent::PreToolUse.to_wire() as u64) as u8;
+            let frame = encode_context_payload(
+                WireHeader::new(client_id, event_id),
+                None,
+                &serde_json::to_vec(&input).unwrap(),
+            );
+            seq += 1;
+            let outcome = production_transform_with_capture_mode(
                 MsgType::HookPayloadWithContext,
                 &frame,
                 &cache,
@@ -452,39 +563,35 @@ fn g0a_captures_replay_in_default_mode_emits_zero_sentinels() {
                 ExecutionMode::Interactive,
                 true,
                 true,
-                metadata,
-                now + Duration::from_millis(seq as u64),
-                1_794_355_200_000_000_000 + (seq as u64 * 1_000_000),
-            ) else {
-                continue;
-            };
-            spans.push(outcome.span.clone());
-            for paired in assembler.observe(outcome.span, now + Duration::from_millis(seq as u64)) {
-                spans.push(paired);
-            }
+                ResolvedSpanMetadata::default(),
+                Instant::now(),
+                1,
+                config.workspace_path_mode,
+                config.capture_mode,
+                Some(&key),
+            )
+            .unwrap_or_else(|e| panic!("{directory} record {seq}: {e}"));
+            assert_eq!(outcome.context_source, "workspace_cache", "{directory}");
+            spans.push(outcome.span);
         }
-    }
-
-    assert!(!spans.is_empty(), "expected spans from G0a captures");
-    let trace_req = ExportTraceServiceRequest {
-        resource_spans: vec![ResourceSpans {
-            resource: Some(resource),
-            scope_spans: vec![ScopeSpans {
-                scope: None,
-                spans,
-                schema_url: String::new(),
+        assert!(!spans.is_empty(), "no replayed records in {directory}");
+        let request = ExportTraceServiceRequest {
+            resource_spans: vec![ResourceSpans {
+                resource: Some(config.resource()),
+                scope_spans: vec![ScopeSpans {
+                    spans,
+                    ..Default::default()
+                }],
+                ..Default::default()
             }],
-            schema_url: String::new(),
-        }],
-    };
-    let trace_bytes = trace_req.encode_to_vec();
-    let trace_strings = collect_all_strings_from_trace_request(&trace_req);
-    assert_no_sentinels_in_bytes_or_strings(
-        "g0a_captures_replay",
-        &trace_bytes,
-        &trace_strings,
-        G0A_SENTINELS,
-    );
+        };
+        let bytes = request.encode_to_vec();
+        let strings = collect_all_strings_from_trace_request(&request);
+        assert_no_sentinels_in_bytes_or_strings(&directory, &bytes, &strings, G0A_SENTINELS);
+        assert_no_sentinels_in_bytes_or_strings(&directory, &bytes, &strings, SENTINELS);
+        assert_no_sentinels_in_bytes_or_strings(&directory, &bytes, &strings, &[&path]);
+    }
+    fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
@@ -558,6 +665,7 @@ fn opt_in_modes_stamp_resource_and_never_export_credentials_or_prompt_content() 
         1_700_000_000_000_000_000,
         WorkspacePathMode::Hash,
         CaptureMode::MetadataOnly,
+        None,
     )
     .expect("metadata_only transform");
 
@@ -622,6 +730,7 @@ fn opt_in_modes_stamp_resource_and_never_export_credentials_or_prompt_content() 
         1_700_000_000_000_000_000,
         WorkspacePathMode::Absolute,
         CaptureMode::Full,
+        None,
     )
     .expect("full transform");
 

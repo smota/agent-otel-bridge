@@ -15,6 +15,7 @@ pub mod pipeline;
 pub mod platform;
 pub mod platforms;
 pub mod privacy;
+pub mod pseudonym_key;
 pub mod quota;
 mod quota_worker;
 pub mod span_assembler;

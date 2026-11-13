@@ -21,10 +21,7 @@ receivers:
         endpoint: localhost:4318
 
 processors:
-  # System attributes fill gaps only. Existing resource attributes stay.
-  resourcedetection:
-    detectors: [system]
-    override: false
+  # No system resource detector: it would reintroduce host.name after Minimal projection.
   # Redact the operator address. update does not create the key and does not
   # drop the span or any other attribute.
   attributes/redact_user_email:
@@ -48,9 +45,9 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, attributes/redact_user_email, batch]
+      processors: [memory_limiter, attributes/redact_user_email, batch]
       exporters: [debug]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, batch]
+      processors: [memory_limiter, batch]
       exporters: [debug]

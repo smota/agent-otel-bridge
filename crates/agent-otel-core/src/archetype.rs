@@ -39,29 +39,50 @@ impl ToolArchetype {
     }
 
     pub fn from_str_name(s: &str) -> Self {
+        match Self::try_from_str_name(s) {
+            Some(archetype) => archetype,
+            None => ToolArchetype::GenericExec,
+        }
+    }
+
+    pub fn try_from_str_name(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "filter_compressor" | "filter" | "compressor" | "proxy" => {
-                ToolArchetype::FilterCompressor
+                Some(ToolArchetype::FilterCompressor)
             }
-            "structured_parser" | "parser" | "json" | "yaml" => ToolArchetype::StructuredParser,
-            "inspector_diff" | "inspector" | "diff" | "viewer" => ToolArchetype::InspectorDiff,
+            "structured_parser" | "parser" | "json" | "yaml" => {
+                Some(ToolArchetype::StructuredParser)
+            }
+            "inspector_diff" | "inspector" | "diff" | "viewer" => {
+                Some(ToolArchetype::InspectorDiff)
+            }
             "search_retrieval" | "search" | "retrieval" | "finder" => {
-                ToolArchetype::SearchRetrieval
+                Some(ToolArchetype::SearchRetrieval)
             }
             "build_test_verify" | "build" | "test" | "verify" | "linter" => {
-                ToolArchetype::BuildTestVerify
+                Some(ToolArchetype::BuildTestVerify)
             }
             "state_mutation" | "mutation" | "mutate" | "fs_mutation" | "write" => {
-                ToolArchetype::StateMutation
+                Some(ToolArchetype::StateMutation)
             }
             "env_pkg_manager" | "pkg_manager" | "package" | "pkg" | "deps" | "dependency" => {
-                ToolArchetype::EnvPkgManager
+                Some(ToolArchetype::EnvPkgManager)
             }
-            "vcs_lifecycle" | "vcs" | "git" | "source_control" => ToolArchetype::VcsLifecycle,
+            "vcs_lifecycle" | "vcs" | "git" | "source_control" => Some(ToolArchetype::VcsLifecycle),
             "network_transfer" | "network" | "remote_fetch" | "http" | "download" => {
-                ToolArchetype::NetworkTransfer
+                Some(ToolArchetype::NetworkTransfer)
             }
-            _ => ToolArchetype::GenericExec,
+            "generic_exec" | "generic" | "exec" => Some(ToolArchetype::GenericExec),
+            _ => None,
+        }
+    }
+
+    /// Maps an input string to the closed `agent.tool.archetype` vocabulary,
+    /// returning `"other"` for any unrecognized value.
+    pub fn normalize_str_name(s: &str) -> &'static str {
+        match Self::try_from_str_name(s) {
+            Some(archetype) => archetype.as_str(),
+            None => "other",
         }
     }
 }

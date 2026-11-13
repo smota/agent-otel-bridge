@@ -17,6 +17,7 @@ use std::sync::atomic::Ordering;
 
 fn diagnostic_snapshot() -> DiagnosticSnapshot {
     DiagnosticSnapshot {
+        pseudonym_key_unavailable: 1,
         transformed: 30,
         invalid: 3,
         span_size: 4,
@@ -102,7 +103,7 @@ fn appends_cumulative_event_outcomes_without_conflating_unknown() {
         false,
     );
 
-    assert_eq!(appended, 8);
+    assert_eq!(appended, 9);
     let events = metric_named(&request, METRIC_BRIDGE_EVENTS);
     assert_eq!(events.unit, "{event}");
     let metric::Data::Sum(sum) = events.data.as_ref().expect("event metric data") else {
