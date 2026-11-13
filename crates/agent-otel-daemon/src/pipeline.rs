@@ -58,22 +58,7 @@ impl ExportQueue {
                 .fetch_add(count as u64, Ordering::Relaxed);
             return;
         };
-        let bytes = self
-            .stats
-            .queued_bytes
-            .fetch_add(batch.encoded_bytes, Ordering::Relaxed)
-            + batch.encoded_bytes;
-        self.stats
-            .peak_queued_bytes
-            .fetch_max(bytes, Ordering::Relaxed);
-        self.stats.queued_items.fetch_add(1, Ordering::Relaxed);
-        let queued = QueuedBatch {
-            batch,
-            _permit: permit,
-            stats: self.stats.clone(),
-            attempted: false,
-            accounted: false,
-        };
+        let queued = self.reserve(batch, permit);
         match self.tx.try_send(queued) {
             Ok(()) => {
                 self.stats
@@ -88,6 +73,58 @@ impl ExportQueue {
                     .fetch_add(count as u64, Ordering::Relaxed);
             }
         }
+    }
+    fn reserve(&self, batch: ExportBatch, permit: OwnedSemaphorePermit) -> QueuedBatch {
+        let bytes = self
+            .stats
+            .queued_bytes
+            .fetch_add(batch.encoded_bytes, Ordering::Relaxed)
+            + batch.encoded_bytes;
+        self.stats
+            .peak_queued_bytes
+            .fetch_max(bytes, Ordering::Relaxed);
+        self.stats.queued_items.fetch_add(1, Ordering::Relaxed);
+        QueuedBatch {
+            batch,
+            _permit: permit,
+            stats: self.stats.clone(),
+            attempted: false,
+            accounted: false,
+        }
+    }
+
+    /// Shutdown-only backpressure, bounded by the daemon's absolute deadline.
+    /// Normal event admission continues to use the nonblocking enqueue method.
+    pub async fn enqueue_until(&self, batch: ExportBatch, deadline: tokio::time::Instant) {
+        let count = batch.count as u64;
+        if tokio::time::Instant::now() >= deadline {
+            self.stats
+                .shutdown_dropped
+                .fetch_add(count, Ordering::Relaxed);
+            return;
+        }
+        let Ok(Ok(permit)) = tokio::time::timeout_at(
+            deadline,
+            self.bytes
+                .clone()
+                .acquire_many_owned(batch.encoded_bytes as u32),
+        )
+        .await
+        else {
+            self.stats
+                .shutdown_dropped
+                .fetch_add(count, Ordering::Relaxed);
+            return;
+        };
+        let queued = self.reserve(batch, permit);
+        if matches!(
+            tokio::time::timeout_at(deadline, self.tx.send(queued)).await,
+            Ok(Ok(()))
+        ) {
+            self.stats.export_queued.fetch_add(count, Ordering::Relaxed);
+        }
+        // A timeout/closed channel drops the unattempted QueuedBatch guard,
+        // reconciling shutdown loss and byte/item reservations exactly once.
     }
 }
 pub async fn export_worker(

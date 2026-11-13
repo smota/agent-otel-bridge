@@ -864,6 +864,9 @@ pub fn project_input_and_metadata(
     workspace_path_mode: WorkspacePathMode,
     key: Option<&PseudonymKey>,
 ) {
+    // Raw native call identity is consumed only by the pre-projection assembler key.
+    input.native_tool_call_id = None;
+
     input.tool_archetype = input
         .tool_archetype
         .as_deref()
@@ -1335,6 +1338,8 @@ const MINIMAL_SPAN_KEYS: &[&str] = &[
     "agent.context.source",
     "agent.context.age_ms",
     "agent.span.paired",
+    // Generated only by the daemon assembler; fixed outcomes, never input content.
+    "agent.span.outcome",
     "agent.span.duration_source",
     "agent.span.incomplete_reason",
     "gen_ai.usage.cache_read_tokens",

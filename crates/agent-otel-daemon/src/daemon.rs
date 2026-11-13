@@ -167,7 +167,11 @@ impl Daemon {
         });
         let mut batch =
             SpanBatcher::with_schema(self.config.resource(), self.config.batch_size, schema_url);
-        let mut span_assembler = SpanAssembler::default();
+        let mut span_assembler = SpanAssembler::with_diagnostics(
+            crate::span_assembler::OPEN_SPAN_CAPACITY,
+            crate::span_assembler::OPEN_SPAN_TTL,
+            stats.clone(),
+        );
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
         let user_email = ambient_user_email(&self.config);
@@ -232,6 +236,7 @@ impl Daemon {
                     processed += 1;
                 }
                 _ = tick.tick() => {
+                    enqueue_spans(span_assembler.expire(Instant::now()), &mut batch, &queue, &stats);
                     if let Some(ready) = batch.take_due(Instant::now(), self.config.batch_timeout) { queue.enqueue(ready); }
                     if last_activity.elapsed() >= self.config.idle_timeout { break; }
                 }
@@ -244,9 +249,12 @@ impl Daemon {
         metrics.abort();
         let _ = (&mut metrics).await;
         if !server_finished
-            && tokio::time::timeout_at(deadline, &mut server)
-                .await
-                .is_err()
+            && tokio::time::timeout_at(
+                deadline.min(tokio::time::Instant::now() + Duration::from_millis(200)),
+                &mut server,
+            )
+            .await
+            .is_err()
         {
             server.abort();
             let _ = (&mut server).await;
@@ -276,9 +284,14 @@ impl Daemon {
                 );
             }
         }
-        if let Some(ready) = batch.take() {
-            queue.enqueue(ready);
-        }
+        enqueue_shutdown_spans(
+            span_assembler.drain_shutdown(deadline.into_std()),
+            &mut batch,
+            &queue,
+            &stats,
+            deadline,
+        )
+        .await;
         drop(queue);
         if tokio::time::timeout_at(deadline, &mut export)
             .await
@@ -286,6 +299,31 @@ impl Daemon {
         {
             export.abort();
             let _ = (&mut export).await;
+        }
+        // Publish final drain counters when budget remains; this uses the same deadline.
+        if tokio::time::Instant::now() < deadline {
+            let mut request = agent_otel_core::quota::build_multi_quota_metrics_request_opts(
+                self.config.resource(),
+                &[],
+                false,
+            );
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            crate::diagnostic_metrics::append_bridge_metrics(
+                &mut request,
+                now,
+                &ingress,
+                &stats.snapshot(),
+                &contexts.stats(Instant::now()),
+                self.config.gen_ai_latest_experimental,
+            );
+            let _ = tokio::time::timeout_at(
+                deadline,
+                self.exporter.export_metrics_until(&request, deadline),
+            )
+            .await;
         }
         // Bounded fact-only summary, useful to an owned test collector even if OTLP is down.
         let summary = serde_json::json!({"kind":"bridge_diagnostics", "pipeline":stats.snapshot(),
@@ -471,7 +509,21 @@ fn transform(
 
     stats.record_trace_fallback(outcome.trace_fallback_unkeyed);
     stats.transformed.fetch_add(1, Ordering::Relaxed);
-    for span in assembler.observe(outcome.span, now_instant) {
+    enqueue_spans(
+        assembler.observe_qualified(outcome.span, outcome.pairing_identity, now_instant),
+        batch,
+        queue,
+        stats,
+    );
+}
+
+fn enqueue_spans(
+    spans: Vec<opentelemetry_proto::tonic::trace::v1::Span>,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+) {
+    for span in spans {
         match batch.try_push(span, Instant::now()) {
             Ok(ready) => {
                 if let Some(ready) = ready {
@@ -487,6 +539,39 @@ fn transform(
                 stats.span_size.fetch_add(1, Ordering::Relaxed);
             }
         }
+    }
+}
+
+async fn enqueue_shutdown_spans(
+    spans: Vec<opentelemetry_proto::tonic::trace::v1::Span>,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+    deadline: tokio::time::Instant,
+) {
+    for span in spans {
+        if tokio::time::Instant::now() >= deadline {
+            stats.shutdown_dropped.fetch_add(1, Ordering::Relaxed);
+            continue;
+        }
+        match batch.try_push(span, Instant::now()) {
+            Ok(ready) => {
+                if let Some(ready) = ready {
+                    queue.enqueue_until(ready, deadline).await;
+                }
+                if batch.is_full() {
+                    if let Some(ready) = batch.take() {
+                        queue.enqueue_until(ready, deadline).await;
+                    }
+                }
+            }
+            Err(_) => {
+                stats.span_size.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+    if let Some(ready) = batch.take() {
+        queue.enqueue_until(ready, deadline).await;
     }
 }
 

@@ -25,10 +25,12 @@ const EVENT_COUNT: u64 = 24;
 struct CollectorStats {
     trace_requests: AtomicU64,
     metric_requests: AtomicU64,
+    metric_payloads: Mutex<Vec<ExportMetricsServiceRequest>>,
     parsed_spans: AtomicU64,
     parse_failures: AtomicU64,
     transport_aborts: AtomicU64,
     unique_spans: Mutex<HashSet<(Vec<u8>, Vec<u8>)>>,
+    spans: Mutex<Vec<opentelemetry_proto::tonic::trace::v1::Span>>,
 }
 
 struct TestCollector {
@@ -242,6 +244,126 @@ fn valid_one_kib_event(workspace: &str) -> Vec<u8> {
     encode_frame(MsgType::HookPayload, &payload)
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shutdown_exports_open_pres_beyond_queue_capacity_as_drained() {
+    check_open_span_shutdown(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shutdown_with_open_pre_and_blocked_collector_respects_deadline() {
+    check_open_span_shutdown(true).await;
+}
+
+async fn check_open_span_shutdown(blocked: bool) {
+    let count: u64 = if blocked { 1 } else { 96 };
+    let collector = TestCollector::start().await;
+    if !blocked {
+        collector.release_traces.cancel();
+    }
+    let endpoint = unique_ipc_endpoint();
+    let mut config = DaemonConfig::from_vars(&|_| None);
+    config.pipe_name = endpoint.clone();
+    config.otlp_endpoint = collector.endpoint.clone();
+    config.traces = SignalExportConfig::http_protobuf(format!("{}/v1/traces", collector.endpoint));
+    config.metrics =
+        SignalExportConfig::http_protobuf(format!("{}/v1/metrics", collector.endpoint));
+    config.batch_size = 1;
+    config.idle_timeout = Duration::MAX;
+    let shutdown = CancellationToken::new();
+    let diagnostics = Arc::new(Diagnostics::default());
+    let daemon = Daemon::new(config, shutdown.clone()).unwrap();
+    let handle = tokio::spawn({
+        let diagnostics = diagnostics.clone();
+        async move {
+            daemon
+                .run_with_diagnostics(diagnostics, Arc::new(IngressStats::default()))
+                .await
+        }
+    });
+    for index in 0..count {
+        let mut payload =
+            WireHeader::new(ClientKind::Codex.to_wire(), HookEvent::PreToolUse.to_wire())
+                .encode()
+                .to_vec();
+        payload.extend_from_slice(&serde_json::to_vec(&serde_json::json!({
+            "session_id":"DRAIN_SESSION_SENTINEL", "tool_use_id":format!("DRAIN CALL SENTINEL {index}"), "tool_name":"Read"
+        })).unwrap());
+        send_native(&endpoint, &encode_frame(MsgType::HookPayload, &payload))
+            .await
+            .unwrap();
+    }
+    wait_until(Duration::from_secs(3), || {
+        diagnostics.transformed.load(Ordering::Relaxed) == count
+    })
+    .await;
+    assert_eq!(collector.stats.parsed_spans.load(Ordering::Relaxed), 0);
+    let started = tokio::time::Instant::now();
+    shutdown.cancel();
+    tokio::time::timeout(Duration::from_millis(5_500), handle)
+        .await
+        .expect("shutdown deadline")
+        .unwrap()
+        .unwrap();
+    assert!(started.elapsed() <= Duration::from_millis(5_500));
+    let snapshot = diagnostics.snapshot();
+    assert_eq!(snapshot.span_shutdown_drained, count);
+    assert_eq!(
+        snapshot.export_queued, count,
+        "all open Pres must enter the exporter on shutdown"
+    );
+    assert_eq!(
+        snapshot.accepted + snapshot.rejected + snapshot.unknown + snapshot.shutdown_dropped,
+        count
+    );
+    assert_eq!(snapshot.queued_items, 0);
+    assert_eq!(snapshot.queued_bytes, 0);
+    if !blocked {
+        assert_eq!(snapshot.accepted, count);
+        let spans = collector.stats.spans.lock().unwrap();
+        assert_eq!(spans.len(), count as usize);
+        for span in spans.iter() {
+            assert!(span.attributes.iter().any(|kv| kv
+                == &agent_otel_core::otlp::kv_string("agent.span.outcome", "drained_unpaired")));
+            assert!(!format!("{span:?}").contains("SENTINEL"));
+        }
+    }
+    if !blocked {
+        use opentelemetry_proto::tonic::{
+            common::v1::any_value,
+            metrics::v1::{metric, number_data_point},
+        };
+        assert!(
+            collector
+                .stats
+                .metric_payloads
+                .lock()
+                .unwrap()
+                .iter()
+                .flat_map(|request| &request.resource_metrics)
+                .flat_map(|resource| &resource.scope_metrics)
+                .flat_map(|scope| &scope.metrics)
+                .filter(|metric| metric.name == "agent.bridge.spans.unpaired.total")
+                .any(|metric| {
+                    let Some(metric::Data::Sum(sum)) = &metric.data else {
+                        return false;
+                    };
+                    sum.data_points.iter().any(|point| {
+                        point.value == Some(number_data_point::Value::AsInt(count as i64))
+                            && point.attributes.iter().any(|kv| {
+                                kv.key == "reason"
+                                    && kv.value.as_ref().and_then(|v| v.value.as_ref())
+                                        == Some(&any_value::Value::StringValue(
+                                            "shutdown".to_string(),
+                                        ))
+                            })
+                    })
+                }),
+            "final drain counter must reach the owned collector"
+        );
+    }
+    collector.stop().await;
+}
+
 async fn wait_until(timeout: Duration, predicate: impl Fn() -> bool) {
     let started = tokio::time::Instant::now();
     loop {
@@ -337,6 +459,7 @@ async fn handle_collector_request(
                         .flat_map(|scope| &scope.spans)
                     {
                         unique_spans.insert((span.trace_id.clone(), span.span_id.clone()));
+                        stats.spans.lock().unwrap().push(span.clone());
                     }
                     let spans = request
                         .resource_spans
@@ -354,8 +477,11 @@ async fn handle_collector_request(
             release_traces.cancelled().await;
         }
         (_, "/v1/metrics") => {
-            if ExportMetricsServiceRequest::decode(body.as_slice()).is_err() {
-                stats.parse_failures.fetch_add(1, Ordering::Relaxed);
+            match ExportMetricsServiceRequest::decode(body.as_slice()) {
+                Ok(request) => stats.metric_payloads.lock().unwrap().push(request),
+                Err(_) => {
+                    stats.parse_failures.fetch_add(1, Ordering::Relaxed);
+                }
             }
             stats.metric_requests.fetch_add(1, Ordering::Relaxed);
         }

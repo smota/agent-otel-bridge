@@ -269,6 +269,17 @@ pub struct AgentHookInput {
     #[serde(alias = "tool_call", alias = "toolCall", default)]
     pub tool_call: Option<ToolCallInfo>,
 
+    /// Native top-level call identity consumed privately by daemon pairing.
+    /// It is never serialized or stamped on a span, and privacy projection clears it.
+    #[serde(
+        alias = "tool_use_id",
+        alias = "tool_call_id",
+        alias = "call_id",
+        skip_serializing,
+        default
+    )]
+    pub native_tool_call_id: Option<String>,
+
     #[serde(alias = "tool_name", alias = "toolName", default)]
     pub tool_name: Option<String>,
 
@@ -585,12 +596,45 @@ impl AgentHookInput {
                 let mut decoder = serde_json::Deserializer::from_slice(bytes);
                 let mut object = serde::Deserializer::deserialize_map(&mut decoder, UniqueObject)?;
                 decoder.end()?;
+                // Captured harness payloads may repeat the same native session under
+                // different aliases. Accept identical values only, preserving raw bytes.
+                let mut removed = false;
+                let session_aliases = [
+                    "conversationId",
+                    "conversation_id",
+                    "sessionId",
+                    "session_id",
+                ];
+                if let Some(value) = session_aliases
+                    .iter()
+                    .find_map(|name| object.get(*name))
+                    .cloned()
+                {
+                    if session_aliases
+                        .iter()
+                        .filter_map(|name| object.get(*name))
+                        .any(|other| other != &value)
+                    {
+                        return Err(error);
+                    }
+                    if session_aliases
+                        .iter()
+                        .filter(|name| object.contains_key(**name))
+                        .count()
+                        > 1
+                    {
+                        for name in session_aliases {
+                            object.remove(name);
+                        }
+                        object.insert("conversationId".to_string(), value);
+                        removed = true;
+                    }
+                }
                 let keys: Vec<String> = object
                     .keys()
                     .filter(|key| key.contains('_'))
                     .cloned()
                     .collect();
-                let mut removed = false;
                 for key in keys {
                     let mut camel = String::new();
                     let mut uppercase = false;

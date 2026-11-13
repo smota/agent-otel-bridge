@@ -39,6 +39,8 @@ pub struct ParsedEventMeta {
 
 #[derive(Debug, Clone)]
 pub struct ProductionTransformOutcome {
+    /// In-memory raw pairing identity; Debug is redacted and it is never stamped on spans.
+    pub pairing_identity: crate::span_assembler::PairingIdentity,
     /// True only when neither key supplied a fallback and no W3C ingress won.
     pub trace_fallback_unkeyed: bool,
     pub span: Span,
@@ -179,6 +181,8 @@ pub fn production_transform_with_session_link(
     };
 
     let link = crate::session_link::resolve(session_link, header.client_id, &input);
+    let pairing_identity =
+        crate::span_assembler::PairingIdentity::from_input(header.client_id, event, &input);
     let mut context = resolve_trace_context(
         input.traceparent.as_deref(),
         traceparent,
@@ -272,6 +276,7 @@ pub fn production_transform_with_session_link(
     project_span(&mut span, capture_mode);
 
     Ok(ProductionTransformOutcome {
+        pairing_identity,
         trace_fallback_unkeyed,
         span,
         meta,

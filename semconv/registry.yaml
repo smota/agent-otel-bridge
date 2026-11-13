@@ -358,6 +358,11 @@ groups:
         stability: development
         brief: "True when a Pre hook was joined with a later Post or Stop hook."
         examples: [true]
+      - id: agent.span.outcome
+        type: string
+        stability: development
+        brief: "Closed assembler outcome for expired, replaced, or shutdown-drained Pre spans."
+        examples: ['expired_unpaired', 'replaced_unpaired', 'drained_unpaired']
 
   - id: registry.agent.tool
     type: attribute_group
