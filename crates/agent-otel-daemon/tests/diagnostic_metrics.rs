@@ -20,6 +20,10 @@ fn diagnostic_snapshot() -> DiagnosticSnapshot {
         pseudonym_key_unavailable: 1,
         trace_fallback_unkeyed: 2,
         transformed: 30,
+        span_expired_ttl: 3,
+        span_expired_capacity: 4,
+        span_replaced: 5,
+        span_shutdown_drained: 6,
         invalid: 3,
         span_size: 4,
         export_queued: 27,
@@ -104,7 +108,7 @@ fn appends_cumulative_event_outcomes_without_conflating_unknown() {
         false,
     );
 
-    assert_eq!(appended, 10);
+    assert_eq!(appended, 11);
     let fallback = metric_named(&request, "agent.bridge.trace_fallback.unkeyed");
     let metric::Data::Sum(fallback) = fallback.data.as_ref().unwrap() else {
         panic!("counter");
@@ -289,5 +293,44 @@ fn gen_ai_latest_experimental_renames_counters_without_emitting_both() {
     assert_eq!(
         metric_named(&request, METRIC_BRIDGE_EVENTS_OPT_IN).unit,
         "{event}"
+    );
+}
+
+#[test]
+fn unpaired_counters_have_exact_static_reasons_and_values() {
+    let mut request = ExportMetricsServiceRequest::default();
+    append_bridge_metrics(
+        &mut request,
+        1,
+        &IngressStats::default(),
+        &diagnostic_snapshot(),
+        &context_snapshot(),
+        false,
+    );
+    let metric = metric_named(&request, "agent.bridge.spans.unpaired.total");
+    let metric::Data::Sum(sum) = metric.data.as_ref().unwrap() else {
+        panic!("counter");
+    };
+    assert!(sum.is_monotonic);
+    assert_eq!(
+        sum.aggregation_temporality,
+        AggregationTemporality::Cumulative as i32
+    );
+    let values: HashMap<_, _> = sum
+        .data_points
+        .iter()
+        .map(|p| {
+            assert_eq!(p.attributes.len(), 1);
+            (label(p, "reason").unwrap(), int_value(p))
+        })
+        .collect();
+    assert_eq!(
+        values,
+        HashMap::from([
+            ("ttl", 3),
+            ("evicted_unpaired", 4),
+            ("duplicate_pre", 5),
+            ("shutdown", 6)
+        ])
     );
 }

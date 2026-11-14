@@ -462,9 +462,11 @@ fn default_mode_rejects_all_forbidden_field_sentinels_across_spans_events_resour
             };
             assert!(project(&outcome.span).is_some());
             assert_ne!(project(&outcome.span), project(&other.span));
-            for span in
-                assembler.observe(outcome.span, now + Duration::from_millis(idx as u64 * 10))
-            {
+            for span in assembler.observe_qualified(
+                outcome.span,
+                outcome.pairing_identity,
+                now + Duration::from_millis(idx as u64 * 10),
+            ) {
                 exported_spans.push(span);
             }
         }

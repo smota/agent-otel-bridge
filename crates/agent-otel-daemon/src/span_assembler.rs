@@ -8,21 +8,29 @@
 //! The map is owned by the daemon run loop. Expired or displaced Pres are
 //! emitted with equal start and end. Nothing is written to disk.
 
-use agent_otel_core::model::HookEvent;
-use agent_otel_core::otlp::kv_bool;
-use agent_otel_core::semconv::{
-    AGENT_DECISION, AGENT_ERROR_CATEGORY, AGENT_FULLY_IDLE, AGENT_HOOK_EVENT, AGENT_SPAN_PAIRED,
-    AGENT_STEP_INDEX, AGENT_SUCCESS, AGENT_TERMINATION_REASON, AGENT_TOOL_COMPRESSION_RATIO,
-    AGENT_TOOL_TOKENS_SAVED, AGY_TERMINATION_REASON, CAPABILITY_CONSECUTIVE_RETRIES,
-    CAPABILITY_IS_WASTE, CAPABILITY_KIND, CAPABILITY_NAME, CAPABILITY_NAMESPACE,
-    CAPABILITY_RESPONSE_BYTES, CAPABILITY_RESPONSE_TOKENS, CAPABILITY_SCHEMA_TOKENS, ERROR_TYPE,
-    GEN_AI_CONVERSATION_ID, GEN_AI_RESPONSE_FINISH_REASONS, GEN_AI_RESPONSE_MODEL,
-    GEN_AI_TOOL_CALL_ID, GEN_AI_TOOL_NAME, GEN_AI_USAGE_CACHE_READ_TOKENS,
-    GEN_AI_USAGE_INPUT_TOKENS, GEN_AI_USAGE_OUTPUT_TOKENS,
+use crate::diagnostics::Diagnostics;
+use agent_otel_core::link_id::{
+    is_valid_native_session, resolve_harness_identity, CanonicalHarness, MAX_LINK_FIELD_BYTES,
 };
-use opentelemetry_proto::tonic::common::v1::{any_value, KeyValue};
+use agent_otel_core::model::{AgentHookInput, HookEvent};
+use agent_otel_core::otlp::{kv_bool, kv_string};
+#[cfg(test)]
+use agent_otel_core::semconv::AGENT_HOOK_EVENT;
+use agent_otel_core::semconv::{
+    AGENT_DECISION, AGENT_ERROR_CATEGORY, AGENT_FULLY_IDLE, AGENT_SPAN_OUTCOME, AGENT_SPAN_PAIRED,
+    AGENT_SUCCESS, AGENT_TERMINATION_REASON, AGENT_TOOL_COMPRESSION_RATIO, AGENT_TOOL_TOKENS_SAVED,
+    AGY_TERMINATION_REASON, CAPABILITY_CONSECUTIVE_RETRIES, CAPABILITY_IS_WASTE, CAPABILITY_KIND,
+    CAPABILITY_NAME, CAPABILITY_NAMESPACE, CAPABILITY_RESPONSE_BYTES, CAPABILITY_RESPONSE_TOKENS,
+    CAPABILITY_SCHEMA_TOKENS, ERROR_TYPE, GEN_AI_RESPONSE_FINISH_REASONS, GEN_AI_RESPONSE_MODEL,
+    GEN_AI_TOOL_NAME, GEN_AI_USAGE_CACHE_READ_TOKENS, GEN_AI_USAGE_INPUT_TOKENS,
+    GEN_AI_USAGE_OUTPUT_TOKENS,
+};
+#[cfg(test)]
+use opentelemetry_proto::tonic::common::v1::any_value;
+use opentelemetry_proto::tonic::common::v1::KeyValue;
 use opentelemetry_proto::tonic::trace::v1::Span;
 use std::collections::HashMap;
+use std::sync::{atomic::Ordering, Arc};
 use std::time::{Duration, Instant};
 
 pub const OPEN_SPAN_CAPACITY: usize = 1024;
@@ -58,23 +66,117 @@ const TOOL_RESULT_IF_ABSENT: &[&str] = &[
     AGENT_TOOL_COMPRESSION_RATIO,
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct PairScope {
+    harness: CanonicalHarness,
+    session: String,
+    origin: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 enum PairKey {
-    ToolCall(String),
+    ToolCall {
+        scope: PairScope,
+        id: String,
+    },
     ToolFallback {
-        conversation: String,
-        step: Option<i64>,
+        scope: PairScope,
+        step: u64,
         tool: String,
     },
-    Invoke(String),
+    Invoke(PairScope),
+}
+
+/// Raw identity captured before normalization or privacy projection. Never exported.
+/// Like A2, a nonzero wire ID is authoritative; only wire 0 uses the alias table.
+/// The map belongs to one daemon/provisioning snapshot, so org/endpoint scope are fixed.
+#[derive(Clone)]
+pub struct PairingIdentity {
+    event: HookEvent,
+    key: Option<PairKey>,
+}
+
+impl std::fmt::Debug for PairingIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PairingIdentity(<redacted>)")
+    }
+}
+
+impl PairingIdentity {
+    pub fn from_input(wire_client_id: u16, event: HookEvent, input: &AgentHookInput) -> Self {
+        Self {
+            event,
+            key: Self::key(wire_client_id, event, input),
+        }
+    }
+
+    fn key(wire_client_id: u16, event: HookEvent, input: &AgentHookInput) -> Option<PairKey> {
+        let harness = resolve_harness_identity(
+            Some(wire_client_id),
+            (wire_client_id == 0)
+                .then_some(input.agent_name.as_deref())
+                .flatten(),
+        )
+        .ok()?;
+        let session = input
+            .conversation_id
+            .as_deref()
+            .filter(|s| is_valid_native_session(s))?;
+        let origin = input.origin.as_deref().unwrap_or("harness");
+        if origin.len() > MAX_LINK_FIELD_BYTES {
+            return None;
+        }
+        let scope = PairScope {
+            harness,
+            session: session.to_owned(),
+            origin: origin.to_owned(),
+        };
+        match event {
+            HookEvent::PreToolUse | HookEvent::PostToolUse => {
+                if input.native_tool_call_id_conflict {
+                    return None;
+                }
+                let nested = input.resolved_tool_call_id().filter(|id| !id.is_empty());
+                let native = input
+                    .native_tool_call_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty());
+                if nested.zip(native).is_some_and(|(a, b)| a != b) {
+                    return None;
+                }
+                if let Some(id) = nested.or(native) {
+                    return (id.len() <= MAX_LINK_FIELD_BYTES).then(|| PairKey::ToolCall {
+                        scope,
+                        id: id.to_owned(),
+                    });
+                }
+                // Without a call ID, require both fallback fields; never join anonymous calls.
+                let tool = input.resolved_tool_name()?;
+                if tool.is_empty() || tool.len() > MAX_LINK_FIELD_BYTES {
+                    return None;
+                }
+                Some(PairKey::ToolFallback {
+                    scope,
+                    step: input.step_idx?,
+                    tool: tool.to_owned(),
+                })
+            }
+            HookEvent::PreInvocation | HookEvent::PostInvocation | HookEvent::Stop => {
+                Some(PairKey::Invoke(scope))
+            }
+            HookEvent::Unknown => None,
+        }
+    }
 }
 
 struct OpenSpan {
     span: Span,
     opened: Instant,
+    sequence: u64,
 }
 
 enum Action {
+    Ignore,
     Immediate,
     Open(PairKey),
     Close(PairKey),
@@ -87,6 +189,8 @@ pub struct SpanAssembler {
     open: HashMap<PairKey, OpenSpan>,
     capacity: usize,
     ttl: Duration,
+    sequence: u64,
+    stats: Arc<Diagnostics>,
 }
 
 impl Default for SpanAssembler {
@@ -97,26 +201,51 @@ impl Default for SpanAssembler {
 
 impl SpanAssembler {
     pub fn new(capacity: usize, ttl: Duration) -> Self {
-        let capacity = capacity.max(1);
+        Self::with_diagnostics(capacity, ttl, Arc::new(Diagnostics::default()))
+    }
+
+    pub fn with_diagnostics(capacity: usize, ttl: Duration, stats: Arc<Diagnostics>) -> Self {
+        let capacity = capacity.clamp(1, OPEN_SPAN_CAPACITY);
         Self {
             open: HashMap::with_capacity(capacity.min(OPEN_SPAN_CAPACITY)),
             capacity,
-            ttl,
+            ttl: ttl.min(OPEN_SPAN_TTL),
+            sequence: 0,
+            stats,
         }
     }
 
     /// Spans to export now, oldest eviction first. A stored Pre returns nothing.
-    pub fn observe(&mut self, span: Span, now: Instant) -> Vec<Span> {
+    pub fn observe_qualified(
+        &mut self,
+        span: Span,
+        identity: PairingIdentity,
+        now: Instant,
+    ) -> Vec<Span> {
         let mut out = Vec::new();
         self.flush_expired(now, &mut out);
-        match classify(&span) {
+        match classify(identity) {
+            Action::Ignore => {}
             Action::Immediate => out.push(emit_unpaired(span)),
             Action::Open(key) => {
                 if let Some(previous) = self.open.remove(&key) {
-                    out.push(emit_unpaired(previous.span));
+                    self.stats.span_replaced.fetch_add(1, Ordering::Relaxed);
+                    out.push(emit_incomplete(
+                        previous.span,
+                        "replaced_unpaired",
+                        "duplicate_pre",
+                    ));
                 }
                 self.evict_if_full(&mut out);
-                self.open.insert(key, OpenSpan { span, opened: now });
+                self.sequence = self.sequence.saturating_add(1);
+                self.open.insert(
+                    key,
+                    OpenSpan {
+                        span,
+                        opened: now,
+                        sequence: self.sequence,
+                    },
+                );
             }
             Action::Close(key) => {
                 if let Some(previous) = self.open.remove(&key) {
@@ -132,6 +261,57 @@ impl SpanAssembler {
             }
         }
         out
+    }
+
+    /// Called by the daemon timer even when no more hooks arrive.
+    pub fn expire(&mut self, now: Instant) -> Vec<Span> {
+        let mut out = Vec::new();
+        self.flush_expired(now, &mut out);
+        out
+    }
+
+    /// Empty the bounded map inside the existing absolute shutdown budget.
+    /// Work that cannot be prepared before the deadline is explicitly accounted as dropped.
+    pub fn drain_shutdown(&mut self, deadline: Instant) -> Vec<Span> {
+        let mut out = Vec::with_capacity(self.open.len());
+        let mut pending: Vec<_> = self.open.drain().map(|(_, open)| open).collect();
+        pending.sort_by_key(|open| (open.opened, open.sequence));
+        for open in pending {
+            if Instant::now() >= deadline {
+                self.stats.shutdown_dropped.fetch_add(1, Ordering::Relaxed);
+            } else {
+                self.stats
+                    .span_shutdown_drained
+                    .fetch_add(1, Ordering::Relaxed);
+                out.push(emit_incomplete(open.span, "drained_unpaired", "shutdown"));
+            }
+        }
+        out
+    }
+
+    // Existing span-construction unit fixtures have unprojected attributes.
+    // Production callers must supply the raw identity captured by the transform.
+    #[cfg(test)]
+    fn observe(&mut self, span: Span, now: Instant) -> Vec<Span> {
+        use agent_otel_core::model::ToolCallInfo;
+        use agent_otel_core::semconv::{
+            AGENT_STEP_INDEX, GEN_AI_CONVERSATION_ID, GEN_AI_TOOL_CALL_ID,
+        };
+        let input = AgentHookInput {
+            conversation_id: attr_str(&span, GEN_AI_CONVERSATION_ID).map(str::to_owned),
+            step_idx: attr_int(&span, AGENT_STEP_INDEX).map(|step| step as u64),
+            tool_name: attr_str(&span, GEN_AI_TOOL_NAME).map(str::to_owned),
+            tool_call: Some(ToolCallInfo {
+                id: attr_str(&span, GEN_AI_TOOL_CALL_ID).map(str::to_owned),
+                name: None,
+                arguments: None,
+            }),
+            ..Default::default()
+        };
+        let event = attr_str(&span, AGENT_HOOK_EVENT)
+            .map(HookEvent::from_str_name)
+            .unwrap_or(HookEvent::Unknown);
+        self.observe_qualified(span, PairingIdentity::from_input(3, event, &input), now)
     }
 
     fn flush_expired(&mut self, now: Instant, out: &mut Vec<Span>) {
@@ -151,7 +331,8 @@ impl SpanAssembler {
             .collect();
         for key in expired {
             if let Some(open) = self.open.remove(&key) {
-                out.push(emit_unpaired(open.span));
+                self.stats.span_expired_ttl.fetch_add(1, Ordering::Relaxed);
+                out.push(emit_incomplete(open.span, "expired_unpaired", "ttl"));
             }
         }
     }
@@ -163,49 +344,40 @@ impl SpanAssembler {
         let oldest = self
             .open
             .iter()
-            .min_by_key(|(_, open)| open.opened)
+            .min_by_key(|(_, open)| (open.opened, open.sequence))
             .map(|(key, _)| key.clone());
         if let Some(key) = oldest {
             if let Some(open) = self.open.remove(&key) {
-                out.push(emit_unpaired(open.span));
+                self.stats
+                    .span_expired_capacity
+                    .fetch_add(1, Ordering::Relaxed);
+                out.push(emit_incomplete(open.span, "evicted_unpaired", "capacity"));
             }
         }
     }
 }
 
-fn classify(span: &Span) -> Action {
-    let event = attr_str(span, AGENT_HOOK_EVENT)
-        .map(HookEvent::from_str_name)
-        .unwrap_or(HookEvent::Unknown);
-    match event {
-        HookEvent::PreToolUse => Action::Open(tool_key(span)),
-        HookEvent::PostToolUse => Action::Close(tool_key(span)),
-        HookEvent::PreInvocation => Action::Open(invoke_key(span)),
-        HookEvent::PostInvocation => Action::Close(invoke_key(span)),
-        HookEvent::Stop => Action::Stop(invoke_key(span)),
+fn classify(identity: PairingIdentity) -> Action {
+    let Some(key) = identity.key else {
+        return if identity.event == HookEvent::Stop {
+            Action::Ignore
+        } else {
+            Action::Immediate
+        };
+    };
+    match identity.event {
+        HookEvent::PreToolUse | HookEvent::PreInvocation => Action::Open(key),
+        HookEvent::PostToolUse | HookEvent::PostInvocation => Action::Close(key),
+        HookEvent::Stop => Action::Stop(key),
         HookEvent::Unknown => Action::Immediate,
     }
 }
 
-fn tool_key(span: &Span) -> PairKey {
-    if let Some(id) = attr_str(span, GEN_AI_TOOL_CALL_ID).filter(|id| !id.is_empty()) {
-        return PairKey::ToolCall(id.to_string());
-    }
-    PairKey::ToolFallback {
-        conversation: attr_str(span, GEN_AI_CONVERSATION_ID)
-            .unwrap_or("")
-            .to_string(),
-        step: attr_int(span, AGENT_STEP_INDEX),
-        tool: attr_str(span, GEN_AI_TOOL_NAME).unwrap_or("").to_string(),
-    }
-}
-
-fn invoke_key(span: &Span) -> PairKey {
-    PairKey::Invoke(
-        attr_str(span, GEN_AI_CONVERSATION_ID)
-            .unwrap_or("")
-            .to_string(),
-    )
+fn emit_incomplete(span: Span, outcome: &'static str, reason: &'static str) -> Span {
+    let mut span = emit_unpaired(span);
+    upsert(&mut span, kv_string(AGENT_SPAN_OUTCOME, outcome));
+    upsert(&mut span, kv_string("agent.span.incomplete_reason", reason));
+    span
 }
 
 fn emit_unpaired(mut span: Span) -> Span {
@@ -259,6 +431,7 @@ fn find_attr<'a>(span: &'a Span, key: &str) -> Option<&'a KeyValue> {
     span.attributes.iter().find(|attr| attr.key == key)
 }
 
+#[cfg(test)]
 fn attr_str<'a>(span: &'a Span, key: &str) -> Option<&'a str> {
     match find_attr(span, key)?.value.as_ref()?.value.as_ref()? {
         any_value::Value::StringValue(value) => Some(value.as_str()),
@@ -266,6 +439,7 @@ fn attr_str<'a>(span: &'a Span, key: &str) -> Option<&'a str> {
     }
 }
 
+#[cfg(test)]
 fn attr_int(span: &Span, key: &str) -> Option<i64> {
     match find_attr(span, key)?.value.as_ref()?.value.as_ref()? {
         any_value::Value::IntValue(value) => Some(*value),

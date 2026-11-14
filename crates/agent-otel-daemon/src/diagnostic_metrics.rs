@@ -86,6 +86,18 @@ pub fn append_bridge_metrics(
             pipeline.trace_fallback_unkeyed,
         )],
     ));
+    metrics.push(counter(
+        "agent.bridge.spans.unpaired.total",
+        "Buffered Pre spans released without a matching Post, before backend acceptance.",
+        "{span}",
+        observed_at_unix_nano,
+        vec![
+            point1("reason", "ttl", pipeline.span_expired_ttl),
+            point1("reason", "evicted_unpaired", pipeline.span_expired_capacity),
+            point1("reason", "duplicate_pre", pipeline.span_replaced),
+            point1("reason", "shutdown", pipeline.span_shutdown_drained),
+        ],
+    ));
     let appended = metrics.len();
     scope_metrics(request).metrics.extend(metrics);
     appended

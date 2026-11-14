@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- The IPC server join wait during daemon shutdown is now at most 200 ms (previously up to 5 s), within the same absolute five-second shutdown budget. A frame still in flight may be admitted or explicitly counted as dropped.
+
 - With K_link, fallback trace IDs derive from the link tag or a separate keyed hash; without it, the historical unkeyed trace fallback remains. Minimal now pseudonymizes or omits all conversation/root session IDs, including opaque IDs. Daemon key storage uses `Zeroizing`; `LinkIdInput` Debug redacts every field.
 
 - **Minimal capture uses per-install keyed pseudonyms, not reversible path hashes:** `workspace.path` and `workspace.project_root` are omitted. Project/repository and custom tool, capability and agent names use domain-separated HMAC-SHA256, truncated to 16 bytes (32 hex characters). Pseudonyms are stable only within an install; this is not an anonymity guarantee. A key failure omits pseudonymized fields while spans still export, and increments a static-label counter. A2 keeps the install pseudonym key separate from the jointly provisioned session-link key.

@@ -167,7 +167,11 @@ impl Daemon {
         });
         let mut batch =
             SpanBatcher::with_schema(self.config.resource(), self.config.batch_size, schema_url);
-        let mut span_assembler = SpanAssembler::default();
+        let mut span_assembler = SpanAssembler::with_diagnostics(
+            crate::span_assembler::OPEN_SPAN_CAPACITY,
+            crate::span_assembler::OPEN_SPAN_TTL,
+            stats.clone(),
+        );
         let mut salt = 0u32;
         // Resolve ambient metadata once, never on the event-processing path.
         let user_email = ambient_user_email(&self.config);
@@ -232,6 +236,7 @@ impl Daemon {
                     processed += 1;
                 }
                 _ = tick.tick() => {
+                    enqueue_spans(span_assembler.expire(Instant::now()), &mut batch, &queue, &stats);
                     if let Some(ready) = batch.take_due(Instant::now(), self.config.batch_timeout) { queue.enqueue(ready); }
                     if last_activity.elapsed() >= self.config.idle_timeout { break; }
                 }
@@ -244,9 +249,12 @@ impl Daemon {
         metrics.abort();
         let _ = (&mut metrics).await;
         if !server_finished
-            && tokio::time::timeout_at(deadline, &mut server)
-                .await
-                .is_err()
+            && tokio::time::timeout_at(
+                deadline.min(tokio::time::Instant::now() + Duration::from_millis(200)),
+                &mut server,
+            )
+            .await
+            .is_err()
         {
             server.abort();
             let _ = (&mut server).await;
@@ -258,7 +266,8 @@ impl Daemon {
             } else {
                 // Quota collection is stopped during drain; event transformation remains pure.
                 process_frame_without_quota(
-                    frame,
+                    frame.msg_type,
+                    &frame.payload,
                     &contexts,
                     &mut batch,
                     &queue,
@@ -273,12 +282,19 @@ impl Daemon {
                     self.pseudonym_key.as_ref(),
                     &session_link,
                     &mut span_assembler,
-                );
+                    deadline,
+                )
+                .await;
             }
         }
-        if let Some(ready) = batch.take() {
-            queue.enqueue(ready);
-        }
+        enqueue_shutdown_spans(
+            span_assembler.drain_shutdown(deadline.into_std()),
+            &mut batch,
+            &queue,
+            &stats,
+            deadline,
+        )
+        .await;
         drop(queue);
         if tokio::time::timeout_at(deadline, &mut export)
             .await
@@ -286,6 +302,31 @@ impl Daemon {
         {
             export.abort();
             let _ = (&mut export).await;
+        }
+        // Publish final drain counters when budget remains; this uses the same deadline.
+        if tokio::time::Instant::now() < deadline {
+            let mut request = agent_otel_core::quota::build_multi_quota_metrics_request_opts(
+                self.config.resource(),
+                &[],
+                false,
+            );
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            crate::diagnostic_metrics::append_bridge_metrics(
+                &mut request,
+                now,
+                &ingress,
+                &stats.snapshot(),
+                &contexts.stats(Instant::now()),
+                self.config.gen_ai_latest_experimental,
+            );
+            let _ = tokio::time::timeout_at(
+                deadline,
+                self.exporter.export_metrics_until(&request, deadline),
+            )
+            .await;
         }
         // Bounded fact-only summary, useful to an owned test collector even if OTLP is down.
         let summary = serde_json::json!({"kind":"bridge_diagnostics", "pipeline":stats.snapshot(),
@@ -355,12 +396,11 @@ fn process_frame(
     session_link: &crate::session_link::SessionLinkConfig,
     assembler: &mut SpanAssembler,
 ) {
-    transform(
-        frame,
+    let spans = transform(
+        frame.msg_type,
+        &frame.payload,
         contexts,
         Some(quotas),
-        batch,
-        queue,
         stats,
         salt,
         mode,
@@ -373,10 +413,12 @@ fn process_frame(
         session_link,
         assembler,
     );
+    enqueue_spans(spans, batch, queue, stats);
 }
 #[allow(clippy::too_many_arguments)]
-fn process_frame_without_quota(
-    frame: IngressFrame,
+async fn process_frame_without_quota(
+    msg_type: agent_otel_ipc::frame::MsgType,
+    payload: &[u8],
     contexts: &ContextCache,
     batch: &mut SpanBatcher,
     queue: &ExportQueue,
@@ -391,13 +433,13 @@ fn process_frame_without_quota(
     pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
     session_link: &crate::session_link::SessionLinkConfig,
     assembler: &mut SpanAssembler,
+    deadline: tokio::time::Instant,
 ) {
-    transform(
-        frame,
+    let spans = transform(
+        msg_type,
+        payload,
         contexts,
         None,
-        batch,
-        queue,
         stats,
         salt,
         mode,
@@ -410,14 +452,14 @@ fn process_frame_without_quota(
         session_link,
         assembler,
     );
+    enqueue_shutdown_spans(spans, batch, queue, stats, deadline).await;
 }
 #[allow(clippy::too_many_arguments)]
 fn transform(
-    frame: IngressFrame,
+    msg_type: agent_otel_ipc::frame::MsgType,
+    payload: &[u8],
     contexts: &ContextCache,
     quotas: Option<&QuotaWorker>,
-    batch: &mut SpanBatcher,
-    queue: &ExportQueue,
     stats: &Diagnostics,
     salt: &mut u32,
     mode: ExecutionMode,
@@ -429,7 +471,7 @@ fn transform(
     pseudonym_key: Option<&crate::pseudonym_key::PseudonymKey>,
     session_link: &crate::session_link::SessionLinkConfig,
     assembler: &mut SpanAssembler,
-) {
+) -> Vec<opentelemetry_proto::tonic::trace::v1::Span> {
     let now_instant = Instant::now();
     let now_nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -438,8 +480,8 @@ fn transform(
     let next_salt = salt.wrapping_add(1);
 
     let outcome = match crate::transform::production_transform_with_session_link(
-        frame.msg_type,
-        &frame.payload,
+        msg_type,
+        payload,
         contexts,
         next_salt,
         mode,
@@ -459,7 +501,7 @@ fn transform(
         }
         Err(_) => {
             stats.invalid.fetch_add(1, Ordering::Relaxed);
-            return;
+            return Vec::new();
         }
     };
 
@@ -471,7 +513,16 @@ fn transform(
 
     stats.record_trace_fallback(outcome.trace_fallback_unkeyed);
     stats.transformed.fetch_add(1, Ordering::Relaxed);
-    for span in assembler.observe(outcome.span, now_instant) {
+    assembler.observe_qualified(outcome.span, outcome.pairing_identity, now_instant)
+}
+
+fn enqueue_spans(
+    spans: Vec<opentelemetry_proto::tonic::trace::v1::Span>,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+) {
+    for span in spans {
         match batch.try_push(span, Instant::now()) {
             Ok(ready) => {
                 if let Some(ready) = ready {
@@ -487,6 +538,39 @@ fn transform(
                 stats.span_size.fetch_add(1, Ordering::Relaxed);
             }
         }
+    }
+}
+
+async fn enqueue_shutdown_spans(
+    spans: Vec<opentelemetry_proto::tonic::trace::v1::Span>,
+    batch: &mut SpanBatcher,
+    queue: &ExportQueue,
+    stats: &Diagnostics,
+    deadline: tokio::time::Instant,
+) {
+    for span in spans {
+        if tokio::time::Instant::now() >= deadline {
+            stats.shutdown_dropped.fetch_add(1, Ordering::Relaxed);
+            continue;
+        }
+        match batch.try_push(span, Instant::now()) {
+            Ok(ready) => {
+                if let Some(ready) = ready {
+                    queue.enqueue_until(ready, deadline).await;
+                }
+                if batch.is_full() {
+                    if let Some(ready) = batch.take() {
+                        queue.enqueue_until(ready, deadline).await;
+                    }
+                }
+            }
+            Err(_) => {
+                stats.span_size.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+    if let Some(ready) = batch.take() {
+        queue.enqueue_until(ready, deadline).await;
     }
 }
 
@@ -511,5 +595,94 @@ mod ambient_email_tests {
                 None
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod shutdown_enqueue_tests {
+    use super::*;
+    use crate::pipeline::EXPORT_QUEUE_ITEMS;
+    use agent_otel_core::model::{ClientKind, HookEvent, WireHeader};
+    use opentelemetry_proto::tonic::trace::v1::Span;
+
+    #[tokio::test]
+    async fn shutdown_frames_wait_for_export_capacity_within_the_absolute_deadline() {
+        let stats = Arc::new(Diagnostics::default());
+        let (queue, mut rx) = ExportQueue::new(stats.clone());
+        let config = DaemonConfig::from_vars(&|_| None);
+        let mut batch = SpanBatcher::new(config.resource(), 1);
+        enqueue_spans(
+            vec![Span::default(); EXPORT_QUEUE_ITEMS],
+            &mut batch,
+            &queue,
+            &stats,
+        );
+        assert_eq!(stats.snapshot().queued_items, EXPORT_QUEUE_ITEMS);
+        let contexts = ContextCache::new();
+        let session_link = crate::session_link::SessionLinkConfig::from_vars(&|_| None).unwrap();
+        let mut assembler = SpanAssembler::default();
+        let mut salt = 0;
+        let mut payload = WireHeader::new(
+            ClientKind::Codex.to_wire(),
+            HookEvent::PostToolUse.to_wire(),
+        )
+        .encode()
+        .to_vec();
+        payload.extend_from_slice(br#"{"session_id":"shutdown-test","tool_use_id":"call"}"#);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let drain = async {
+            for _ in 0..32 {
+                process_frame_without_quota(
+                    MsgType::HookPayload,
+                    &payload,
+                    &contexts,
+                    &mut batch,
+                    &queue,
+                    &stats,
+                    &mut salt,
+                    ExecutionMode::Interactive,
+                    false,
+                    false,
+                    ResolvedSpanMetadata::default(),
+                    config.workspace_path_mode,
+                    config.capture_mode,
+                    None,
+                    &session_link,
+                    &mut assembler,
+                    deadline,
+                )
+                .await;
+            }
+        };
+        tokio::pin!(drain);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut drain)
+                .await
+                .is_err(),
+            "shutdown frame must wait for the full queue"
+        );
+        assert_eq!(stats.snapshot().transformed, 1);
+        assert_eq!(stats.snapshot().export_capacity, 0);
+        let receive = async {
+            let mut retained = Vec::new();
+            for _ in 0..EXPORT_QUEUE_ITEMS + 32 {
+                retained.push(rx.recv().await.unwrap());
+            }
+            retained
+        };
+        let (_, retained) =
+            tokio::time::timeout_at(deadline, async { tokio::join!(drain, receive) })
+                .await
+                .unwrap();
+        let snapshot = stats.snapshot();
+        assert_eq!(snapshot.transformed, 32);
+        assert_eq!(snapshot.invalid, 0);
+        assert_eq!(snapshot.export_queued, (EXPORT_QUEUE_ITEMS + 32) as u64);
+        assert_eq!(snapshot.export_capacity, 0);
+        assert_eq!(snapshot.shutdown_dropped, 0);
+        assert_eq!(
+            retained.iter().map(|item| item.batch.count).sum::<usize>(),
+            EXPORT_QUEUE_ITEMS + 32
+        );
     }
 }
