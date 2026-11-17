@@ -22,3 +22,6 @@ benchmarks/reports/
 /.agentflow/transactions/
 .meshloop/
 .meshloop-worktrees/
+
+# graphify knowledge-graph output (regenerated)
+graphify-out/
